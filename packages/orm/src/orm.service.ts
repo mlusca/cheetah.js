@@ -3,12 +3,13 @@ import {EntityStorage, Property} from './domain/entities';
 import {ENTITIES, PROPERTIES_METADATA, PROPERTIES_RELATIONS} from './constants';
 import {globbySync} from 'globby';
 import {Project, SyntaxKind} from 'ts-morph';
+import { Orm } from '@cheetah.js/orm';
 
 @Service()
 export class OrmService {
   private allEntities = new Map<string, { nullables: string[], defaults: { [key: string]: any } }>();
 
-  constructor(private storage: EntityStorage, entityFile: string | undefined = undefined) {
+  constructor(private orm: Orm, private storage: EntityStorage, entityFile: string | undefined = undefined) {
     console.log('Preparing entities...')
     const files = new Project({skipLoadingLibFiles: true}).addSourceFilesAtPaths(entityFile ?? this.getSourceFilePaths())
     files.forEach(file => {
@@ -50,13 +51,16 @@ export class OrmService {
   }
 
   @OnApplicationInit()
-  async onInit() {
+  async onInit(customConfig: any = undefined) {
     const configFile = globbySync('cheetah.config.ts', {absolute: true});
     if (configFile.length === 0) {
       console.log('No config file found!')
       return;
     }
     const config = await import(configFile[0]);
+
+    this.orm.setConnection(customConfig ?? config.default.connection);
+    await this.orm.connect();
 
     if (typeof config.default.entities === 'string') {
       const files = globbySync([config.default.entities, '!node_modules'], {gitignore: true, absolute: true})

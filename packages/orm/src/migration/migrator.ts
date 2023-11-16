@@ -33,14 +33,13 @@ export class Migrator {
       }
     }
 
-    this.orm = new Orm(this.config, new LoggerService(new InjectorService()));
-    await this.orm.connect();
+    this.orm = new Orm(new LoggerService(new InjectorService()));
+    this.entities = new EntityStorage();
+    const serv = new OrmService(this.orm, this.entities)
+    await serv.onInit(this.config);
   }
 
   async initMigration() {
-    this.entities = new EntityStorage();
-    const serv = new OrmService(this.entities)
-    serv.onInit();
     const snapshotBd = await this.snapshotBd();
     const snapshotEntities = await this.snapshotEntities();
     const calculator = new DiffCalculator(this.entities);

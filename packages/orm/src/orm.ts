@@ -1,19 +1,25 @@
 import { ConnectionSettings, DriverInterface, InstanceOf } from './driver/driver.interface';
-import { LoggerService } from '@cheetah.js/core';
+import { LoggerService, Service } from '@cheetah.js/core';
 import { SqlBuilder } from './SqlBuilder';
 
+@Service()
 export class Orm<T extends DriverInterface = DriverInterface> {
   driverInstance: T;
   static instance: Orm<any>
+  public connection: ConnectionSettings<T>
 
-  static getInstance() {
+  constructor(public logger: LoggerService) {
+    Orm.instance = this
+  }
+
+  static getInstance(): Orm<any> {
     return Orm.instance
   }
 
-  constructor(public connection: ConnectionSettings<T>, public logger: LoggerService) {
+  public setConnection(connection: ConnectionSettings<T>) {
+    this.connection = connection
     // @ts-ignore
     this.driverInstance = new this.connection.driver(connection)
-    Orm.instance = this
   }
 
   createQueryBuilder<Model>(model: new() => Model): SqlBuilder<Model> {

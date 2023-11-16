@@ -9,18 +9,16 @@ export let app: Orm<PgDriver>
 export const mockLogger = spyOn(loggerInstance, 'debug')
 
 export async function startDatabase(entityFile: string | undefined = undefined, logger: LoggerService = loggerInstance) {
-  const service = new OrmService(new EntityStorage(), entityFile)
-  app = new Orm({
+  app = new Orm(logger)
+  const service = new OrmService(app, new EntityStorage(), entityFile)
+  await service.onInit({
     host: 'localhost',
     port: 5432,
     database: 'postgres',
     username: 'postgres',
     password: 'postgres',
     driver: PgDriver,
-  }, logger)
-  service.onInit()
-
-  await app.connect()
+  })
 }
 
 export async function purgeDatabase(schema: string = 'public') {
