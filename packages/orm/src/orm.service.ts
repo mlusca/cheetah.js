@@ -1,15 +1,15 @@
-import {Metadata, OnApplicationInit, Service} from '@cheetah.js/core';
-import {EntityStorage, Property} from './domain/entities';
-import {ENTITIES, PROPERTIES_METADATA, PROPERTIES_RELATIONS} from './constants';
-import {globbySync} from 'globby';
-import {Project, SyntaxKind} from 'ts-morph';
-import { Orm } from '@cheetah.js/orm';
+import { Metadata, OnApplicationInit, Service } from '@cheetah.js/core';
+import { EntityStorage, Property } from './domain/entities';
+import { ENTITIES, PROPERTIES_METADATA, PROPERTIES_RELATIONS } from './constants';
+import { globbySync } from 'globby';
+import { Project, SyntaxKind } from 'ts-morph';
+import { Orm } from './orm';
 
 @Service()
 export class OrmService {
   private allEntities = new Map<string, { nullables: string[], defaults: { [key: string]: any } }>();
 
-  constructor(private orm: Orm, private storage: EntityStorage, entityFile: string | undefined = undefined) {
+  constructor(private orm: Orm, private storage: EntityStorage, entityFile?: string) {
     console.log('Preparing entities...')
     const files = new Project({skipLoadingLibFiles: true}).addSourceFilesAtPaths(entityFile ?? this.getSourceFilePaths())
     files.forEach(file => {
@@ -51,15 +51,18 @@ export class OrmService {
   }
 
   @OnApplicationInit()
-  async onInit(customConfig: any = undefined) {
+  async onInit(customConfig: any = {}) {
+
     const configFile = globbySync('cheetah.config.ts', {absolute: true});
     if (configFile.length === 0) {
       console.log('No config file found!')
       return;
     }
-    const config = await import(configFile[0]);
 
-    this.orm.setConnection(customConfig ?? config.default.connection);
+    const config = await import(configFile[0]);
+    const setConfig = Object.keys(customConfig).length > 0 ? customConfig :  config.default;
+
+    this.orm.setConnection(setConfig);
     await this.orm.connect();
 
     if (typeof config.default.entities === 'string') {

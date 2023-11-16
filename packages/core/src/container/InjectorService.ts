@@ -13,7 +13,7 @@ import {
   Injectable,
   isClassValidator, isPrimitiveType,
   isRequestScope,
-  LocalsContainer, LoggerService,
+  LocalsContainer,
   Metadata,
   MiddlewareRes,
   nameOf,
@@ -25,6 +25,7 @@ import {
   TokenProvider,
   Type,
 } from '@cheetah.js/core';
+import {LoggerService} from '../services/logger.service';
 import {ContainerConfiguration, TokenRouteWithProvider} from './ContainerConfiguration.js';
 import {Container} from './container';
 import {plainToInstance} from 'class-transformer';

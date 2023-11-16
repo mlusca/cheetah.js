@@ -1,4 +1,4 @@
-import { ConnectionSettings, DriverInterface, InstanceOf } from './driver/driver.interface';
+import { ConnectionSettings, DriverInterface } from './driver/driver.interface';
 import { LoggerService, Service } from '@cheetah.js/core';
 import { SqlBuilder } from './SqlBuilder';
 
