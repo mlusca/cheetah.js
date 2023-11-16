@@ -79,7 +79,7 @@ Middleware from the parent class will be inherited by the child class. (except r
 
 ### Validation
 Cheetah.js validates route parameters using [class-validator](https:github.comtypestackclass-validator). Simply add the DTO as a method parameter and Cheetah.js will validate the route parameters.
-#### Exemplo:
+#### Example:
 ```javascript
 import { Controller, Get, Query } from '@cheetah.js/core';
 
