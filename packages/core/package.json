@@ -1,0 +1,49 @@
+{
+  "name": "@cheetah.js/core",
+  "description": "Cheetah.js is a framework for building web applications object oriented with TypeScript and Bun.sh.",
+  "keywords": [
+    "bun",
+    "framework",
+    "typescript",
+    "cheetah",
+    "cheetah.js",
+    "object oriented",
+    "oop"
+  ],
+  "scripts": {
+    "compile": "sudo rm -rf ./dist && tsc && bun run build.ts"
+  },
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": "./dist/index.js"
+    }
+  },
+  "version": "0.1.0",
+  "license": "MIT",
+  "dependencies": {
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.0",
+    "globby": "^13.2.2",
+    "parseurl-fast": "^1.2.0",
+    "pino": "^8.16.1",
+    "reflect-metadata": "^0.1.13"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "gitHead": "726879b8d699b9abf35e80aa64ada630c8ced14d"
+}

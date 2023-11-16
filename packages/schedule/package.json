@@ -1,0 +1,37 @@
+{
+  "name": "@cheetah.js/schedule",
+  "version": "0.1.0",
+  "description": "Schedule module for Cheetah framework (Bun) ⏰",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "compile": "sudo rm -rf ./dist && tsc"
+  },
+  "dependencies": {
+    "cron": "3.1.6",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/uuid": "^9.0.6"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": "./dist/index.js"
+    }
+  },
+  "peerDependencies": {
+    "@cheetah.js/core": "^0.1.0"
+  },
+  "author": "",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "gitHead": "726879b8d699b9abf35e80aa64ada630c8ced14d"
+}

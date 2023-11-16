@@ -1,0 +1,20 @@
+{
+  "name": "@cheetah.js/core",
+  "private": false,
+  "workspaces": [
+    "packages/*"
+  ],
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "lerna": "^7.4.2",
+    "bun-types": "latest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mlusca/cheetah.js.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

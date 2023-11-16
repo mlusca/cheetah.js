@@ -1,0 +1,50 @@
+{
+  "name": "@cheetah.js/orm",
+  "version": "0.1.0",
+  "description": "A simple ORM for Cheetah.js",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "compile": "sudo rm -rf ./dist && tsc && bun run build.ts"
+  },
+  "dependencies": {
+    "uuid": "^9.0.1",
+    "reflect-metadata": "^0.1.13",
+    "ts-morph": "^20.0.0",
+    "commander": "^11.1.0"
+  },
+  "bin": {
+    "cheetah-orm": "./src/cheetah.ts"
+  },
+  "devDependencies": {
+    "@types/uuid": "^9.0.6",
+    "pg": "^8.11.3",
+    "@types/pg": "^8.10.9"
+  },
+  "peerDependencies": {
+    "@cheetah.js/core": "^0.1.0",
+    "pg": "^8.11.3"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    }
+  },
+  "author": "",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "gitHead": "726879b8d699b9abf35e80aa64ada630c8ced14d"
+}

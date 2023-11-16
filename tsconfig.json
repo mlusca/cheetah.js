@@ -1,0 +1,38 @@
+{
+    "compilerOptions": {
+        "module": "ES2022",
+        "target": "ES2021",
+//        "lib": ["es2022"],
+        "declaration": true,
+        "sourceMap": true,
+        "strict": true,
+        "esModuleInterop": true,
+        "moduleResolution": "bundler",
+        "preserveConstEnums": true,
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
+        "allowSyntheticDefaultImports": true,
+        "forceConsistentCasingInFileNames": true,
+        "strictPropertyInitialization": false,
+        "allowJs": false,
+        "baseUrl": ".",
+        "skipLibCheck": true,
+        "paths": {
+            "@cheetah.js/core": ["./packages/core"],
+            "@cheetah.js/core/*": ["./packages/core/src/*"],
+            "@cheetah.js/schedule": ["./packages/schedule"],
+            "@cheetah.js/schedule/*": ["./packages/schedule/src/*"],
+            "@cheetah.js/orm": ["./packages/orm"],
+            "@cheetah.js/orm/*": ["./packages/orm/src/*"]
+        },
+        "types": [
+            "bun-types"
+        ]
+    },
+    "exclude": [
+        "node_modules", "**/*.spec.ts", "**/dist"
+    ],
+    "include": [
+        "packages/**/*"
+    ],
+}
