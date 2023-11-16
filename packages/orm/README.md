@@ -223,6 +223,19 @@ const user = await User.findOne({
  | $or | Or | Joins query clauses with a logical OR returns all documents that match the conditions of either clause. |
 | $not | Not | Inverts the effect of a query expression and returns documents that do not match the query expression. |
 
+### [Migrations](#migrations)
+Cheetah ORM is capable of creating and running migrations.
+You must have the connection configuration file in the project root "cheetah.config.ts".
+To create a migration, run the command below:
 
+```bash
+bun cheetah-orm migration:generate
+```
+This command will create a migration file in the path defined in the configuration file, differentiating your entities created with the database.
 
+#### Example:
+```bash
+bun cheetah-orm migration:run
+```
+This command will run all migrations that have not yet been run.
 

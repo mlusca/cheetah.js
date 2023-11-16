@@ -3,7 +3,7 @@ import { ColDiff, ConnectionSettings, DriverInterface, SnapshotTable } from '@ch
 import { globby } from 'globby'
 import { Orm, OrmService } from '@cheetah.js/orm';
 import { InjectorService, LoggerService } from '@cheetah.js/core';
-import { EntityStorage } from '@cheetah.js/orm/domain/entities';
+import { EntityStorage } from '../domain/entities';
 import * as path from 'path';
 import * as fs from 'fs';
 import { DiffCalculator } from './diff-calculator';
