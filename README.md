@@ -60,6 +60,23 @@ export class HomeController {
 }
 ```
 
+Cheetah.js also supports the use of nested controllers, so just add the child class decorated with @Controller() inside the parent class.
+#### Exemplo:
+```javascript
+import { Controller, Get } from '@cheetah.js/core';
+
+@Controller({
+    children: [ ChildController ] // Add child controller
+})
+export class HomeController {
+  @Get('/')
+  index() {
+    return 'Hello World!';
+  }
+}
+```
+Middleware from the parent class will be inherited by the child class. (except route middleware).
+
 ### Validation
 Cheetah.js validates route parameters using [class-validator](https:github.comtypestackclass-validator). Simply add the DTO as a method parameter and Cheetah.js will validate the route parameters.
 #### Exemplo:
@@ -152,22 +169,6 @@ export class HomeController {
     }
 }
 ```
-Cheetah.js also supports the use of nested controllers, so just add the child class decorated with @Controller() inside the parent class.
-#### Exemplo:
-```javascript
-import { Controller, Get } from '@cheetah.js/core';
-
-@Controller({
-    children: [ ChildController ] // Add child controller
-})
-export class HomeController {
-  @Get('/')
-  index() {
-    return 'Hello World!';
-  }
-}
-```
-Middleware from the parent class will be inherited by the child class. (except route middleware).
 
 ### Logging
 We provide the LoggerService service, it uses pinojs to log.
