@@ -1,6 +1,7 @@
 # Cheetah.js
 Cheetah.js is a simple object-oriented framework for Bun still in development.
-
+<br>
+Check the ORM documentation [here](https://github.com/mlusca/cheetah.js/tree/master/packages/orm).
 ### Menu
 - [Installation](#install)
 
