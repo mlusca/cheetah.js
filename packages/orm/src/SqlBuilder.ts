@@ -451,7 +451,9 @@ export class SqlBuilder<T> {
         return;
       }
 
-      if (entitiesOptions.get(alias)!.showProperties.hasOwnProperty(prop)) {
+      const entityProperty = entitiesOptions.get(alias)!.showProperties[prop]
+      if (entityProperty) {
+        console.log(typeof value, entityProperty.type)
         // @ts-ignore
         entity[prop] = value;
       }
