@@ -1,6 +1,7 @@
 # Cheetah.js
 Cheetah.js is a simple object-oriented framework for Bun still in development.
-
+<br>
+Check the ORM documentation [here](https://github.com/mlusca/cheetah.js/tree/master/packages/orm).
 ### Menu
 - [Installation](#install)
 
@@ -9,6 +10,16 @@ For install Cheetah.js, run the command below:
 
 ```bash 
 bun install @cheetah.js/core
+```
+
+Your tsconfig.json should have the following settings:
+```json
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  }
+}
 ```
 
 ## Start the server
@@ -36,9 +47,51 @@ new Cheetah({
     providers: [ HomeController ]
 }).listen();
 ```
+To receive parameters in the route, simply add the ":" before the parameter name. And to receive it in the method, just use the @Param decorator.
+```javascript
+import { Controller, Get } from '@cheetah.js/core';
+
+@Controller()
+export class HomeController {
+  @Get(':name')
+  index(@Param('name') name: string) {
+    return `Hello ${name}!`;
+  }
+}
+```
+
+### Validation
+Cheetah.js validates route parameters using [class-validator](https:github.comtypestackclass-validator). Simply add the DTO as a method parameter and Cheetah.js will validate the route parameters.
+#### Exemplo:
+```javascript
+import { Controller, Get, Query } from '@cheetah.js/core';
+
+export class UserDto {
+  @IsString()
+  name: string;
+}
+
+@Controller()
+export class HomeController {
+  @Get()
+  index(@Query() user: UserDto) {
+    return `Hello ${user.name}!`;
+  }
+}
+```
+To configure the validator, simply pass the options in the Cheetah.js constructor:
+```javascript
+import { Cheetah } from '@cheetah.js/core';
+
+new Cheetah({ 
+    validator: {
+        whitelist: true
+    }
+}).listen();
+```
 
 ### Dependency injection
-Cheetah.js provides support for dependency injection using the @Service decorator. 
+Cheetah.js provides support for dependency injection using the @Service decorator.
 The available scopes are Singleton (default), request and instance. You can define services to handle business logic and inject them into controllers or other services as needed. </br>
 #### Example:
 ```javascript
@@ -46,17 +99,17 @@ import { Service } from '@cheetah.js/core';
 
 @Service() // Default scope is Singleton
 export class UserService {
-  create() {
-    return 'User created!';
-  }
+    create() {
+        return 'User created!';
+    }
 }
 
 
 @Service()
 export class AnotherService {
-  constructor(userService: UserService) {
-    console.log(userService.create()); // User created!
-  }
+    constructor(userService: UserService) {
+        console.log(userService.create()); // User created!
+    }
 }
 ```
 ### Middleware
@@ -68,18 +121,18 @@ import { Context, Middleware, Service, CheetahMiddleware, CheetahClosure } from 
 
 @Service
 export class LoggerMiddleware implements CheetahMiddleware {
-  handle(context: Context, next: CheetahClosure) {
-    next();
-  }
+    handle(context: Context, next: CheetahClosure) {
+        next();
+    }
 }
 
 @Middleware(LoggerMiddleware)
 @Controller()
 export class HomeController {
-  @Get('/')
-  index() {
-    return 'Hello World!';
-  }
+    @Get('/')
+    index() {
+        return 'Hello World!';
+    }
 }
 ```
 
@@ -90,9 +143,9 @@ import { Cheetah, LoggerService, Controller } from '@cheetah.js/core';
 
 @Controller()
 export class HomeController {
-  constructor(logger: LoggerService) {
-    this.logger.info("Hello World!")
-  }
+    constructor(logger: LoggerService) {
+        this.logger.info("Hello World!")
+    }
 }
 
 new Cheetah({logger: {level: 'info'}}).listen();

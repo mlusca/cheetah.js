@@ -47,6 +47,48 @@ new Cheetah({
     providers: [ HomeController ]
 }).listen();
 ```
+To receive parameters in the route, simply add the ":" before the parameter name. And to receive it in the method, just use the @Param decorator.
+```javascript
+import { Controller, Get } from '@cheetah.js/core';
+
+@Controller()
+export class HomeController {
+  @Get(':name')
+  index(@Param('name') name: string) {
+    return `Hello ${name}!`;
+  }
+}
+```
+
+### Validation
+Cheetah.js validates route parameters using [class-validator](https:github.comtypestackclass-validator). Simply add the DTO as a method parameter and Cheetah.js will validate the route parameters.
+#### Exemplo:
+```javascript
+import { Controller, Get, Query } from '@cheetah.js/core';
+
+export class UserDto {
+  @IsString()
+  name: string;
+}
+
+@Controller()
+export class HomeController {
+  @Get()
+  index(@Query() user: UserDto) {
+    return `Hello ${user.name}!`;
+  }
+}
+```
+To configure the validator, simply pass the options in the Cheetah.js constructor:
+```javascript
+import { Cheetah } from '@cheetah.js/core';
+
+new Cheetah({ 
+    validator: {
+        whitelist: true
+    }
+}).listen();
+```
 
 ### Dependency injection
 Cheetah.js provides support for dependency injection using the @Service decorator.
