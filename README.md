@@ -90,6 +90,23 @@ new Cheetah({
 }).listen();
 ```
 
+### List of decorators
+| Decorator | Description                                 |
+| --- |---------------------------------------------|
+| @Controller() | Defines the class as a controller           |
+| @Get() | Defines the route as GET                    |
+| @Post() | Defines the route as POST                   |
+| @Put() | Defines the route as PUT                    |
+| @Patch() | Defines the route as PATCH                  |
+| @Delete() | Defines the route as DELETE                 |
+| @Middleware() | Defines the middleware to a class or method |
+| @Param() | Get the param from url                      |
+| @Query() | Get the query from url                      |
+| @Body() | Get the body from request                   |
+| @Header() | Get the header from request                 |
+| @Context() | Get the context from request               |
+
+
 ### Dependency injection
 Cheetah.js provides support for dependency injection using the @Service decorator.
 The available scopes are Singleton (default), request and instance. You can define services to handle business logic and inject them into controllers or other services as needed. </br>
