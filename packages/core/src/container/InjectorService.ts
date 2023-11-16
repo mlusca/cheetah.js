@@ -25,10 +25,10 @@ import {
   TokenProvider,
   Type,
 } from '@cheetah.js/core';
-import { ContainerConfiguration, TokenRouteWithProvider } from './ContainerConfiguration.js';
-import { Container } from './container';
-import { plainToInstance } from 'class-transformer';
-import { validateSync } from 'class-validator';
+import {ContainerConfiguration, TokenRouteWithProvider} from './ContainerConfiguration.js';
+import {Container} from './container';
+import {plainToInstance} from 'class-transformer';
+import {validateSync} from 'class-validator';
 import Memoirist from '../route/memoirist';
 
 @Injectable()
@@ -38,7 +38,7 @@ export class InjectorService {
   container: Container = new Container()
   applicationConfig: ApplicationConfig = {}
   router = new Memoirist()
-  private historyMethods: WeakMap<any, {[key: string] : {args: any, params: any}}> = new Map()
+  private historyMethods: WeakMap<any, { [key: string]: { args: any, params: any } }> = new Map()
 
   loadModule(container: Container, applicationConfig: ApplicationConfig, router: Memoirist<any>) {
     this.container = container
@@ -53,6 +53,7 @@ export class InjectorService {
   private resolveControllers() {
     if (!this.settings) return {};
     const controllers = GlobalProvider.getByType(ProviderType.CONTROLLER)
+      .filter(controller => !controller.isChild())
 
     let hydrateRoute: Map<string, TokenRouteWithProvider[]> = new Map()
     for (const controller of controllers) {
@@ -91,10 +92,78 @@ export class InjectorService {
             })),
         ])
       }
+
+      if (controller.children) {
+        const childrenRoutes = this.resolveChildrenRoutes(controller.path ?? '', controller.children, controllerMiddleware)
+        childrenRoutes.forEach(route => {
+          hydrateRoute.set(route.method.toLowerCase(), [
+            ...hydrateRoute.get(route.method.toLowerCase()) || [],
+            route
+          ])
+        })
+      }
     }
     hydrateRoute.forEach(method => {
       method.forEach(route => this.router.add(route.method.toLowerCase(), route.path, route))
     })
+  }
+
+  private resolveChildrenRoutes(parentPath: string, children: Provider[], parentMiddlewares: any[]): TokenRouteWithProvider[] {
+    let childrenRoutes: any[] = [];
+
+    for (const childController of children) {
+
+      let controller = GlobalProvider.get(childController)
+      if(!controller) throw new Error(`Child ${childController} not is an controller. Please, check the providers configuration.`)
+      let childRoutes = Metadata.get(CONTROLLER_ROUTES, controller.token);
+      const childMiddlewares = Metadata.get(CONTROLLER_MIDDLEWARES, controller.token) || [];
+
+      if (childRoutes.length === 0) continue;
+
+      if (parentPath) {
+        childRoutes = childRoutes.map((route: any) => {
+          let controllerPath = controller?.path ?? '';
+
+          if(controllerPath.endsWith('/')) {
+            controllerPath = controller!.path!.slice(0, -1);
+          }
+          if (!controllerPath.startsWith('/')) {
+            controllerPath = `/${controller!.path}`;
+          }
+
+          route.path = `${parentPath}${controllerPath ?? ''}${route.path}`;
+          if (route.path.endsWith('/')) {
+            route.path = route.path.slice(0, -1);
+          }
+          if (!route.path.startsWith('/')) {
+            route.path = `/${route.path}`;
+          }
+          return route;
+        });
+      }
+      // @ts-ignore
+      for (const method of Object.keys(HttpMethod).map(key => HttpMethod[key])) {
+        if (!childRoutes.some((route: any) => route.method.toLowerCase() === method)) continue;
+
+        childrenRoutes = [
+          ...childrenRoutes,
+          ...childRoutes
+            .filter((route: any) => route.method.toLowerCase() === method)
+            .map((route: any) => ({
+              ...route,
+              provider: controller!.token,
+              route,
+              middlewares: [...parentMiddlewares, ...childMiddlewares, ...(Metadata.get(ROUTE_MIDDLEWARES, controller!.token, route.methodName) || [])]
+            }))
+        ];
+      }
+
+      if (controller.children) {
+        childrenRoutes = [...childrenRoutes, ...this.resolveChildrenRoutes(controller.path!, controller.children, childMiddlewares)];
+      }
+    }
+
+    return childrenRoutes;
   }
 
   private ensureProvider(token: TokenProvider): Provider | undefined {
@@ -149,6 +218,7 @@ export class InjectorService {
     let instance: any;
 
     // Se algum dos deps for REQUEST, o escopo do provider será REQUEST também
+    // @ts-ignore
     if (isRequestScope(provider, deps, this)) {
       scope = ProviderScope.REQUEST
     }
@@ -171,37 +241,11 @@ export class InjectorService {
   }
 
   async invokeRoute(route: TokenRouteWithProvider, context: Context, locals: LocalsContainer) {
+    // @ts-ignore
     await MiddlewareRes.resolveMiddlewares(route, this, locals)
 
     return this.invokeMethod(route.provider.instance, route.methodName, locals, context)
   }
-
-//  async invokeMethod(instance: any, methodName: string, locals: LocalsContainer, context: Context) {
-//    const args = getMethodArgTypes(instance, methodName)
-//    const params = Metadata.getParamDecoratorFunc(instance, methodName)
-//
-//    const services = args.map((token: any, index: any) => {
-//      if (params[index]) {
-//        const param = params[index]
-//
-//        if (isClassValidator(token)) {
-//          const obj = plainToInstance(token, param.fun(context, param.param))
-//          const errors = validateSync(obj, this.applicationConfig.validation);
-//          if (errors.length > 0) {
-//            throw new HttpException(errors, 400)
-//          }
-//
-//          return obj
-//        }
-//
-//        return param.fun(context, param.param)
-//      }
-//
-//      return this.invoke(getClassOrSymbol(token), locals)
-//    })
-//
-//    return instance[methodName](...services)
-//  }
 
   async invokeMethod(instance: any, methodName: string, locals: LocalsContainer, context: Context) {
     const cachedMethod = this.historyMethods.get(instance);

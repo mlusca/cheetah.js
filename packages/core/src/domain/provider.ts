@@ -1,76 +1,82 @@
-import { ProviderType } from './provider-type';
-import { ProviderScope } from './provider-scope';
-import { classOf, isClass, methodsOf, TokenProvider, Type } from '@cheetah.js/core';
+import {ProviderType} from './provider-type';
+import {ProviderScope} from './provider-scope';
+import {classOf, isClass, methodsOf, TokenProvider, Type} from '@cheetah.js/core';
 
 export type ProviderHookCallback<T = any> = (instance: T, ...args: any[]) => Promise<void> | void;
 
 export class Provider {
 
-    /**
-     * Token group provider to retrieve all provider from the same type
-     */
-    public type: TokenProvider | ProviderType = ProviderType.PROVIDER;
-    public deps: TokenProvider[] = [];
-    public instance: any
-    private _provide: TokenProvider
-    // @ts-ignore
-    private _useClass: Type
-    public hooks?: Record<string, ProviderHookCallback>;
-    public path?: string;
+  /**
+   * Token group provider to retrieve all provider from the same type
+   */
+  public type: TokenProvider | ProviderType = ProviderType.PROVIDER;
+  public deps: TokenProvider[] = [];
+  public instance: any
+  private _provide: TokenProvider
+  // @ts-ignore
+  private _useClass: Type
+  public hooks?: Record<string, ProviderHookCallback>;
+  public path?: string;
 
-    /**
-     * Scope used by the injector to build the provider.
-     */
-    scope?: ProviderScope = ProviderScope.SINGLETON;
+  /**
+   * Scope used by the injector to build the provider.
+   */
+  scope?: ProviderScope = ProviderScope.SINGLETON;
+  children?: any[] = [];
+  parent?: Function;
 
-    constructor(token: TokenProvider, options: Partial<Provider> = {}) {
-        this.provide = token;
-        this.useClass = token;
-       
-        Object.assign(this, options);
-    }
+  constructor(token: TokenProvider, options: Partial<Provider> = {}) {
+    this.provide = token;
+    this.useClass = token;
 
-    get token() {
-        return this._provide;
-    }
-    
-    get useClass(): Type {
-        return this._useClass;
-    }
+    Object.assign(this, options);
+  }
 
-    /**
-     * Create a new store if the given value is a class. Otherwise the value is ignored.
-     * @param value
-     */
-    set useClass(value: Type) {
-        if (isClass(value)) {
-            this._useClass = classOf(value);
+  get token() {
+    return this._provide;
+  }
 
-            this.hooks = methodsOf(this._useClass).reduce((hooks, { propertyKey }) => {
-                if (String(propertyKey).startsWith('$')) {
-                    return {
-                        ...hooks,
-                        [propertyKey]: (instance: any, ...args: any[]) => instance[propertyKey](...args),
-                    };
-                }
-                return hooks;
-            }, {} as any);
+  get useClass(): Type {
+    return this._useClass;
+  }
+
+  /**
+   * Create a new store if the given value is a class. Otherwise the value is ignored.
+   * @param value
+   */
+  set useClass(value: Type) {
+    if (isClass(value)) {
+      this._useClass = classOf(value);
+
+      this.hooks = methodsOf(this._useClass).reduce((hooks, {propertyKey}) => {
+        if (String(propertyKey).startsWith('$')) {
+          return {
+            ...hooks,
+            [propertyKey]: (instance: any, ...args: any[]) => instance[propertyKey](...args),
+          };
         }
+        return hooks;
+      }, {} as any);
+    }
+  }
+
+  get provide() {
+    return this._provide
+  }
+
+  set provide(value: TokenProvider) {
+    if (!value) {
+      return
     }
 
-    get provide() {
-        return this._provide
-    }
+    this._provide = value;
+  }
 
-    set provide(value: TokenProvider) {
-        if (!value) {
-            return
-        }
+  clone(): Provider {
+    return new (classOf(this))(this._provide, this);
+  }
 
-        this._provide = value;
-    }
-    
-    clone(): Provider {
-        return new (classOf(this))(this._provide, this);
-    }
+  isChild(): boolean {
+    return !!this.parent
+  }
 }

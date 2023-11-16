@@ -1,10 +1,8 @@
-import { Metadata, OnApplicationInit, Service } from '@cheetah.js/core';
-import { EntityStorage, Property } from './domain/entities';
-import { ENTITIES, PROPERTIES_METADATA, PROPERTIES_RELATIONS } from './constants';
-import { globbySync } from 'globby';
-import { Project, SyntaxKind } from 'ts-morph';
-import { Orm } from '@cheetah.js/orm/orm';
-import { ConnectionSettings } from '@cheetah.js/orm/driver/driver.interface';
+import {Metadata, OnApplicationInit, Service} from '@cheetah.js/core';
+import {EntityStorage, Property} from './domain/entities';
+import {ENTITIES, PROPERTIES_METADATA, PROPERTIES_RELATIONS} from './constants';
+import {globbySync} from 'globby';
+import {Project, SyntaxKind} from 'ts-morph';
 
 @Service()
 export class OrmService {
