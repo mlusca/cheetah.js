@@ -17,3 +17,12 @@ export function OnApplicationShutdown(): MethodDecorator {
         Metadata.set(CONTROLLER_EVENTS, anotherEvents, Reflect)
     }
 }
+
+export function OnApplicationBoot() {
+    return (target: Function, propertyKey: any) => {
+        const anotherEvents: OnEvent[] = Metadata.get(CONTROLLER_EVENTS, Reflect) || []
+        anotherEvents.push({ methodName: propertyKey, eventName: EventType.OnApplicationBoot, target: target.constructor })
+
+        Metadata.set(CONTROLLER_EVENTS, anotherEvents, Reflect)
+    }
+}

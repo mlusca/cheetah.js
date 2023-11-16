@@ -33,6 +33,7 @@ export class Cheetah {
   private server: Server
 
   constructor(public config: ApplicationConfig = {}) {
+    this.injector.callHook(EventType.OnApplicationBoot, {})
   }
 
   /**
