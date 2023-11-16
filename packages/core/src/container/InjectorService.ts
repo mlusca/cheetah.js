@@ -45,9 +45,9 @@ export class InjectorService {
     this.router = router;
     this.applicationConfig = applicationConfig
     this.removeUnknownProviders()
-    this.callHook(EventType.OnApplicationInit)
     this.saveInjector()
     this.resolveControllers()
+    this.callHook(EventType.OnApplicationInit)
   }
 
   private resolveControllers() {
