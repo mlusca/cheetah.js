@@ -12,6 +12,16 @@ For install Cheetah.js, run the command below:
 bun install @cheetah.js/core
 ```
 
+Your tsconfig.json should have the following settings:
+```json
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  }
+}
+```
+
 ## Start the server
 ```javascript
 import { Cheetah } from '@cheetah.js/core';
