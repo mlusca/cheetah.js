@@ -32,7 +32,7 @@ export const Body = createParamDecorator((context: Context, data: string) =>  da
 export const Query = createParamDecorator((context: Context, data: string) => data ? context.query[data] : (context.query || {}));
 export const Param = createParamDecorator((context: Context, data: string) => data ? context.param[data] : null);
 export const Req = createParamDecorator((context: Context) => context.req);
-export const Headers = createParamDecorator((context: Context, data: string) => data ? context.headers.get(data): (context.headers || {}));
+export const Headers = createParamDecorator((context: Context, data: string) => data ? context.headers[data]: (context.headers || {}));
 export const Locals = createParamDecorator((context: Context) => context.locals || {});
 export const Get = createMethodDecorator('GET');
 export const Post = createMethodDecorator('POST');
