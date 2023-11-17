@@ -6,7 +6,9 @@ Cheetah.js ORM is a simple and powerful ORM for Cheetah.js and Bun.
 ### Menu
 - [Installation](#install)
 - [Entities](#entities)
+  - [Value Objects](#value-objects)
 - [Usage](#usage)
+- [Migrations](#migrations)
 
 ### [Installation](#install)
 For install Cheetah.js ORM, run the command below:
@@ -147,6 +149,58 @@ export class User {
 | length | number | Defines the length of the property.                                                        |
 | onUpdate | string | Define the action to be taken for this property when updating the entity in the database   |
 | onInsert | string | Defines the action to be taken for this property when inserting the entity in the database |
+
+#### Value Objects
+A Value Object is an immutable type that is distinguishable only by the state of its properties. That is, unlike an Entity, which has a unique identifier and remains distinct even if its properties are otherwise identical, two Value Objects with the exact same properties can be considered equal.
+Cheetah ORM Entities support Value Objects. To define a Value Object, extends the ValueObject class:
+
+```javascript
+import { ValueObject } from '@cheetah.js/orm';
+
+export class Name extends ValueObject<string, Name> { // First type is a value scalar type, 
+    // and second is a ValueObject
+
+ validate(value): boolean {
+   return value.length > 0; // Any validation
+ }
+}
+
+const name = new Name('John Doe');
+const name2 = Name.from('John Doe'); // Same as above
+
+console.log(name.equals(name2)); // true
+
+```
+Is Required to implement the validate method, that returns a boolean value.
+To use the Value Object in the Entity, just add the ValueObject type to the property:
+
+```javascript
+import { Entity, PrimaryKey, Property } from '@cheetah.js/orm';
+
+@Entity()
+export class User {
+    @PrimaryKey()
+    id: number;
+
+    @Property()
+    name: Name;
+}
+```
+Cheetah ORM will automatically convert the Value Object to the database type and vice versa.<br>
+Important: If you value object is different from string type, you need to define the database type in the @Property decorator, because the Cheetah ORM would not know the correct type of your value object:
+
+```javascript
+import { Entity, PrimaryKey, Property } from '@cheetah.js/orm';
+
+@Entity()
+export class User {
+    @PrimaryKey()
+    id: number;
+
+    @Property({ type: 'json' })
+    name: Name;
+}
+```
 
 #### Relations
 Cheetah ORM supports relations between entities. The available relations are: OneToMany, ManyToOne.
