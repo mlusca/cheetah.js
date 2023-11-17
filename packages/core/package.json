@@ -26,6 +26,10 @@
       "require": "./dist/index.js"
     }
   },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com:mlusca/cheetah.js.git"
+  },
   "version": "0.1.4",
   "license": "MIT",
   "dependencies": {

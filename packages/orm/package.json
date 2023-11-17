@@ -24,6 +24,10 @@
     "ts-morph": "^20.0.0",
     "commander": "^11.1.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com:mlusca/cheetah.js.git"
+  },
   "bin": {
     "cheetah-orm": "./src/cheetah.ts"
   },
