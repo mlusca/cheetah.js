@@ -4,11 +4,12 @@ import {
   FilterQuery,
   QueryOrderMap,
   Relationship,
-  Statement,
+  Statement, ValueOrInstance,
 } from './driver/driver.interface';
 import { EntityStorage, Options } from './domain/entities';
 import { Orm } from '../src';
 import { LoggerService } from '@cheetah.js/core';
+import { ValueObject } from './common/value-object';
 
 export class SqlBuilder<T> {
   private readonly driver: DriverInterface;
@@ -44,9 +45,13 @@ export class SqlBuilder<T> {
     return this;
   }
 
-  insert(values: Partial<T>): SqlBuilder<T> {
+  insert(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): SqlBuilder<T> {
     const {tableName, schema} = this.getTableName();
-
+    for (let value in values) {
+      if (this.extendsFrom(ValueObject, values[value].constructor.prototype)) {
+        values[value] = (values[value] as ValueObject<any, any>).getValue();
+      }
+    }
     this.statements.statement = 'insert';
     this.statements.alias = this.getAlias(tableName)
     this.statements.table = `"${schema}"."${tableName}"`;
@@ -54,8 +59,13 @@ export class SqlBuilder<T> {
     return this;
   }
 
-  update(values: Partial<T>): SqlBuilder<T> {
+  update(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): SqlBuilder<T> {
     const {tableName, schema} = this.getTableName();
+    for (let value in values) {
+      if (this.extendsFrom(ValueObject, values[value].constructor.prototype)) {
+        values[value] = (values[value] as ValueObject<any, any>).getValue();
+      }
+    }
 
     this.statements.statement = 'update';
     this.statements.alias = this.getAlias(tableName)
@@ -272,6 +282,9 @@ export class SqlBuilder<T> {
     const operators = ['$eq', '$ne', '$in', '$nin', '$like', '$gt', '$gte', '$lt', '$lte', '$and', '$or'];
 
     for (let [key, value] of Object.entries(condition)) {
+      if (this.extendsFrom(ValueObject, value.constructor.prototype)) {
+        value = (value as ValueObject<any, any>).getValue();
+      }
 
       if (!operators.includes(key)) {
         this.lastKeyNotOperator = key;
@@ -453,7 +466,12 @@ export class SqlBuilder<T> {
 
       const entityProperty = entitiesOptions.get(alias)!.showProperties[prop]
       if (entityProperty) {
-        console.log(typeof value, entityProperty.type)
+
+        if (this.extendsFrom(ValueObject, entityProperty.type.prototype)) {
+          // @ts-ignore
+          entity[prop] = new entityProperty.type(value);
+          return;
+        }
         // @ts-ignore
         entity[prop] = value;
       }
@@ -540,5 +558,16 @@ export class SqlBuilder<T> {
     });
 
     return values;
+  }
+
+  private extendsFrom(baseClass, instance) {
+    let proto = Object.getPrototypeOf(instance);
+    while (proto) {
+      if (proto === baseClass.prototype) {
+        return true;
+      }
+      proto = Object.getPrototypeOf(proto);
+    }
+    return false;
   }
 }

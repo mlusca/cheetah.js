@@ -1,5 +1,5 @@
 import { SqlBuilder } from '../SqlBuilder';
-import { FilterQuery, FindOneOption, FindOptions, InstanceOf } from '../driver/driver.interface';
+import { FilterQuery, FindOneOption, FindOptions, InstanceOf, ValueOrInstance } from '../driver/driver.interface';
 
 export abstract class BaseEntity {
   private _oldValues: any = {};
@@ -112,19 +112,11 @@ export abstract class BaseEntity {
 
   static async create<T extends BaseEntity>(
     this: { new(): T } & typeof BaseEntity,
-    where: Partial<InstanceOf<T>>,
+    where: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>,
   ): Promise<T> {
     return this.createQueryBuilder<T>()
       .insert(where)
       .executeAndReturnFirstOrFail();
-  }
-
-  static getTableName(): string {
-    if ('tableName' in this) {
-      return (this as any).tableName;
-    }
-
-    return this.name.toLowerCase();
   }
 
   public async save() {

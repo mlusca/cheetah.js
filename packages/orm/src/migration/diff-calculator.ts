@@ -77,11 +77,14 @@ export class DiffCalculator {
 
   private checkIndexes(bdTable: SnapshotTable | undefined, entityTable: SnapshotTable | undefined, colDiffs: ColDiff[]) {
     if ((bdTable && bdTable.indexes) || (entityTable && entityTable.indexes)) {
-      if (!bdTable || !bdTable.indexes){
+      if (!bdTable || !bdTable.indexes) {
         colDiffs.push({
           actionType: 'INDEX',
           colName: '*',
-          indexTables: entityTable!.indexes.map(index => ({name: index.indexName, properties: index.columnName.split(',')})),
+          indexTables: entityTable!.indexes.map(index => ({
+            name: index.indexName,
+            properties: index.columnName.split(','),
+          })),
         });
       }
 
@@ -89,7 +92,7 @@ export class DiffCalculator {
         colDiffs.push({
           actionType: 'INDEX',
           colName: '*',
-          indexTables: bdTable!.indexes.map(index => ({ name: index.indexName })),
+          indexTables: bdTable!.indexes.map(index => ({name: index.indexName})),
         });
       }
     }
@@ -119,13 +122,15 @@ export class DiffCalculator {
   }
 
   private createNewColumn(entityCol: ColumnsInfo, colDiffs: ColDiff[]): ColDiff[] {
+    const colType = this.convertEntityTypeToSqlType(entityCol.type);
 
     colDiffs.push({
       actionType: 'CREATE',
       colName: entityCol.name,
-      colType: this.convertEntityTypeToSqlType(entityCol.type),
-      colLength: entityCol.length,
+      colType: colType.type,
+      colLength: entityCol.length ?? colType.len,
       colChanges: {
+        autoIncrement: entityCol.autoIncrement,
         default: entityCol.default,
         primary: entityCol.primary,
         unique: entityCol.unique,
@@ -138,12 +143,15 @@ export class DiffCalculator {
   }
 
   private diffColumnType(bdCol: ColumnsInfo, entityCol: ColumnsInfo, colDiffs: ColDiff[]): void {
-    if (bdCol.type !== this.convertEntityTypeToSqlType(entityCol.type) || bdCol.length !== entityCol.length) {
+    const colT = this.convertEntityTypeToSqlType(entityCol.type);
+    const colType = colT.type;
+    const length = entityCol.length ?? colT.len;
+    if (bdCol.type !== colType || bdCol.length !== length) {
       colDiffs.push({
         actionType: 'ALTER',
         colName: entityCol.name,
-        colType: this.convertEntityTypeToSqlType(entityCol.type),
-        colLength: entityCol.length,
+        colType: colType,
+        colLength: length,
       });
     }
   }
@@ -244,14 +252,35 @@ export class DiffCalculator {
   }
 
   // TODO: Precisa ser de acordo com o driver
-  private convertEntityTypeToSqlType(entityType: string): string {
+  // adicionar  'varchar' | 'text' | 'int' | 'bigint' | 'float' | 'double' | 'decimal' | 'date' | 'datetime' | 'time' | 'timestamp' | 'boolean' | 'json' | 'jsonb' | 'enum' | 'array' | 'uuid'
+  private convertEntityTypeToSqlType(entityType: string): { type: string, len?: number } {
     switch (entityType) {
       case "Number":
-        return "numeric";
+      case 'int':
+        return {type: 'numeric', len: 11};
+      case 'bigint':
+        return {type: 'bigint'};
+      case 'float':
+        return {type: 'float4'};
+      case 'double':
+        return {type: 'float8'};
+      case 'decimal':
+        return {type: 'decimal'};
       case "String":
-        return "character varying";
+      case "varchar":
+        return {type: 'character varying', len: 255};
+      case "Boolean":
+        return {type: "boolean"};
+      case "Date":
+        return {type: "timestamp"};
+      case "Object":
+        return {type: "json"};
+      case 'uuid':
+        return {type: 'uuid'};
+      case 'text':
+        return {type: 'text'};
       default:
-        return "character varying"
+        return {type: "character varying", len: 255};
       //... mais casos aqui ...
     }
   }

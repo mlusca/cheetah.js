@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import { Metadata } from '@cheetah.js/core';
 import { ENTITIES } from '../../src/constants';
 import { Index } from '../../src/decorators/index.decorator';
+import { Email } from '../../src/common/email.vo';
 
 describe('Migration', () => {
 
@@ -246,6 +247,50 @@ describe('Migration', () => {
     expect(migrationContent).toContain("CREATE TABLE \"public\".\"address\" (\"id\" numeric(11) NOT NULL PRIMARY KEY UNIQUE,\"user\" numeric(11) NOT NULL);")
     expect(migrationContent).toContain("ALTER TABLE \"public\".\"address\" ADD CONSTRAINT \"address_user_fk\" FOREIGN KEY (\"user\") REFERENCES \"user\" (\"id\");")
     expect(migrationContent.split('\n').length).toEqual(5)
+    await execute(migrationContent);
+  });
+
+  it('should create with value-objects', async () => {
+    class User extends BaseEntity {
+      @PrimaryKey()
+      id: number;
+
+      @Property({ dbType: 'text' })
+      email: Email;
+    }
+
+    Entity()(User);
+
+    const migrator = new Migrator();
+    await migrator.initConfigFile();
+    await migrator.createMigration( 'test');
+    const migrationFilePath = path.join(__dirname, '/test.sql');
+    const migrationContent = fs.readFileSync(migrationFilePath, {encoding: 'utf-8'});
+
+    expect(migrationContent).toContain("CREATE TABLE \"public\".\"user\" (\"id\" numeric(11) NOT NULL PRIMARY KEY UNIQUE,\"email\" text NOT NULL);")
+    expect(migrationContent.split('\n').length).toEqual(1)
+    await execute(migrationContent);
+  });
+
+  it('should create with auto-increment', async () => {
+    class User extends BaseEntity {
+      @PrimaryKey({ autoIncrement: true })
+      id: number;
+
+      @Property({ dbType: 'text' })
+      email: Email;
+    }
+
+    Entity()(User);
+
+    const migrator = new Migrator();
+    await migrator.initConfigFile();
+    await migrator.createMigration( 'test');
+    const migrationFilePath = path.join(__dirname, '/test.sql');
+    const migrationContent = fs.readFileSync(migrationFilePath, {encoding: 'utf-8'});
+
+    expect(migrationContent).toContain("CREATE TABLE \"public\".\"user\" (\"id\" SERIAL PRIMARY KEY UNIQUE,\"email\" text NOT NULL);")
+    expect(migrationContent.split('\n').length).toEqual(1)
     await execute(migrationContent);
   });
 })

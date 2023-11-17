@@ -6,6 +6,16 @@ type VoExtended<T, Vo> = Vo extends ValueObject<T, Vo>
 
 export abstract class ValueObject<T, Vo> {
   /**
+   * Validates the value of the Value Object.
+   * It is abstract so that each Value Object can implement its own validation.
+   * It is protected from being called directly.
+   *
+   * @param value
+   * @protected
+   */
+  protected abstract validate(value: T): boolean;
+
+  /**
    * Valor do Value Object.
    * É privado para não ser alterado diretamente.
    * O valor também é imutável.
@@ -16,8 +26,7 @@ export abstract class ValueObject<T, Vo> {
 
   constructor(value: T) {
     if (!this.validate(value)) {
-      //@ts-ignore
-      throw new HttpException(`Invalid value for ${this.name}`, 400);
+      throw new HttpException(`Invalid value for ${this.constructor.name}`, 400);
     }
 
     this.setValue(value);
@@ -54,16 +63,6 @@ export abstract class ValueObject<T, Vo> {
   public equals(vo: ValueObject<T, Vo>): boolean {
     return this.getValue() === vo.getValue();
   }
-
-  /**
-   * Validates the value of the Value Object.
-   * It is abstract so that each Value Object can implement its own validation.
-   * It is protected from being called directly.
-   *
-   * @param value
-   * @protected
-   */
-  protected abstract validate(value: T): boolean;
 
   /**
    * Sets the value of the Value Object.

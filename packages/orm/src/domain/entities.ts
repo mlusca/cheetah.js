@@ -72,9 +72,10 @@ export class EntityStorage {
     let properties: ColumnsInfo[] = Object.entries(values.showProperties).map(([key, value]) => {
       return {
         name: key,
-        type: value.type.name,
+        type: value.options.dbType ?? value.type.name,
         nullable: value.options?.nullable,
         default: value.options?.default,
+        autoIncrement: value.options?.autoIncrement,
         primary: value.options?.isPrimary,
         unique: value.options?.unique,
         length: value.options?.length,
@@ -91,6 +92,7 @@ export class EntityStorage {
         unique: relation.unique,
         length: relation.length || getDefaultLength(type),
         default: relation.default,
+        autoIncrement: relation.autoIncrement,
         primary: relation.isPrimary,
         foreignKeys: [
           {

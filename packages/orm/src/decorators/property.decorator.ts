@@ -8,6 +8,7 @@ export type PropertyOptions = {
   default?: any;
   length?: number;
   unique?: boolean;
+  dbType?: 'varchar' | 'text' | 'int' | 'bigint' | 'float' | 'double' | 'decimal' | 'date' | 'datetime' | 'time' | 'timestamp' | 'boolean' | 'json' | 'jsonb' | 'enum' | 'array' | 'uuid';
   autoIncrement?: boolean;
   onUpdate?: () => any;
   onInsert?: () => any;

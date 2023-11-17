@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, jest, test, setSystemTime } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, jest, setSystemTime, test } from 'bun:test'
 import { app, execute, mockLogger, purgeDatabase, startDatabase } from '../node-database';
 import { BaseEntity, Entity, OneToMany, PrimaryKey, Property } from '../../src';
+import { Email } from '../../src/common/email.vo';
 
 @Entity()
 class UserTest extends BaseEntity {
@@ -12,6 +13,15 @@ class UserTest extends BaseEntity {
 
   @Property({onUpdate: () => new Date()})
   updatedAt: Date;
+}
+
+@Entity()
+class UserValue extends BaseEntity {
+  @PrimaryKey()
+  id: number;
+
+  @Property()
+  email: Email
 }
 
 describe('Creation, update and deletion of entities', () => {
@@ -453,6 +463,40 @@ describe('Creation, update and deletion of entities', () => {
     expect(created!.createdAt).toEqual(dateNow);
     expect(created!.updatedAt).toEqual(dateNow);
   })
+
+  test('When have a column with value-object', async() => {
+    const DLL = `
+      CREATE TABLE "uservalue"
+      (
+          "id"    SERIAL PRIMARY KEY,
+          "email" varchar(255) NOT NULL
+      );
+  `;
+
+    await purgeDatabase()
+    await startDatabase(import.meta.path)
+    await execute(DLL)
+
+    Entity()(UserValue)
+    const created = await UserValue.create({
+      id: 1,
+      email: Email.from('test@test.com')
+    })
+
+    const find = await UserValue.findOne({
+      email: Email.from('test@test.com'),
+      id: 1
+    })
+
+    expect(created).toBeInstanceOf(UserValue);
+    expect(created!.id).toEqual(1);
+    expect(created!.email).toEqual(Email.from('test@test.com'));
+
+    expect(find).toBeInstanceOf(UserValue);
+    expect(find!.id).toEqual(1);
+    expect(find!.email).toEqual(Email.from('test@test.com'));
+  })
+
 
   async function createUser() {
     return User.create({

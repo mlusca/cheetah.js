@@ -1,6 +1,7 @@
 import { PropertyOptions } from '../decorators/property.decorator';
 import { Collection } from '../domain/collection';
 import { Reference } from '../domain/reference';
+import { ValueObject } from '../common/value-object';
 
 export interface DriverInterface {
   connectionString: string;
@@ -36,6 +37,9 @@ export interface DriverInterface {
   commitTransaction(): Promise<void>;
   rollbackTransaction(): Promise<void>;
 }
+
+// @ts-ignore
+export type ValueOrInstance<T> = T extends ValueObject<any, any> ? T | T['value'] : NonNullable<T>;
 
 export type SnapshotConstraintInfo = {
   indexName: string;
@@ -158,6 +162,7 @@ export type ColumnsInfo = {
   default?: string | null;
   primary?: boolean;
   unique?: boolean;
+  autoIncrement?: boolean;
   length?: number;
   foreignKeys?: ForeignKeyInfo[];
 }
@@ -175,6 +180,7 @@ export type ColDiff = {
     primary?: boolean;
     unique?: boolean;
     nullable?: boolean;
+    autoIncrement?: boolean;
     foreignKeys?: ForeignKeyInfo[];
   };
 }
@@ -226,17 +232,19 @@ export type OperatorMap<T> = {
   $like?: string;
 
 };
-export type ExcludeFunctions<T, K extends keyof T> = T[K] extends Function ? never : (K extends symbol ? never : K);
+export type ExcludeFunctions<T, K extends keyof T> = T[K] extends Function ? ValueOrInstance<T> : (K extends symbol ? never : K);
 export type Scalar = boolean | number | string | bigint | symbol | Date | RegExp | Uint8Array | {
   toHexString(): string;
 };
 //TODO: editar
-export type ExpandProperty<T> = T extends (infer U)[] ? NonNullable<U> : NonNullable<T> ;
-export type ExpandScalar<T> = null | (T extends string ? T | RegExp : T extends Date ? Date | string : T);
+export type ExpandProperty<T> = T extends (infer U)[] ? ValueOrInstance<U> : ValueOrInstance<T> ;
+export type ExpandScalar<T> = null | ValueOrInstance<T> | (T extends string ? T | RegExp : T extends Date ? Date | string : T);
 type ExpandObject<T> = T extends object ? T extends Scalar ? never : {
+  // @ts-ignore
   -readonly [K in keyof T as ExcludeFunctions<T, K>]?: Query<ExpandProperty<T[K]>> | FilterValue<ExpandProperty<T[K]>> | null;
 } : never;
 export type EntityProps<T> = {
+  // @ts-ignore
   -readonly [K in keyof T as ExcludeFunctions<T, K>]?: T[K];
 };
 export type Query<T> = T extends object ? T extends Scalar ? never : FilterQuery<T> : FilterValue<T>;
@@ -245,7 +253,7 @@ export type FilterValue<T> = OperatorMap<FilterValue2<T>> | FilterValue2<T> | Fi
 export type EntityClass<T> = Function & { prototype: T };
 export type EntityName<T> = string | EntityClass<T>  | { name: string };
 export type ObjectQuery<T> = ExpandObject<T> & OperatorMap<T>;
-export type FilterQuery<T> = ObjectQuery<T> | NonNullable<ExpandScalar<Primary<T>>> | NonNullable<EntityProps<T> & OperatorMap<T>> | FilterQuery<T>[];
+export type FilterQuery<T> = ValueOrInstance<T> | ObjectQuery<T> | NonNullable<ExpandScalar<Primary<T>>> | NonNullable<EntityProps<T> & OperatorMap<T>> | FilterQuery<T>[];
 
 export type Relationship<T> = {
   isRelation?: boolean;
@@ -315,6 +323,7 @@ export declare enum QueryOrderNumeric {
 export type QueryOrderKeysFlat = QueryOrder | QueryOrderNumeric | keyof typeof QueryOrder;
 export type QueryOrderKeys<T> = QueryOrderKeysFlat | QueryOrderMap<T>;
 export type QueryOrderMap<T> = {
+  // @ts-ignore
   [K in keyof T as ExcludeFunctions<T, K>]?: QueryOrderKeys<ExpandProperty<T[K]>>;
 };
 export type EntityField<T, P extends string = never> = AutoPath<T, P, '*'>;

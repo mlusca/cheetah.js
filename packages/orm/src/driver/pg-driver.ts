@@ -29,9 +29,11 @@ export class PgDriver implements DriverInterface {
 
   getCreateTableInstruction(schema: string | undefined, tableName: string, creates: ColDiff[]) {
     return `CREATE TABLE "${schema}"."${tableName}" (${creates.map(colDiff => {
-      let sql = `"${colDiff.colName}" ${colDiff.colType}${(colDiff.colLength ? `(${colDiff.colLength})` : '')}`;
-
-      if (!colDiff.colChanges?.nullable) {
+      const isAutoIncrement = colDiff.colChanges?.autoIncrement;
+    
+      let sql = `"${colDiff.colName}" ${isAutoIncrement ? 'SERIAL' : colDiff.colType + (colDiff.colLength ? `(${colDiff.colLength})` : '')}`;
+    
+      if (!isAutoIncrement && !colDiff.colChanges?.nullable) {
         sql += ' NOT NULL';
       }
 
