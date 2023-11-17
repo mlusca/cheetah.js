@@ -1,4 +1,3 @@
-import 'reflect-metadata'
 export * from './commons'
 export * from './container'
 export * from './domain'

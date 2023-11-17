@@ -9,6 +9,6 @@ await Bun.build({
   splitting: true
 })
 
-copyFileSync('dist/index.d.ts', 'dist/bun/index.d.ts')
+// copyFileSync('dist/index.d.ts', 'dist/bun/index.d.ts')
 
 export {}

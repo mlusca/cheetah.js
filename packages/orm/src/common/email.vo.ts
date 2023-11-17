@@ -1,4 +1,4 @@
-import { ValueObject } from '@cheetah.js/orm/common/value-object';
+import { ValueObject } from './value-object';
 
 const REGEX = /^[a-z0-9.]+@[a-z0-9]+\.[a-z]+(\.[a-z]+)?$/i;
 

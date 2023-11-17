@@ -5,10 +5,10 @@
     "packages/*"
   ],
   "license": "MIT",
-  "dependencies": {},
   "devDependencies": {
-    "lerna": "^7.4.2",
-    "bun-types": "latest"
+    "@types/node": "^20.9.1",
+    "bun-types": "latest",
+    "lerna": "^7.4.2"
   },
   "repository": {
     "type": "git",

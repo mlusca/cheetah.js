@@ -1,5 +1,6 @@
 {
   "name": "@cheetah.js/core",
+  "version": "0.1.9",
   "description": "Cheetah.js is a framework for building web applications object oriented with TypeScript and Bun.sh.",
   "keywords": [
     "bun",
@@ -30,7 +31,6 @@
     "type": "git",
     "url": "git+ssh://git@github.com:mlusca/cheetah.js.git"
   },
-  "version": "0.1.4",
   "license": "MIT",
   "dependencies": {
     "class-transformer": "^0.5.1",

@@ -1,5 +1,7 @@
+#!/usr/bin/env node
+
 import {Migrator} from "./migration/migrator";
-import { Command } from 'commander';
+const Command = require('commander');
 
 const program = new Command();
 

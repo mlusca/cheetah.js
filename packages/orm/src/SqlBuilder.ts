@@ -7,7 +7,7 @@ import {
   Statement, ValueOrInstance,
 } from './driver/driver.interface';
 import { EntityStorage, Options } from './domain/entities';
-import { Orm } from '../src';
+import { Orm } from './orm';
 import { LoggerService } from '@cheetah.js/core';
 import { ValueObject } from './common/value-object';
 

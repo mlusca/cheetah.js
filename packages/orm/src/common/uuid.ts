@@ -1,4 +1,4 @@
-import { ValueObject } from '@cheetah.js/orm';
+import { ValueObject } from './value-object';
 
 export class Uuid extends ValueObject<string, Uuid> {
 
