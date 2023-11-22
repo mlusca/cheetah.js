@@ -1,10 +1,12 @@
 import {
   AutoPath,
   DriverInterface,
-  FilterQuery, JoinStatement,
+  FilterQuery,
+  JoinStatement,
   QueryOrderMap,
   Relationship,
-  Statement, ValueOrInstance,
+  Statement,
+  ValueOrInstance,
 } from './driver/driver.interface';
 import { EntityStorage, Options } from './domain/entities';
 import { Orm } from './orm';
@@ -13,12 +15,10 @@ import { ValueObject } from './common/value-object';
 
 export class SqlBuilder<T> {
   private readonly driver: DriverInterface;
-
   private entityStorage: EntityStorage;
   private statements: Statement<T> = {};
   private entity!: Options;
   private model!: new () => T;
-
   private aliases: Set<string> = new Set();
   private lastKeyNotOperator = '';
   private logger: LoggerService;
@@ -29,7 +29,7 @@ export class SqlBuilder<T> {
     const orm = Orm.getInstance();
     this.driver = orm.driverInstance;
     this.logger = orm.logger;
-    this.entityStorage = EntityStorage.getInstance()
+    this.entityStorage = EntityStorage.getInstance();
 
     this.getEntity(model);
   }
@@ -41,7 +41,7 @@ export class SqlBuilder<T> {
     this.statements.statement = 'select';
     this.statements.columns = columns;
     this.originalColumns = columns || [];
-    this.statements.alias = this.getAlias(tableName)
+    this.statements.alias = this.getAlias(tableName);
     this.statements.table = `"${schema}"."${tableName}"`;
     return this;
   }
@@ -52,36 +52,30 @@ export class SqlBuilder<T> {
   }
 
   insert(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): SqlBuilder<T> {
-    const {tableName, schema} = this.getTableName();
-    for (let value in values) {
-      if (this.extendsFrom(ValueObject, values[value].constructor.prototype)) {
-        values[value] = (values[value] as ValueObject<any, any>).getValue();
-      }
-    }
+    const { tableName, schema } = this.getTableName();
+    processValuesForInsert(values);
     this.statements.statement = 'insert';
-    this.statements.alias = this.getAlias(tableName)
+    this.statements.alias = this.getAlias(tableName);
     this.statements.table = `"${schema}"."${tableName}"`;
-    this.statements.values = this.withUpdatedValues(this.withDefaultValues(values, this.entity), this.entity);
+    this.statements.values = this.withUpdatedValues(
+      this.withDefaultValues(values, this.entity),
+      this.entity
+    );
     return this;
   }
 
   update(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): SqlBuilder<T> {
-    const {tableName, schema} = this.getTableName();
-    for (let value in values) {
-      if (this.extendsFrom(ValueObject, values[value].constructor.prototype)) {
-        values[value] = (values[value] as ValueObject<any, any>).getValue();
-      }
-    }
-
+    const { tableName, schema } = this.getTableName();
+    processValuesForUpdate(values);
     this.statements.statement = 'update';
-    this.statements.alias = this.getAlias(tableName)
+    this.statements.alias = this.getAlias(tableName);
     this.statements.table = `${schema}.${tableName}`;
     this.statements.values = this.withUpdatedValues(values, this.entity);
     return this;
   }
 
   where(where: FilterQuery<T>): SqlBuilder<T> {
-    if (typeof where === 'undefined' || Object.entries(where).length === 0) {
+    if (!where || Object.keys(where).length === 0) {
       return this;
     }
 
@@ -89,10 +83,8 @@ export class SqlBuilder<T> {
     return this;
   }
 
-  orderBy(orderBy: (QueryOrderMap<T> & {
-    0?: never;
-  }) | QueryOrderMap<T>[]): SqlBuilder<T> {
-    if (typeof orderBy === 'undefined') {
+  orderBy(orderBy: (QueryOrderMap<T> & { 0?: never }) | QueryOrderMap<T>[]): SqlBuilder<T> {
+    if (!orderBy) {
       return this;
     }
 
@@ -110,6 +102,19 @@ export class SqlBuilder<T> {
     return this;
   }
 
+  async execute(): Promise<{ query: any; startTime: number; sql: string }> {
+    if (!this.statements.columns) {
+      this.statements.columns = this.generateColumns();
+    } else {
+      this.extractAliasForColumns();
+      this.filterInvalidColumns();
+    }
+    this.includeUpdatedColumns();
+    const result = await this.driver.executeStatement(this.statements);
+    this.logExecution(result);
+    return result;
+  }
+
   async executeAndReturnFirst(): Promise<T | undefined> {
     this.statements.limit = 1;
 
@@ -119,37 +124,11 @@ export class SqlBuilder<T> {
       return undefined;
     }
 
-    const entities = result.query.rows[0]
+    const entities = result.query.rows[0];
+    const model = await this.transformToModel(this.model, this.statements, entities);
+    await this.handleSelectJoin(entities, model);
 
-    if (this.statements.selectJoin && this.statements.selectJoin.length > 0) {
-      const models = this.transformToModel(this.model, this.statements, entities);
-
-      for (const join of this.statements.selectJoin) {
-        const ids = entities[`${join.originAlias}_${join.primaryKey}`];
-
-        if (join.where) {
-          join.where = `${join.where} AND ${join.alias}."${join.fkKey}" = ${this.t(ids)}`
-        } else {
-          join.where = `${join.alias}."${join.fkKey}" IN (${ids.map((id: any) => this.t(id)).join(', ')})`
-        }
-        if (join.columns) {
-          join.columns = (join.columns.map(column => `${join.alias}."${column}" as "${join.alias}_${column}"`) as any[])
-        } else {
-          join.columns = this.getColumnsEntity(join.joinEntity, join.alias) as any;
-        }
-        const child = await this.driver.executeStatement(join)
-        this.logger.debug(`SQL: ${child.sql} [${Date.now() - child.startTime}ms]`)
-
-        const property = this.entityStorage.get(this.model)!.relations.find(rel => rel.propertyKey === join.selectJoinProperty);
-        const values = child.query.rows.map((row: any) => this.transformToModel(join.joinEntity, join, row));
-
-        models[join.selectJoinProperty] = (property.type === Array) ? [...values] : values[0];
-      }
-
-      return models as any;
-    }
-
-    return this.transformToModel(this.model, this.statements, entities);
+    return model as any;
   }
 
   async executeAndReturnFirstOrFail(): Promise<T> {
@@ -158,51 +137,104 @@ export class SqlBuilder<T> {
     const result = await this.execute();
 
     if (result.query.rows.length === 0) {
-      throw new Error('Result not found')
+      throw new Error('Result not found');
     }
 
-    return this.transformToModel(this.model, this.statements, result.query.rows[0]);
+    const entities = result.query.rows[0];
+    const model = await this.transformToModel(this.model, this.statements, entities);
+    await this.handleSelectJoin(entities, model);
+    return model as any;
   }
 
-  // TODO: Corrigir tipagem do retorno de acordo com o driver
   async executeAndReturnAll(): Promise<T[]> {
-    const result = await this.execute()
+    const result = await this.execute();
 
     if (result.query.rows.length === 0) {
       return [];
     }
 
-    return result.query.rows.map((row: any) => this.transformToModel(this.model, this.statements, row));
+    const rows = result.query.rows;
+    const results = [];
+
+    for (const row of rows) {
+      const models = this.transformToModel(this.model, this.statements, row)
+      await this.handleSelectJoin(row, models);
+      results.push(models);
+    }
+
+    return results as any;
   }
 
-  async execute(): Promise<{ query: any, startTime: number, sql: string }> {
-    if (!this.statements.columns) {
-      let columns: any[] = [
-        ...this.getColumnsEntity((this.model as Function), this.statements.alias!),
-      ];
+  private async handleSelectJoin(entities: any, models): Promise<void> {
+    if (this.statements.selectJoin && this.statements.selectJoin.length > 0) {
+      for (const join of this.statements.selectJoin) {
+        const ids = entities[`${join.originAlias}_${join.primaryKey}`];
 
-      if (this.statements.join) {
-        columns = [
-          ...columns,
-          ...this.statements.join.flatMap(join => this.getColumnsEntity(join.joinEntity!, join.joinAlias)),
-        ]
+        if (join.where) {
+          join.where = `${join.where} AND ${join.alias}."${join.fkKey}" = ${this.t(ids)}`;
+        } else {
+          join.where = `${join.alias}."${join.fkKey}" IN (${ids
+            .map((id: any) => this.t(id))
+            .join(', ')})`;
+        }
+
+        if (join.columns && join.columns.length > 0) {
+          join.columns = (join.columns.map(
+            (column) => `${join.alias}."${column}" as "${join.alias}_${column}"`
+          ) as any[]);
+        } else {
+          join.columns = this.getColumnsEntity(join.joinEntity, join.alias) as any;
+        }
+
+        const child = await this.driver.executeStatement(join);
+        this.logger.debug(`SQL: ${child.sql} [${Date.now() - child.startTime}ms]`);
+
+        const property = this.entityStorage.get(this.model)!.relations.find(
+          (rel) => rel.propertyKey === join.selectJoinProperty
+        );
+        const values = child.query.rows.map((row: any) =>
+          this.transformToModel(join.joinEntity, join, row)
+        );
+        models[join.selectJoinProperty] = property.type === Array ? [...values] : values[0];
       }
 
-      this.statements.columns = columns
-    } else {
-      // @ts-ignore
-      this.statements.columns = this.statements.columns.map((column: string) => {
-        return this.discoverColumnAlias(column)
-      }).flat();
-      // @ts-ignore
-      this.statements.columns = this.statements.columns.filter((column: string) => column);
+      return models as any;
     }
-    this.statements.columns!.push(...this.updatedColumns)
-    const result = await this.driver.executeStatement(this.statements);
+  }
 
-    this.logger.debug(`SQL: ${result.sql} [${Date.now() - result.startTime}ms]`)
 
-    return result;
+  private generateColumns(): any[] {
+    let columns: any[] = [
+      ...this.getColumnsEntity((this.model as Function), this.statements.alias!),
+    ];
+
+    if (this.statements.join) {
+      columns = [
+        ...columns,
+        ...this.statements.join.flatMap(join => this.getColumnsEntity(join.joinEntity!, join.joinAlias)),
+      ]
+    }
+
+    return columns;
+  }
+
+  private extractAliasForColumns() {
+    // @ts-ignore
+    this.statements.columns = this.statements.columns!.map((column: string) => {
+      return this.discoverColumnAlias(column)
+    }).flat();
+  }
+
+  private filterInvalidColumns() {
+    this.statements.columns = this.statements.columns!.filter(Boolean);
+  }
+
+  private includeUpdatedColumns() {
+    this.statements.columns!.push(...this.updatedColumns);
+  }
+
+  private logExecution(result: { query: any, startTime: number, sql: string }): void {
+    this.logger.debug(`SQL: ${result.sql} [${Date.now() - result.startTime}ms]`);
   }
 
   startTransaction(): Promise<void> {
@@ -591,7 +623,17 @@ export class SqlBuilder<T> {
       throw new Error('Entity not found');
     }
 
-    return Object.keys(e.showProperties).map(key => `${alias}."${key}" as "${alias}_${key}"`);
+    const columns = Object.keys(e.showProperties).map(key => `${alias}."${key}" as "${alias}_${key}"`)
+
+    if (e.relations) {
+      for (const relation of e.relations) {
+        if (relation.relation === 'many-to-one') {
+          columns.push(`${alias}."${relation.propertyKey}" as "${alias}_${relation.propertyKey}"`)
+        }
+      }
+    }
+
+    return columns;
   }
 
   private withDefaultValues(values: any, entityOptions: Options) {
@@ -637,4 +679,31 @@ export class SqlBuilder<T> {
     }
     return false;
   }
+}
+
+
+function processValuesForInsert<T>(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): void {
+  for (const value in values) {
+    if (extendsFrom(ValueObject, values[value].constructor.prototype)) {
+      values[value] = (values[value] as ValueObject<any, any>).getValue();
+    }
+  }
+}
+
+function processValuesForUpdate<T>(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): void {
+  for (const value in values) {
+    if (extendsFrom(ValueObject, values[value].constructor.prototype)) {
+      values[value] = (values[value] as ValueObject<any, any>).getValue();
+    }
+  }
+}
+function extendsFrom(baseClass, instance): boolean {
+  let proto = Object.getPrototypeOf(instance);
+  while (proto) {
+    if (proto === baseClass.prototype) {
+      return true;
+    }
+    proto = Object.getPrototypeOf(proto);
+  }
+  return false;
 }

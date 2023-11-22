@@ -240,13 +240,13 @@ export type OperatorMap<T> = {
   $like?: string;
 
 };
-export type ExcludeFunctions<T, K extends keyof T> = T[K] extends Function ? ValueOrInstance<T> : (K extends symbol ? never : K);
+export type ExcludeFunctions<T, K extends keyof T> = T[K] extends Function ? never : (K extends symbol ? never : K);
 export type Scalar = boolean | number | string | bigint | symbol | Date | RegExp | Uint8Array | {
   toHexString(): string;
 };
 //TODO: editar
-export type ExpandProperty<T> = T extends (infer U)[] ? ValueOrInstance<U> : ValueOrInstance<T> ;
-export type ExpandScalar<T> = null | ValueOrInstance<T> | (T extends string ? T | RegExp : T extends Date ? Date | string : T);
+export type ExpandProperty<T> = T extends Reference<infer U> ? NonNullable<U> : T extends Collection<infer U, any> ? NonNullable<U> : T extends (infer U)[] ? NonNullable<U> : NonNullable<T>;
+export type ExpandScalar<T> = null | (T extends string ? T | RegExp : T extends Date ? Date | string : T);
 type ExpandObject<T> = T extends object ? T extends Scalar ? never : {
   // @ts-ignore
   -readonly [K in keyof T as ExcludeFunctions<T, K>]?: Query<ExpandProperty<T[K]>> | FilterValue<ExpandProperty<T[K]>> | null;
@@ -261,7 +261,7 @@ export type FilterValue<T> = OperatorMap<FilterValue2<T>> | FilterValue2<T> | Fi
 export type EntityClass<T> = Function & { prototype: T };
 export type EntityName<T> = string | EntityClass<T>  | { name: string };
 export type ObjectQuery<T> = ExpandObject<T> & OperatorMap<T>;
-export type FilterQuery<T> = ValueOrInstance<T> | ObjectQuery<T> | NonNullable<ExpandScalar<Primary<T>>> | NonNullable<EntityProps<T> & OperatorMap<T>> | FilterQuery<T>[];
+export type FilterQuery<T> = ObjectQuery<T> | NonNullable<ExpandScalar<Primary<T>>> | NonNullable<EntityProps<T> & OperatorMap<T>> | FilterQuery<T>[];
 
 export type Relationship<T> = {
   isRelation?: boolean;

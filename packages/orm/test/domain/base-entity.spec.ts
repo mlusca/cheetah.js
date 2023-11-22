@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, jest, setSystemTime, test } from 'bun:test'
 import { app, execute, mockLogger, purgeDatabase, startDatabase } from '../node-database';
-import { BaseEntity, Entity, OneToMany, PrimaryKey, Property } from '../../src';
+import { BaseEntity, Entity, ManyToOne, OneToMany, PrimaryKey, Property } from '../../src';
 import { Email } from '../../src/common/email.vo';
 
 @Entity()
@@ -65,6 +65,18 @@ describe('Creation, update and deletion of entities', () => {
 
     @Property()
     user: number;
+  }
+
+  @Entity()
+  class Street extends BaseEntity {
+    @PrimaryKey()
+    id: number;
+
+    @Property()
+    street: string;
+
+    @ManyToOne(() => Address)
+    address: Address;
   }
 
   beforeEach(async () => {
