@@ -1,5 +1,5 @@
 import { SqlBuilder } from '../SqlBuilder';
-import { FilterQuery, FindOneOption, FindOptions, InstanceOf, ValueOrInstance } from '../driver/driver.interface';
+import { FilterQuery, FindOneOption, FindOptions, ValueOrInstance } from '../driver/driver.interface';
 
 export abstract class BaseEntity {
   private _oldValues: any = {};
