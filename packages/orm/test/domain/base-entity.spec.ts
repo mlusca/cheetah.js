@@ -317,7 +317,7 @@ describe('Creation, update and deletion of entities', () => {
       $or: [
         {id: 1},
         {email: 'test_error@test.com'},
-        ]
+      ],
     });
 
     expect(result).toEqual(user);
@@ -332,7 +332,7 @@ describe('Creation, update and deletion of entities', () => {
       $and: [
         {id: 1},
         {email: 'test@test.com'},
-      ]
+      ],
     });
 
     expect(result).toEqual(user);
@@ -361,9 +361,9 @@ describe('Creation, update and deletion of entities', () => {
 
     const result = await User.findOneOrFail({
       addresses: {
-        id: 1
-      }
-    },{fields: ['id', 'addresses.id']});
+        id: 1,
+      },
+    }, {fields: ['id', 'addresses.id']});
 
     expect(result.id).toEqual(user.id);
     expect(result.email).toBeUndefined();
@@ -384,9 +384,9 @@ describe('Creation, update and deletion of entities', () => {
 
     const result = await User.findOneOrFail({
       addresses: {
-        id: 1
-      }
-    },{fields: ['id', 'addresses.id'], orderBy: {id: 'DESC', addresses: {address: 'DESC'}}});
+        id: 1,
+      },
+    }, {fields: ['id', 'addresses.id'], orderBy: {id: 'DESC', addresses: {address: 'DESC'}}});
 
     expect(result.id).toEqual(user.id);
     expect(mockLogger).toHaveBeenCalledTimes(3);
@@ -397,7 +397,7 @@ describe('Creation, update and deletion of entities', () => {
     const user = await createUser();
 
 
-    const result = await User.find({},{
+    const result = await User.find({}, {
       fields: ['id'],
       limit: 1,
     });
@@ -415,11 +415,11 @@ describe('Creation, update and deletion of entities', () => {
       id: 2,
     });
 
-    const result = await User.find({},{
+    const result = await User.find({}, {
       fields: ['id'],
       offset: 1,
       limit: 1,
-      orderBy: {id: 'ASC'}
+      orderBy: {id: 'ASC'},
     });
 
     expect(result[0].id).toEqual(user2.id);
@@ -427,7 +427,7 @@ describe('Creation, update and deletion of entities', () => {
     expect((mockLogger as jest.Mock).mock.calls[2][0]).toStartWith("SQL: SELECT u1.\"id\" as u1_id FROM \"public\".\"user\" u1 ORDER BY u1.\"id\" ASC OFFSET 1 LIMIT 1");
   })
 
-  test('When use a querybuilder', async() => {
+  test('When use a querybuilder', async () => {
     const created = await app.createQueryBuilder<User>(User)
       .insert({id: 1, email: 'test@test.com'})
       .executeAndReturnFirst()
@@ -436,18 +436,18 @@ describe('Creation, update and deletion of entities', () => {
     expect(created!.id).toEqual(1);
   })
 
-  test('When have update column and default column', async() => {
+  test('When have update column and default column', async () => {
     const dateNow = new Date();
     setSystemTime(dateNow)
 
     const DLL = `
-      CREATE TABLE "usertest"
-      (
-          "id"    SERIAL PRIMARY KEY,
-          "createdAt" timestamp,
-          "updatedAt" timestamp
-      );
-  `;
+        CREATE TABLE "usertest"
+        (
+            "id"        SERIAL PRIMARY KEY,
+            "createdAt" timestamp,
+            "updatedAt" timestamp
+        );
+    `;
 
     await purgeDatabase()
     await startDatabase(import.meta.path)
@@ -455,7 +455,7 @@ describe('Creation, update and deletion of entities', () => {
 
     Entity()(UserTest)
     const created = await UserTest.create({
-      id: 1
+      id: 1,
     })
 
     expect(created).toBeInstanceOf(UserTest);
@@ -464,14 +464,14 @@ describe('Creation, update and deletion of entities', () => {
     expect(created!.updatedAt).toEqual(dateNow);
   })
 
-  test('When have a column with value-object', async() => {
+  test('When have a column with value-object', async () => {
     const DLL = `
-      CREATE TABLE "uservalue"
-      (
-          "id"    SERIAL PRIMARY KEY,
-          "email" varchar(255) NOT NULL
-      );
-  `;
+        CREATE TABLE "uservalue"
+        (
+            "id"    SERIAL PRIMARY KEY,
+            "email" varchar(255) NOT NULL
+        );
+    `;
 
     await purgeDatabase()
     await startDatabase(import.meta.path)
@@ -480,12 +480,12 @@ describe('Creation, update and deletion of entities', () => {
     Entity()(UserValue)
     const created = await UserValue.create({
       id: 1,
-      email: Email.from('test@test.com')
+      email: Email.from('test@test.com'),
     })
 
     const find = await UserValue.findOne({
       email: Email.from('test@test.com'),
-      id: 1
+      id: 1,
     })
 
     expect(created).toBeInstanceOf(UserValue);
@@ -497,11 +497,40 @@ describe('Creation, update and deletion of entities', () => {
     expect(find!.email).toEqual(Email.from('test@test.com'));
   })
 
+  test('When have a join with strategy select-in', async () => {
+    await execute(DDL_ADDRESS)
+    Entity()(User)
+    Entity()(Address)
 
-  async function createUser() {
-    return User.create({
-      email: 'test@test.com',
-      id: 1,
-    })
-  }
+    const user = await createUser();
+    const address = await Address.create({
+      address: 'Street 1',
+      user: user.id,
+      id: 3,
+    });
+
+    const result = await User.findOne({
+      addresses: {
+        id: 3,
+      },
+    }, {fields: ['id', 'addresses.id'], loadStrategy: 'select'});
+
+    expect(result).toBeInstanceOf(User);
+    expect(result!.id).toEqual(user.id);
+    expect(result!.addresses).toBeInstanceOf(Array);
+    expect(result!.addresses[0]).toBeInstanceOf(Address);
+    expect(result!.addresses[0].id).toEqual(address.id);
+    expect(result!.addresses[0].address).toBeUndefined();
+    expect(mockLogger).toHaveBeenCalledTimes(4);
+    expect((mockLogger as jest.Mock).mock.calls[2][0]).toStartWith("SQL: SELECT u1.\"id\" as u1_id FROM \"public\".\"user\" u1 LIMIT 1");
+    expect((mockLogger as jest.Mock).mock.calls[3][0]).toStartWith("SQL: SELECT a1.\"id\" as \"a1_id\" FROM \"public\".\"address\" a1 WHERE (a1.id = 3) AND a1.\"user\" = 1");
+  })
+
+
+async function createUser() {
+  return User.create({
+    email: 'test@test.com',
+    id: 1,
+  })
+}
 })

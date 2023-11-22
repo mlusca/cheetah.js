@@ -56,6 +56,7 @@ export abstract class BaseEntity {
   ): Promise<T[]> {
     return this.createQueryBuilder<T>()
       .select(options?.fields as any)
+      .setStrategy(options?.loadStrategy)
       .where(where)
       .limit(options?.limit)
       .offset(options?.offset)
@@ -70,6 +71,7 @@ export abstract class BaseEntity {
   ): Promise<T | undefined> {
     return this.createQueryBuilder<T>()
       .select(options?.fields as any)
+      .setStrategy(options?.loadStrategy)
       .where(where)
       .executeAndReturnFirst();
   }
@@ -89,6 +91,7 @@ export abstract class BaseEntity {
     return this.createQueryBuilder<T>()
       // @ts-ignore
       .select(options?.fields)
+      .setStrategy(options?.loadStrategy)
       .where(where)
       .orderBy(options?.orderBy as string[])
       .executeAndReturnFirstOrFail();
@@ -103,6 +106,7 @@ export abstract class BaseEntity {
   ): Promise<T[]> {
     const builder = this.createQueryBuilder<T>()
       .select(options.fields as any)
+      .setStrategy(options?.loadStrategy)
       .offset(options?.offset)
       .limit(options.limit)
       .orderBy(options?.orderBy as string[]);

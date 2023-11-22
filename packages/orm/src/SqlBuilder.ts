@@ -1,7 +1,7 @@
 import {
   AutoPath,
   DriverInterface,
-  FilterQuery,
+  FilterQuery, JoinStatement,
   QueryOrderMap,
   Relationship,
   Statement, ValueOrInstance,
@@ -23,6 +23,7 @@ export class SqlBuilder<T> {
   private lastKeyNotOperator = '';
   private logger: LoggerService;
   private updatedColumns: any[] = [];
+  private originalColumns: any[] = [];
 
   constructor(model: new () => T) {
     const orm = Orm.getInstance();
@@ -38,10 +39,15 @@ export class SqlBuilder<T> {
     const schema = this.entity.schema || 'public';
 
     this.statements.statement = 'select';
-
     this.statements.columns = columns;
+    this.originalColumns = columns || [];
     this.statements.alias = this.getAlias(tableName)
     this.statements.table = `"${schema}"."${tableName}"`;
+    return this;
+  }
+
+  setStrategy(strategy: 'joined' | 'select' = 'joined'): SqlBuilder<T> {
+    this.statements.strategy = strategy;
     return this;
   }
 
@@ -113,7 +119,37 @@ export class SqlBuilder<T> {
       return undefined;
     }
 
-    return this.transformToModel(result.query.rows[0]);
+    const entities = result.query.rows[0]
+
+    if (this.statements.selectJoin && this.statements.selectJoin.length > 0) {
+      const models = this.transformToModel(this.model, this.statements, entities);
+
+      for (const join of this.statements.selectJoin) {
+        const ids = entities[`${join.originAlias}_${join.primaryKey}`];
+
+        if (join.where) {
+          join.where = `${join.where} AND ${join.alias}."${join.fkKey}" = ${this.t(ids)}`
+        } else {
+          join.where = `${join.alias}."${join.fkKey}" IN (${ids.map((id: any) => this.t(id)).join(', ')})`
+        }
+        if (join.columns) {
+          join.columns = (join.columns.map(column => `${join.alias}."${column}" as "${join.alias}_${column}"`) as any[])
+        } else {
+          join.columns = this.getColumnsEntity(join.joinEntity, join.alias) as any;
+        }
+        const child = await this.driver.executeStatement(join)
+        this.logger.debug(`SQL: ${child.sql} [${Date.now() - child.startTime}ms]`)
+
+        const property = this.entityStorage.get(this.model)!.relations.find(rel => rel.propertyKey === join.selectJoinProperty);
+        const values = child.query.rows.map((row: any) => this.transformToModel(join.joinEntity, join, row));
+
+        models[join.selectJoinProperty] = (property.type === Array) ? [...values] : values[0];
+      }
+
+      return models as any;
+    }
+
+    return this.transformToModel(this.model, this.statements, entities);
   }
 
   async executeAndReturnFirstOrFail(): Promise<T> {
@@ -125,7 +161,7 @@ export class SqlBuilder<T> {
       throw new Error('Result not found')
     }
 
-    return this.transformToModel(result.query.rows[0]);
+    return this.transformToModel(this.model, this.statements, result.query.rows[0]);
   }
 
   // TODO: Corrigir tipagem do retorno de acordo com o driver
@@ -136,7 +172,7 @@ export class SqlBuilder<T> {
       return [];
     }
 
-    return result.query.rows.map((row: any) => this.transformToModel(row));
+    return result.query.rows.map((row: any) => this.transformToModel(this.model, this.statements, row));
   }
 
   async execute(): Promise<{ query: any, startTime: number, sql: string }> {
@@ -158,12 +194,12 @@ export class SqlBuilder<T> {
       this.statements.columns = this.statements.columns.map((column: string) => {
         return this.discoverColumnAlias(column)
       }).flat();
+      // @ts-ignore
+      this.statements.columns = this.statements.columns.filter((column: string) => column);
     }
-
     this.statements.columns!.push(...this.updatedColumns)
-
     const result = await this.driver.executeStatement(this.statements);
-    // console.log(result.query.rows);
+
     this.logger.debug(`SQL: ${result.sql} [${Date.now() - result.startTime}ms]`)
 
     return result;
@@ -220,7 +256,7 @@ export class SqlBuilder<T> {
       return `${this.statements.alias!}."${column}" as ${this.statements.alias!}_${column}`;
     }
 
-    if (typeof this.statements.join === 'undefined') {
+    if (typeof this.statements.join === 'undefined' && typeof this.statements.selectJoin === 'undefined') {
       throw new Error('Join not found');
     }
 
@@ -229,14 +265,22 @@ export class SqlBuilder<T> {
     let lastAlias = this.statements.alias!;
 
     const relationsMap = new Map(this.entity.relations.map(rel => [rel.propertyKey, rel]));
-    const joinMap = new Map(this.statements.join!.map(join => [join.joinProperty, join]));
+    const joinMap = new Map<string, JoinStatement<any>>()
+    const joinSelectMap = new Map<string, Statement<any>>()
+    this.statements.join?.forEach(join => joinMap.set(join.joinProperty, join))
+    this.statements.selectJoin?.forEach(join => joinSelectMap.set(join.selectJoinProperty, join))
 
     for (let i = 0; i < entities.length; i++) {
       if (i === 0) {
         const relation = relationsMap.get(entities[i]);
         lastEntity = relation?.entity() as Function;
         // @ts-ignore
-        lastAlias = joinMap.get(entities[i])?.joinAlias;
+        if (joinMap.has(entities[i])) {
+          lastAlias = joinMap.get(entities[i]).joinAlias;
+        } else {
+          lastAlias = joinSelectMap.get(entities[i])?.alias;
+          return undefined
+        }
       } else {
         if ((i + 1) === entities.length) {
           if (onlyAlias) {
@@ -292,7 +336,10 @@ export class SqlBuilder<T> {
 
       const relationShip = this.entity.relations?.find(rel => rel.propertyKey === key);
       if (relationShip) {
-        sqlParts.push(this.applyJoin(relationShip, value, alias));
+        const sql = this.applyJoin(relationShip, value, alias);
+        if (this.statements.strategy === 'joined') {
+          sqlParts.push(sql);
+        }
       } else if (typeof value !== 'object' || value === null) {
         if (key === '$eq') {
           sqlParts.push(this.addSimpleConditionToSql(this.lastKeyNotOperator, value, alias, '='));
@@ -347,6 +394,9 @@ export class SqlBuilder<T> {
         }
       }
     }
+    if (sqlParts.length === 0) {
+      return '';
+    }
 
     return this.addLogicalOperatorToSql(sqlParts, 'AND');
   }
@@ -373,7 +423,6 @@ export class SqlBuilder<T> {
     }
     const joinAlias = `${this.getAlias(joinTableName)}`;
     const joinWhere = this.conditionToSql(value, joinAlias)
-    this.statements.join = this.statements.join || [];
     let on = '';
 
     switch (relationShip.relation) {
@@ -385,27 +434,45 @@ export class SqlBuilder<T> {
         break;
     }
 
-    this.statements.join.push({
-      joinAlias: joinAlias,
-      joinTable: joinTableName,
-      joinSchema: joinSchema || 'public',
-      joinWhere: joinWhere,
-      joinProperty: relationShip.propertyKey as string,
-      originAlias: alias,
-      originSchema: schema,
-      originTable: tableName,
-      propertyKey: relationShip.propertyKey,
-      joinEntity: (relationShip.entity() as Function),
-      type: 'LEFT',
-      // @ts-ignore
-      on,
-      originalEntity: relationShip.originalEntity as Function,
-    })
+    if (this.statements.strategy === 'joined') {
+      this.statements.join = this.statements.join || [];
+      this.statements.join.push({
+        joinAlias: joinAlias,
+        joinTable: joinTableName,
+        joinSchema: joinSchema || 'public',
+        joinWhere: joinWhere,
+        joinProperty: relationShip.propertyKey as string,
+        originAlias: alias,
+        originSchema: schema,
+        originTable: tableName,
+        propertyKey: relationShip.propertyKey,
+        joinEntity: (relationShip.entity() as Function),
+        type: 'LEFT',
+        // @ts-ignore
+        on,
+        originalEntity: relationShip.originalEntity as Function,
+      })
+    } else {
+
+      this.statements.selectJoin = this.statements.selectJoin || [];
+      this.statements.selectJoin.push({
+        statement: 'select',
+        columns: this.originalColumns.filter(column => column.startsWith(`${relationShip.propertyKey as string}`)).map(column => column.split('.')[1]) || [],
+        table: `"${joinSchema || 'public'}"."${joinTableName}"`,
+        alias: joinAlias,
+        where: joinWhere,
+        selectJoinProperty: relationShip.propertyKey as string,
+        fkKey: this.getFkKey(relationShip),
+        primaryKey: originPrimaryKey,
+        originAlias: alias,
+        joinEntity: (relationShip.entity() as Function),
+      })
+    }
 
     return joinWhere;
   }
 
-  private getFkKey(relationShip: Relationship<any>): string | number {
+  private getFkKey(relationShip: Relationship<any>): string {
     // se for nullable, deverá retornar o primary key da entidade target
     if (typeof relationShip.fkKey === 'undefined') {
       return 'id'; // TODO: Pegar dinamicamente o primary key da entidade target
@@ -438,15 +505,15 @@ export class SqlBuilder<T> {
     this.entity = entity;
   }
 
-  private transformToModel<T>(data: any): T {
-    const instance = new (this.model as any)()
+  private transformToModel<T>(model: any, statement: Statement<any>, data: any): T {
+    const instance = new model()
 
     instance.$_isPersisted = true;
     const entitiesByAlias: { [key: string]: Function } = {
-      [this.statements.alias!]: instance,
+      [statement.alias!]: instance,
     }
     const entitiesOptions: Map<string, Options> = new Map();
-    entitiesOptions.set(this.statements.alias!, this.entityStorage.get(instance.constructor)!)
+    entitiesOptions.set(statement.alias!, this.entityStorage.get(instance.constructor)!)
 
     if (this.statements.join) {
       this.statements.join.forEach(join => {
@@ -466,12 +533,12 @@ export class SqlBuilder<T> {
 
       const entityProperty = entitiesOptions.get(alias)!.showProperties[prop]
       if (entityProperty) {
-
         if (this.extendsFrom(ValueObject, entityProperty.type.prototype)) {
           // @ts-ignore
           entity[prop] = new entityProperty.type(value);
           return;
         }
+
         // @ts-ignore
         entity[prop] = value;
       }

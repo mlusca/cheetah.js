@@ -13,14 +13,14 @@ services:
     ports:
       - 5432:5432
     network_mode: host
-
-  mysql:
-    image: mysql:8.0.27
-    container_name: db-mysql
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: mysql
-    ports:
-      - 3306:3306
-    network_mode: host
+#
+#  mysql:
+#    image: mysql:8.0.27
+#    container_name: db-mysql
+#    restart: always
+#    environment:
+#      MYSQL_ROOT_PASSWORD: root
+#      MYSQL_DATABASE: mysql
+#    ports:
+#      - 3306:3306
+#    network_mode: host

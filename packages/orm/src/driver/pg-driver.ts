@@ -165,7 +165,7 @@ export class PgDriver implements DriverInterface {
         sql += ` LIMIT ${statement.limit}`;
       }
     }
-
+    console.log(sql)
     const startTime = Date.now();
     return {
       query: await this.client.query(sql),
@@ -183,7 +183,7 @@ export class PgDriver implements DriverInterface {
     return this.client.end()
   }
 
-  executeSql(s: string) {
+  executeSql(s: string) {''
     return this.client.query(s)
   }
 

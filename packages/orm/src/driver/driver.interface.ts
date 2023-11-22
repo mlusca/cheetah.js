@@ -105,12 +105,20 @@ export type Statement<T> = {
   alias?: string;
   columns?: Array<keyof T>;
   join?: JoinStatement<T>[];
+  selectJoin?: Statement<T>[];
+  strategy?: 'select' | 'joined';
   where?: string;
   values?: any;
   groupBy?: string[];
   orderBy?: string[];
   limit?: number;
   offset?: number;
+
+  selectJoinProperty?: string
+  fkKey?: string;
+  primaryKey?: string;
+  originAlias?: string;
+  joinEntity?: Function;
 }
 
 interface SnapshotColumnInfo {
@@ -336,5 +344,6 @@ export interface FindOptions<T, P extends string = never> {
   limit?: number;
   offset?: number;
   fields?: readonly EntityField<T, P>[];
+  loadStrategy?: 'select' | 'joined';
 }
 export type FindOneOption<T, P extends string = never> = Omit<FindOptions<T, P>, 'limit'|'offset'>
