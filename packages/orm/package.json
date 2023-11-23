@@ -19,10 +19,10 @@
     "compile": "sudo rm -rf ./dist && tsc && bun run build.ts"
   },
   "dependencies": {
-    "uuid": "^9.0.1",
+    "commander": "^11.1.0",
     "reflect-metadata": "^0.1.13",
     "ts-morph": "^20.0.0",
-    "commander": "^11.1.0"
+    "uuid": "^9.0.1"
   },
   "repository": {
     "type": "git",
@@ -32,9 +32,9 @@
     "cheetah-orm": "./dist/cheetah.js"
   },
   "devDependencies": {
+    "@types/pg": "^8.10.9",
     "@types/uuid": "^9.0.6",
-    "pg": "^8.11.3",
-    "@types/pg": "^8.10.9"
+    "pg": "^8.11.3"
   },
   "peerDependencies": {
     "@cheetah.js/core": "^0.1.9",
