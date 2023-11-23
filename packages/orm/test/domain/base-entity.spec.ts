@@ -534,6 +534,7 @@ describe('Creation, update and deletion of entities', () => {
     expect(result!.addresses[0].id).toEqual(address.id);
     expect(result!.addresses[0].address).toBeUndefined();
     expect(mockLogger).toHaveBeenCalledTimes(4);
+    expect(mockLogger).not.toHaveBeenCalledTimes(5)
     expect((mockLogger as jest.Mock).mock.calls[2][0]).toStartWith("SQL: SELECT u1.\"id\" as u1_id FROM \"public\".\"user\" u1 LIMIT 1");
     expect((mockLogger as jest.Mock).mock.calls[3][0]).toStartWith("SQL: SELECT a1.\"id\" as \"a1_id\" FROM \"public\".\"address\" a1 WHERE (a1.id = 3) AND a1.\"user\" = 1");
   })
