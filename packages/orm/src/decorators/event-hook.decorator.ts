@@ -1,4 +1,4 @@
-import { EVENTS_METADATA } from '@cheetah.js/orm/constants';
+import { EVENTS_METADATA } from '../constants';
 
 export function BeforeCreate() {
     return function (target, propertyName) {

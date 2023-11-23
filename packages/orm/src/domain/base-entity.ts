@@ -1,6 +1,6 @@
 import { SqlBuilder } from '../SqlBuilder';
 import { FilterQuery, FindOneOption, FindOptions, ValueOrInstance } from '../driver/driver.interface';
-import { EntityStorage, Options, Property } from '@cheetah.js/orm/domain/entities';
+import { EntityStorage, Property } from './entities';
 
 export abstract class BaseEntity {
   private _oldValues: any = {};

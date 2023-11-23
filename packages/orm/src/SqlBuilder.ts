@@ -12,7 +12,7 @@ import { EntityStorage, Options } from './domain/entities';
 import { Orm } from './orm';
 import { LoggerService } from '@cheetah.js/core';
 import { ValueObject } from './common/value-object';
-import { BaseEntity } from '@cheetah.js/orm/domain/base-entity';
+import { BaseEntity } from './domain/base-entity';
 
 export class SqlBuilder<T> {
   private readonly driver: DriverInterface;
