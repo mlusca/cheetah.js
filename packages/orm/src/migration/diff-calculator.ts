@@ -302,6 +302,7 @@ export class DiffCalculator {
     if (bdCol.enumItems || entityCol.enumItems) {
       if (bdCol.enumItems && entityCol.enumItems) {
         const allEnums = new Set([...bdCol.enumItems, ...entityCol.enumItems]);
+        // @ts-ignore
         const differences = [...allEnums].filter(x => !bdCol.enumItems?.includes(x) || !entityCol.enumItems?.includes(x));
 
         if (differences.length === 0) {
