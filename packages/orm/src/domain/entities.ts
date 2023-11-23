@@ -14,6 +14,7 @@ export type Options = {
   indexes?: SnapshotIndexInfo[];
   relations: Relationship<any>[];
   tableName: string;
+  hooks?: { type: string, propertyName: string }[];
   schema?: string;
 }
 
@@ -27,22 +28,25 @@ export class EntityStorage {
     EntityStorage.instance = this;
   }
 
-  add(entity: { target: Function, options: any }, properties: {[key: string]: Property}, relations: Relationship<any>[]) {
+  add(entity: { target: Function, options: any }, properties: {
+    [key: string]: Property
+  }, relations: Relationship<any>[], hooks: { type: string, propertyName: string }[]) {
     const entityName = entity.options?.tableName || entity.target.name.toLowerCase();
     const indexes = Metadata.get('indexes', entity.target) || [];
     this.entities.set(entity.target, {
       showProperties: properties,
       hideProperties: [],
       relations,
-      indexes: indexes.map((index: {name: string, properties: string[]}) => {
+      indexes: indexes.map((index: { name: string, properties: string[] }) => {
         return {
           table: entityName,
           indexName: index.name.replace('[TABLE]', entityName),
           columnName: index.properties.join(','),
         }
       }),
+      hooks,
       tableName: entityName,
-      ...entity.options
+      ...entity.options,
     })
   }
 
@@ -98,8 +102,8 @@ export class EntityStorage {
           {
             referencedColumnName: this.getFkKey(relation),
             referencedTableName: this.get(relation.entity() as any)!.tableName,
-          }
-        ]
+          },
+        ],
       }
     })
 

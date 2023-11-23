@@ -136,7 +136,7 @@ export class PgDriver implements DriverInterface {
         sql = `INSERT INTO ${table} (${fields}) VALUES (${values}) RETURNING ${statement.columns!.join(', ').replaceAll(`${alias}.`, '')}`;
         break;
       case 'update':
-        sql = `UPDATE ${table} as ${alias} SET ${Object.entries(statement.values).map(([key, value]) => `${key} = '${value}'`).join(', ')}`;
+        sql = `UPDATE ${table} as ${alias} SET ${Object.entries(statement.values).map(([key, value]) => `${key} = ${this.toDatabaseValue(value)}`).join(', ')}`;
         break;
       case 'delete':
         break;

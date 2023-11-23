@@ -3,6 +3,7 @@ export * from './decorators/property.decorator';
 export * from './decorators/primary-key.decorator';
 export * from './decorators/one-many.decorator';
 export * from './decorators/index.decorator';
+export * from './decorators/event-hook.decorator';
 export * from './orm'
 export * from './orm.service'
 export * from './domain/base-entity'

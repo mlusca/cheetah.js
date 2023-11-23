@@ -33,6 +33,7 @@ export class SqlBuilder<T> {
     this.entityStorage = EntityStorage.getInstance();
 
     this.getEntity(model);
+    this.statements.hooks = this.entity.hooks;
   }
 
   select(columns?: AutoPath<T, never, '*'>[]): SqlBuilder<T> {
@@ -52,9 +53,15 @@ export class SqlBuilder<T> {
     return this;
   }
 
+  setInstance(instance: T): SqlBuilder<T> {
+    this.statements.instance = instance;
+    return this;
+  }
+
   insert(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): SqlBuilder<T> {
     const {tableName, schema} = this.getTableName();
     processValuesForInsert(values);
+    this.statements.instance = upEntity(values, this.model, 'insert')
     this.statements.statement = 'insert';
     this.statements.alias = this.getAlias(tableName);
     this.statements.table = `"${schema}"."${tableName}"`;
@@ -68,6 +75,7 @@ export class SqlBuilder<T> {
   update(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): SqlBuilder<T> {
     const {tableName, schema} = this.getTableName();
     processValuesForUpdate(values);
+    this.statements.instance = upEntity(values, this.model, 'update')
     this.statements.statement = 'update';
     this.statements.alias = this.getAlias(tableName);
     this.statements.table = `${schema}.${tableName}`;
@@ -170,9 +178,34 @@ export class SqlBuilder<T> {
     }
     this.statements.join = this.statements.join?.reverse()
     this.includeUpdatedColumns();
+    this.beforeHooks();
     const result = await this.driver.executeStatement(this.statements);
     this.logExecution(result);
     return result;
+  }
+
+  private beforeHooks() {
+    if (this.statements.statement === 'update') {
+      this.callHook('beforeUpdate', this.statements.instance);
+      return;
+    }
+
+    if (this.statements.statement === 'insert') {
+      this.callHook('beforeCreate');
+      return;
+    }
+  }
+
+  private afterHooks(model?: any) {
+    if (this.statements.statement === 'update') {
+      this.callHook('afterUpdate', this.statements.instance);
+      return;
+    }
+
+    if (this.statements.statement === 'insert') {
+      this.callHook('afterCreate', model);
+      return;
+    }
   }
 
   async executeAndReturnFirst(): Promise<T | undefined> {
@@ -186,6 +219,7 @@ export class SqlBuilder<T> {
 
     const entities = result.query.rows[0];
     const model = await this.transformToModel(this.model, this.statements, entities);
+    this.afterHooks(model);
     await this.handleSelectJoin(entities, model);
 
     return model as any;
@@ -202,6 +236,7 @@ export class SqlBuilder<T> {
 
     const entities = result.query.rows[0];
     const model = await this.transformToModel(this.model, this.statements, entities);
+    this.afterHooks(model);
     await this.handleSelectJoin(entities, model);
     return model as any;
   }
@@ -218,6 +253,7 @@ export class SqlBuilder<T> {
 
     for (const row of rows) {
       const models = this.transformToModel(this.model, this.statements, row)
+      this.afterHooks(models);
       await this.handleSelectJoin(row, models);
       results.push(models);
     }
@@ -565,6 +601,7 @@ export class SqlBuilder<T> {
     const {
       tableName: joinTableName,
       schema: joinSchema,
+      hooks: joinHooks,
     } = this.entityStorage.get((relationShip.entity() as Function)) || {
       tableName: (relationShip.entity() as Function).name.toLowerCase(),
       schema: 'public',
@@ -606,6 +643,7 @@ export class SqlBuilder<T> {
         // @ts-ignore
         on,
         originalEntity: relationShip.originalEntity as Function,
+        hooks: joinHooks,
       })
     } else {
 
@@ -624,6 +662,7 @@ export class SqlBuilder<T> {
         originProperty: relationShip.propertyKey as string,
         joinEntity: (relationShip.entity() as Function),
         originEntity: relationShip.originalEntity as Function,
+        hooks: joinHooks,
       })
     }
     return joinWhere;
@@ -805,6 +844,37 @@ export class SqlBuilder<T> {
     }
     return false;
   }
+
+  public callHook(type: string, model?: any) {
+    const hooks = this.statements.hooks?.filter(hook => hook.type === type) || [];
+    const instance = model || this.statements.instance;
+
+    for (const hook of hooks) {
+      instance[hook.propertyName]()
+
+      if (!model) {
+        this.reflectToValues();
+      }
+    }
+  }
+
+  private reflectToValues() {
+    for (const key in this.statements.instance as any) {
+      if (key.startsWith('$')) {
+        continue;
+      }
+      if (key.startsWith('_')) {
+        continue;
+      }
+      if (this.entity.showProperties[key]) {
+        this.statements.values[key] = this.statements.instance[key];
+        continue;
+      }
+      if (this.entity.relations.find(rel => rel.propertyKey === key)) {
+        this.statements.values[key] = this.statements.instance[key];
+      }
+    }
+  }
 }
 
 
@@ -839,4 +909,43 @@ function extendsFrom(baseClass, instance): boolean {
     proto = Object.getPrototypeOf(proto);
   }
   return false;
+}
+
+function upEntity(values: any, entity: Function, moment: 'insert' | 'update' = undefined) {
+  const entityStorage = EntityStorage.getInstance();
+  const entityOptions = entityStorage.get(entity);
+  // @ts-ignore
+  const instance = new entity();
+
+  if (!entityOptions) {
+    throw new Error('Entity not found');
+  }
+
+  const property = Object.entries(entityOptions.showProperties)
+  const relations = entityOptions.relations;
+
+  property.forEach(([key, property]) => {
+    if (property.options.onInsert && moment === 'insert') {
+      instance[key] = property.options.onInsert!();
+    }
+
+    if (property.options.onInsert && moment === 'update') {
+      instance[key] = property.options.onUpdate!();
+    }
+
+    if (key in values) {
+      instance[key] = values[key];
+    }
+  })
+
+  if (relations) {
+    for (const relation of relations) {
+      if (relation.relation === 'many-to-one') {
+        // @ts-ignore
+        instance[relation.propertyKey] = instance[relation.propertyKey];
+      }
+    }
+  }
+
+  return instance;
 }

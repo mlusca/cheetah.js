@@ -97,6 +97,7 @@ export type JoinStatement<T> = {
   joinProperty: string;
   on: string;
   propertyKey: string | symbol;
+  hooks?: { type: string, propertyName: string }[];
 };
 
 export type Statement<T> = {
@@ -114,6 +115,8 @@ export type Statement<T> = {
   orderBy?: string[];
   limit?: number;
   offset?: number;
+  hooks?: { type: string, propertyName: string }[];
+  instance?: InstanceOf<T>;
 
   joinProperty?: string
   fkKey?: string;

@@ -1,6 +1,6 @@
 import { Metadata, OnApplicationInit, Service } from '@cheetah.js/core';
 import { EntityStorage, Property } from './domain/entities';
-import { ENTITIES, PROPERTIES_METADATA, PROPERTIES_RELATIONS } from './constants';
+import { ENTITIES, EVENTS_METADATA, PROPERTIES_METADATA, PROPERTIES_RELATIONS } from './constants';
 import { globbySync } from 'globby';
 import { Project, SyntaxKind } from 'ts-morph';
 import { Orm } from './orm';
@@ -84,6 +84,7 @@ export class OrmService {
       const nullableDefaultEntity = this.allEntities.get(entity.target.name);
       const properties: { [key: string]: Property } = Metadata.get(PROPERTIES_METADATA, entity.target);
       const relationship = Metadata.get(PROPERTIES_RELATIONS, entity.target);
+      const hooks = Metadata.get(EVENTS_METADATA, entity.target)
 
       for (const property in properties) {
         if (nullableDefaultEntity?.nullables.includes(property)) {
@@ -94,7 +95,7 @@ export class OrmService {
         }
       }
 
-      this.storage.add(entity, properties, relationship);
+      this.storage.add(entity, properties, relationship, hooks);
     }
     console.log('Entities prepared!')
   }

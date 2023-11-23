@@ -131,15 +131,17 @@ export abstract class BaseEntity {
     const qb = this.createQueryBuilder()
 
     if (this.$_isPersisted) {
-      qb.update(this._changedValues)
+      qb.update(this._changedValues);
+      qb.setInstance(this)
         // @ts-ignore
-        .where({id: this._oldValues.id})
+        qb.where({id: this._oldValues.id})
     } else {
       qb.insert(this._oldValues)
     }
 
     await qb.execute()
-
+    qb.callHook('afterCreate', this)
+    qb.callHook('afterUpdate', this)
     this._oldValues = {
       ...this._oldValues,
       ...this._changedValues,
