@@ -32,7 +32,8 @@ export interface DriverInterface {
   getAlterTableDropNullInstruction(schema: string | undefined, tableName: string, colName: string, colDiff: ColDiff): string;
 
   getAlterTableDropNotNullInstruction(schema: string | undefined, tableName: string, colName: string, colDiff: ColDiff): string;
-
+  getAlterTableEnumInstruction(schema: string, tableName: string, colName: string, colDiff: ColDiff): string;
+  getDropTypeEnumInstruction(param: {name: string}, schema: string | undefined, tableName: string): string;
   startTransaction(): Promise<void>;
   commitTransaction(): Promise<void>;
   rollbackTransaction(): Promise<void>;
@@ -82,6 +83,16 @@ export type Condition<T> = {
 export type InstanceOf<T> = {
   [key in keyof T]: T[key]
 };
+
+export type ClassType<T = any> = {
+  [k: string]: T;
+};
+
+export interface EnumOptions<T> extends PropertyOptions {
+  items?: (number | string)[] | (() => ClassType);
+  array?: boolean;
+}
+
 
 export type JoinStatement<T> = {
   type: 'INNER' | 'LEFT' | 'RIGHT';
@@ -178,6 +189,8 @@ export type ColumnsInfo = {
   unique?: boolean;
   autoIncrement?: boolean;
   length?: number;
+  isEnum?: boolean;
+  enumItems?: string[] | number[];
   foreignKeys?: ForeignKeyInfo[];
 }
 
@@ -195,6 +208,8 @@ export type ColDiff = {
     unique?: boolean;
     nullable?: boolean;
     autoIncrement?: boolean;
+    enumItems?: string[] | number[];
+    enumModified?: boolean;
     foreignKeys?: ForeignKeyInfo[];
   };
 }

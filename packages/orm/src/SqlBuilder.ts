@@ -607,8 +607,8 @@ export class SqlBuilder<T> {
       schema: 'public',
     };
     let originPrimaryKey = 'id';
-    for (const prop in this.entity.showProperties) {
-      if (this.entity.showProperties[prop].options.isPrimary) {
+    for (const prop in this.entity.properties) {
+      if (this.entity.properties[prop].options.isPrimary) {
         originPrimaryKey = prop;
         break;
       }
@@ -727,7 +727,7 @@ export class SqlBuilder<T> {
         return;
       }
 
-      const entityProperty = entitiesOptions.get(alias)!.showProperties[prop]
+      const entityProperty = entitiesOptions.get(alias)!.properties[prop]
       if (entityProperty) {
         if (this.extendsFrom(ValueObject, entityProperty.type.prototype)) {
           // @ts-ignore
@@ -787,7 +787,7 @@ export class SqlBuilder<T> {
       throw new Error('Entity not found');
     }
 
-    const columns = Object.keys(e.showProperties).map(key => `${alias}."${key}" as "${alias}_${key}"`)
+    const columns = Object.keys(e.properties).map(key => `${alias}."${key}" as "${alias}_${key}"`)
 
     if (e.relations) {
       for (const relation of e.relations) {
@@ -802,8 +802,8 @@ export class SqlBuilder<T> {
   }
 
   private withDefaultValues(values: any, entityOptions: Options) {
-    const property = Object.entries(entityOptions.showProperties).filter(([_, value]) => value.options.onInsert);
-    const defaultProperties = Object.entries(entityOptions.showProperties).filter(([_, value]) => value.options.default);
+    const property = Object.entries(entityOptions.properties).filter(([_, value]) => value.options.onInsert);
+    const defaultProperties = Object.entries(entityOptions.properties).filter(([_, value]) => value.options.default);
 
     for (const [key, property] of defaultProperties) {
       if (typeof values[key] === 'undefined') {
@@ -824,7 +824,7 @@ export class SqlBuilder<T> {
   }
 
   private withUpdatedValues(values: any, entityOptions: Options) {
-    const property = Object.entries(entityOptions.showProperties).filter(([_, value]) => value.options.onUpdate);
+    const property = Object.entries(entityOptions.properties).filter(([_, value]) => value.options.onUpdate);
 
     property.forEach(([key, property]) => {
       values[key] = property.options.onUpdate!();
@@ -835,6 +835,7 @@ export class SqlBuilder<T> {
   }
 
   private extendsFrom(baseClass, instance) {
+    if (!instance) return false;
     let proto = Object.getPrototypeOf(instance);
     while (proto) {
       if (proto === baseClass.prototype) {
@@ -866,7 +867,7 @@ export class SqlBuilder<T> {
       if (key.startsWith('_')) {
         continue;
       }
-      if (this.entity.showProperties[key]) {
+      if (this.entity.properties[key]) {
         this.statements.values[key] = this.statements.instance[key];
         continue;
       }
@@ -921,7 +922,7 @@ function upEntity(values: any, entity: Function, moment: 'insert' | 'update' = u
     throw new Error('Entity not found');
   }
 
-  const property = Object.entries(entityOptions.showProperties)
+  const property = Object.entries(entityOptions.properties)
   const relations = entityOptions.relations;
 
   property.forEach(([key, property]) => {

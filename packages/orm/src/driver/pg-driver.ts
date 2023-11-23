@@ -28,11 +28,16 @@ export class PgDriver implements DriverInterface {
   }
 
   getCreateTableInstruction(schema: string | undefined, tableName: string, creates: ColDiff[]) {
-    return `CREATE TABLE "${schema}"."${tableName}" (${creates.map(colDiff => {
+    let beforeSql = ``;
+    const st = `CREATE TABLE "${schema}"."${tableName}" (${creates.map(colDiff => {
       const isAutoIncrement = colDiff.colChanges?.autoIncrement;
-    
-      let sql = `"${colDiff.colName}" ${isAutoIncrement ? 'SERIAL' : colDiff.colType + (colDiff.colLength ? `(${colDiff.colLength})` : '')}`;
-    
+      let sql = ``;
+      if (colDiff.colChanges?.enumItems) {
+          beforeSql += `CREATE TYPE "${schema}_${tableName}_${colDiff.colName}_enum" AS ENUM (${colDiff.colChanges.enumItems.map(item => `'${item}'`).join(', ')});`;
+        sql += `"${colDiff.colName}" "${schema}_${tableName}_${colDiff.colName}_enum"`;
+      } else {
+        sql += `"${colDiff.colName}" ${isAutoIncrement ? 'SERIAL' : colDiff.colType + (colDiff.colLength ? `(${colDiff.colLength})` : '')}`;
+      }
       if (!isAutoIncrement && !colDiff.colChanges?.nullable) {
         sql += ' NOT NULL';
       }
@@ -51,6 +56,8 @@ export class PgDriver implements DriverInterface {
 
       return sql;
     })});`;
+
+    return beforeSql+st;
   }
   getAlterTableFkInstruction(schema: string | undefined, tableName: string, colDiff: ColDiff, fk: ForeignKeyInfo) {
     return `ALTER TABLE "${schema}"."${tableName}" ADD CONSTRAINT "${tableName}_${colDiff.colName}_fk" FOREIGN KEY ("${colDiff.colName}") REFERENCES "${fk.referencedTableName}" ("${fk.referencedColumnName}");`;
@@ -59,8 +66,15 @@ export class PgDriver implements DriverInterface {
     return `CREATE INDEX "${index.name}" ON "${schema}"."${tableName}" (${index.properties.map(prop => `"${prop}"`).join(', ')});`;
   }
   getAddColumn(schema: string | undefined, tableName: string, colName: string, colDiff: ColDiff, colDiffInstructions: string[]): void{
-    let sql = `ALTER TABLE "${schema}"."${tableName}" ADD COLUMN "${colName}" ${colDiff.colType}${(colDiff.colLength ? `(${colDiff.colLength})` : '')}`
-
+    let beforeSql = ``;
+    let sql = ``;
+    if (colDiff.colChanges?.enumItems) {
+      beforeSql += `CREATE TYPE "${schema}_${tableName}_${colDiff.colName}_enum" AS ENUM (${colDiff.colChanges.enumItems.map(item => `'${item}'`).join(', ')});`;
+      colDiffInstructions.push(beforeSql);
+      sql += `ALTER TABLE "${schema}"."${tableName}" ADD COLUMN "${colDiff.colName}" "${schema}_${tableName}_${colDiff.colName}_enum"`;
+    } else {
+      sql += `ALTER TABLE "${schema}"."${tableName}" ADD COLUMN "${colName}" ${colDiff.colType}${(colDiff.colLength ? `(${colDiff.colLength})` : '')}`
+    }
     if (!colDiff.colChanges?.nullable) {
       sql += ' NOT NULL';
     }
@@ -85,7 +99,7 @@ export class PgDriver implements DriverInterface {
     colDiffInstructions.push(`ALTER TABLE "${schema}"."${tableName}" DROP COLUMN IF EXISTS "${colName}";`);
   }
   getDropIndex(index: { name: string; properties?: string[] }, schema: string | undefined, tableName: string) {
-    return `DROP INDEX "${index.name}" ON "${schema}"."${tableName}";`;
+    return `${this.getDropConstraint(index, schema, tableName)}`;
   }
   getAlterTableType(schema: string | undefined, tableName: string, colName: string, colDiff: ColDiff): string {
     return `ALTER TABLE "${schema}"."${tableName}" ALTER COLUMN "${colName}" TYPE ${colDiff.colType}${(colDiff.colLength ? `(${colDiff.colLength})` : '')};`;
@@ -107,6 +121,13 @@ export class PgDriver implements DriverInterface {
   }
   getAlterTableDropNotNullInstruction(schema: string | undefined, tableName: string, colName: string, colDiff: ColDiff): string {
     return `ALTER TABLE "${schema}"."${tableName}" ALTER COLUMN "${colName}" SET NOT NULL;`;
+  }
+  getAlterTableEnumInstruction(schema: string, tableName: string, colName: string, colDiff: ColDiff): string {
+    return `ALTER TABLE "${schema}"."${tableName}" ALTER COLUMN "${colName}" TYPE varchar(255);DROP TYPE IF EXISTS "${schema}_${tableName}_${colName}_enum";CREATE TYPE "${schema}_${tableName}_${colName}_enum" AS ENUM (${colDiff.colChanges!.enumItems!.map(item => `'${item}'`).join(', ')});ALTER TABLE "${schema}"."${tableName}" ALTER COLUMN "${colName}" TYPE "${schema}_${tableName}_${colName}_enum" USING "${colName}"::text::"${schema}_${tableName}_${colName}_enum"`;
+  }
+
+  getDropTypeEnumInstruction(param: { name: string }, schema: string | undefined, tableName: string): string {
+    return `DROP TYPE IF EXISTS "${param.name}";`;
   }
 
   async startTransaction(): Promise<void> {
@@ -183,7 +204,7 @@ export class PgDriver implements DriverInterface {
     return this.client.end()
   }
 
-  executeSql(s: string) {''
+  executeSql(s: string) {
     return this.client.query(s)
   }
 
@@ -198,6 +219,15 @@ export class PgDriver implements DriverInterface {
 
     const indexes = await this.index(tableName, options) || [];
     const constraints = await this.constraints(tableName, options) || [];
+    let enums = await this.getEnums(tableName, schema)
+    // @ts-ignore
+    enums = enums.reduce((acc, curr) => {
+      if (!acc[curr.type]) {
+        acc[curr.type] = [];
+      }
+      acc[curr.type].push(curr.label);
+      return acc;
+    }, {});
 
     return {
       tableName,
@@ -213,7 +243,9 @@ export class PgDriver implements DriverInterface {
           primary: constraints.some(c => c.type === 'PRIMARY KEY' && c.consDef.includes(row.column_name)),
           unique: constraints.some(c => (c.type === 'UNIQUE' || c.type === 'PRIMARY KEY') && c.consDef.includes(row.column_name)),
           type: row.data_type,
-          foreignKeys: this.getForeignKeys(constraints, row)
+          foreignKeys: this.getForeignKeys(constraints, row),
+          isEnum: row.data_type === 'USER-DEFINED',
+          enumItems: row.data_type === 'USER-DEFINED' ? enums[`${schema}_${tableName}_${row.column_name}_enum`] : undefined,
         }
       })
     }
@@ -306,5 +338,20 @@ export class PgDriver implements DriverInterface {
       default:
         return `'${value}'`;
     }
+  }
+
+  private async getEnums(tableName: any, schema: string) {
+    const result = await this.client.query(`SELECT e.enumlabel as label, t.typname as type
+       FROM pg_type t
+       JOIN pg_enum e ON t.oid = e.enumtypid
+       JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+       WHERE n.nspname = '${schema}'`);
+
+    return result.rows.map(row => {
+      return {
+        label: row.label,
+        type: row.type
+      }
+    });
   }
 }

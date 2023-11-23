@@ -1,5 +1,6 @@
 import { SqlBuilder } from '../SqlBuilder';
 import { FilterQuery, FindOneOption, FindOptions, ValueOrInstance } from '../driver/driver.interface';
+import { EntityStorage, Options, Property } from '@cheetah.js/orm/domain/entities';
 
 export abstract class BaseEntity {
   private _oldValues: any = {};
@@ -147,5 +148,30 @@ export abstract class BaseEntity {
       ...this._changedValues,
     }
     this._changedValues = {}
+  }
+
+  public toJSON(): Record<string, any> {
+    let data: any = {}
+    let storage = EntityStorage.getInstance()
+    let entity = storage.get(this.constructor)
+    let allProperties = new Map<string, Property>(Object.entries(entity.properties).map(([key, value]) => [key, value]))
+
+    for (const key in this) {
+      // if starts with $ or _, ignore
+      if (key.startsWith('$') || key.startsWith('_')) {
+        continue;
+      }
+
+      if (!allProperties.has(key)) {
+        continue;
+      }
+
+      if (entity.hideProperties.includes(key)) {
+        continue;
+      }
+
+      data[key] = this[key]
+    }
+    return data;
   }
 }

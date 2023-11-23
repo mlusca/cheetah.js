@@ -7,6 +7,7 @@ Cheetah.js ORM is a simple and powerful ORM for Cheetah.js and Bun.
 - [Installation](#install)
 - [Entities](#entities)
   - [Value Objects](#value-objects)
+  - [Hooks](#hooks)
 - [Usage](#usage)
 - [Migrations](#migrations)
 
@@ -149,6 +150,29 @@ export class User {
 | length | number | Defines the length of the property.                                                        |
 | onUpdate | string | Define the action to be taken for this property when updating the entity in the database   |
 | onInsert | string | Defines the action to be taken for this property when inserting the entity in the database |
+
+### [Hooks](#hooks)
+Cheetah ORM supports hooks for entities. The available hooks are: BeforeCreate, AfterCreate, BeforeUpdate, AfterUpdate, BeforeDelete, AfterDelete.
+Hooks is only for modify the entity, not for create, update or delete another entities statements in database.
+
+### Example:
+```javascript
+import { Entity, PrimaryKey, Property, BeforeCreate } from '@cheetah.js/orm';
+
+@Entity()
+export class User {
+    @PrimaryKey()
+    id: number;
+
+    @Property()
+    name: string;
+
+    @BeforeCreate()
+    static beforeCreate() {
+        this.name = 'John Doe';
+    }
+}
+```
 
 #### Value Objects
 A Value Object is an immutable type that is distinguishable only by the state of its properties. That is, unlike an Entity, which has a unique identifier and remains distinct even if its properties are otherwise identical, two Value Objects with the exact same properties can be considered equal.

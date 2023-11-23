@@ -7,9 +7,12 @@ export type PropertyOptions = {
   nullable?: boolean;
   default?: any;
   length?: number;
+  hidden?: boolean;
   unique?: boolean;
   dbType?: 'varchar' | 'text' | 'int' | 'bigint' | 'float' | 'double' | 'decimal' | 'date' | 'datetime' | 'time' | 'timestamp' | 'boolean' | 'json' | 'jsonb' | 'enum' | 'array' | 'uuid';
   autoIncrement?: boolean;
+  isEnum?: boolean;
+  enumItems?: string[]|number[];
   onUpdate?: () => any;
   onInsert?: () => any;
 }

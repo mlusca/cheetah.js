@@ -9,7 +9,7 @@ export type Property = {
 }
 
 export type Options = {
-  showProperties: { [key: string]: Property };
+  properties: { [key: string]: Property };
   hideProperties: string[];
   indexes?: SnapshotIndexInfo[];
   relations: Relationship<any>[];
@@ -34,8 +34,8 @@ export class EntityStorage {
     const entityName = entity.options?.tableName || entity.target.name.toLowerCase();
     const indexes = Metadata.get('indexes', entity.target) || [];
     this.entities.set(entity.target, {
-      showProperties: properties,
-      hideProperties: [],
+      properties: properties,
+      hideProperties: Object.entries(properties).filter(([key, value]) => value.options.hidden).map(([key]) => key),
       relations,
       indexes: indexes.map((index: { name: string, properties: string[] }) => {
         return {
@@ -73,7 +73,7 @@ export class EntityStorage {
 
   private snapshotColumns(values: Options): ColumnsInfo[] {
 
-    let properties: ColumnsInfo[] = Object.entries(values.showProperties).map(([key, value]) => {
+    let properties: ColumnsInfo[] = Object.entries(values.properties).map(([key, value]) => {
       return {
         name: key,
         type: value.options.dbType ?? value.type.name,
@@ -83,6 +83,8 @@ export class EntityStorage {
         primary: value.options?.isPrimary,
         unique: value.options?.unique,
         length: value.options?.length,
+        isEnum: value.options?.isEnum,
+        enumItems: value.options?.enumItems,
       }
     })
     // @ts-ignore
@@ -118,7 +120,7 @@ export class EntityStorage {
   }
 
   private snapshotIndexes(values: Options): SnapshotIndexInfo[] {
-    return Object.entries(values.showProperties).map(([key, value]) => {
+    return Object.entries(values.properties).map(([key, value]) => {
       return {
         indexName: key,
         columnName: key,
@@ -133,7 +135,7 @@ export class EntityStorage {
       return 'unknown'
     }
 
-    return entity.showProperties[this.getFkKey(relation)].type.name
+    return entity.properties[this.getFkKey(relation)].type.name
   }
 
   /**
@@ -145,7 +147,7 @@ export class EntityStorage {
     // se for nullable, deverá retornar o primary key da entidade target
     if (typeof relationShip.fkKey === 'undefined') {
       const entity = this.entities.get(relationShip.entity() as any);
-      const property = Object.entries(entity!.showProperties).find(([key, value]) => value.options.isPrimary === true);
+      const property = Object.entries(entity!.properties).find(([key, value]) => value.options.isPrimary === true);
       if (!property) {
         throw new Error(`Entity ${entity!.tableName} does not have a primary key`);
       }

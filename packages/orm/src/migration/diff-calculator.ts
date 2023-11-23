@@ -31,7 +31,6 @@ export class DiffCalculator {
         const colDiffs: ColDiff[] = entityTable.columns.flatMap(c => {
           return this.createNewColumn(c, [])
         });
-        this.checkIndexes(bdTable, entityTable, colDiffs)
         // Se a tabela só está nas entidades, precisamos criá-la
         diffs.push({
           tableName,
@@ -39,14 +38,13 @@ export class DiffCalculator {
           schema: entityTable.schema ?? 'public',
           colDiffs,// Indica que todas as colunas devem ser criadas
         });
+        this.checkIndexes(bdTable, entityTable, colDiffs)
       } else {
         const colDiffs: ColDiff[] = [];
         // Se a tabela está em ambos, precisamos comparar as colunas
         const bdColumnsMap = new Map(bdTable.columns.map(col => [col.name, col]));
         const entityColumnsMap = new Map(entityTable.columns.map(col => [col.name, col]));
         const allColumnNames = new Set([...bdColumnsMap.keys(), ...entityColumnsMap.keys()]);
-
-        this.checkIndexes(bdTable, entityTable, colDiffs)
 
         allColumnNames.forEach(colName => {
           const bdCol = bdColumnsMap.get(colName);
@@ -69,6 +67,7 @@ export class DiffCalculator {
             colDiffs,
           });
         }
+        this.checkIndexes(bdTable, entityTable, colDiffs)
       }
     });
 
@@ -87,7 +86,6 @@ export class DiffCalculator {
           })),
         });
       }
-
       if (!entityTable || !entityTable.indexes) {
         colDiffs.push({
           actionType: 'INDEX',
@@ -135,6 +133,7 @@ export class DiffCalculator {
         primary: entityCol.primary,
         unique: entityCol.unique,
         nullable: entityCol.nullable,
+        enumItems: entityCol.enumItems,
         foreignKeys: entityCol.foreignKeys ?? [],
       },
     });
@@ -143,10 +142,23 @@ export class DiffCalculator {
   }
 
   private diffColumnType(bdCol: ColumnsInfo, entityCol: ColumnsInfo, colDiffs: ColDiff[]): void {
-    const colT = this.convertEntityTypeToSqlType(entityCol.type);
+    if (bdCol.type === 'integer' && bdCol.primary) {
+      bdCol.type = 'numeric';
+      bdCol.length = 11
+    }
+
+    const colT = entityCol.isEnum ? {type: 'USER-DEFINED', len: null} : this.convertEntityTypeToSqlType(entityCol.type);
     const colType = colT.type;
     const length = entityCol.length ?? colT.len;
+
     if (bdCol.type !== colType || bdCol.length !== length) {
+      if (colType === 'USER-DEFINED') {
+        colDiffs.push({
+          actionType: 'DELETE',
+          colName: entityCol.name,
+        });
+        return;
+      }
       colDiffs.push({
         actionType: 'ALTER',
         colName: entityCol.name,
@@ -231,6 +243,7 @@ export class DiffCalculator {
 
   private diffColumnSql(bdCol: ColumnsInfo, entityCol: ColumnsInfo, colDiffs: ColDiff[]) {
     this.diffForeignKey(bdCol, entityCol, colDiffs);
+    this.diffEnum(bdCol, entityCol, colDiffs);
     this.diffColumnType(bdCol, entityCol, colDiffs);
     this.diffColumnDefault(bdCol, entityCol, colDiffs);
     this.diffColumnPrimary(bdCol, entityCol, colDiffs);
@@ -282,6 +295,45 @@ export class DiffCalculator {
       default:
         return {type: "character varying", len: 255};
       //... mais casos aqui ...
+    }
+  }
+
+  private diffEnum(bdCol: ColumnsInfo, entityCol: ColumnsInfo, colDiffs: ColDiff[]) {
+    if (bdCol.enumItems || entityCol.enumItems) {
+      if (bdCol.enumItems && entityCol.enumItems) {
+        const allEnums = new Set([...bdCol.enumItems, ...entityCol.enumItems]);
+        const differences = [...allEnums].filter(x => !bdCol.enumItems?.includes(x) || !entityCol.enumItems?.includes(x));
+
+        if (differences.length === 0) {
+          return;
+        }
+
+        colDiffs.push({
+          actionType: 'ALTER',
+          colName: entityCol.name,
+          colChanges: {
+            enumItems: entityCol.enumItems,
+          },
+        });
+      }
+
+      if (!entityCol.enumItems) {
+        colDiffs.push({
+          actionType: 'DELETE',
+          colName: bdCol.name,
+          colChanges: {
+            enumItems: [],
+          },
+        });
+      } else if (!bdCol.enumItems) {
+        colDiffs.push({
+          actionType: 'CREATE',
+          colName: entityCol.name,
+          colChanges: {
+            enumItems: entityCol.enumItems,
+          },
+        });
+      }
     }
   }
 }

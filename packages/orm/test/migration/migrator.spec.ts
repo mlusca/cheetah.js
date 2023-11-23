@@ -10,6 +10,7 @@ import { Metadata } from '@cheetah.js/core';
 import { ENTITIES } from '../../src/constants';
 import { Index } from '../../src/decorators/index.decorator';
 import { Email } from '../../src/common/email.vo';
+import { Enum } from '../../src/decorators/enum.decorator';
 
 describe('Migration', () => {
 
@@ -291,6 +292,121 @@ describe('Migration', () => {
 
     expect(migrationContent).toContain("CREATE TABLE \"public\".\"user\" (\"id\" SERIAL PRIMARY KEY UNIQUE,\"email\" text NOT NULL);")
     expect(migrationContent.split('\n').length).toEqual(1)
+    await execute(migrationContent);
+  });
+
+  it('should create with enum property', async () => {
+    enum Role {
+      ADMIN = 'admin',
+      USER = 'user',
+    }
+    class User extends BaseEntity {
+      @PrimaryKey({ autoIncrement: true })
+      id: number;
+
+      @Enum(() => Role)
+      role: Role;
+    }
+
+    Entity()(User);
+
+    const migrator = new Migrator();
+    await migrator.initConfigFile();
+    await migrator.createMigration( 'test');
+    const migrationFilePath = path.join(__dirname, '/test.sql');
+    const migrationContent = fs.readFileSync(migrationFilePath, {encoding: 'utf-8'});
+
+    expect(migrationContent).toContain("CREATE TYPE \"public_user_role_enum\" AS ENUM ('admin', 'user');CREATE TABLE \"public\".\"user\" (\"id\" SERIAL PRIMARY KEY UNIQUE,\"role\" \"public_user_role_enum\" NOT NULL);")
+    expect(migrationContent.split('\n').length).toEqual(1)
+    await execute(migrationContent);
+  });
+
+  it('should alter property to enum property', async () => {
+    const DDL = `
+        CREATE TABLE "public"."user" ("id" SERIAL PRIMARY KEY UNIQUE,"role" character varying(255) NOT NULL UNIQUE);
+    `;
+    await execute(DDL);
+    enum Role {
+      ADMIN = 'admin',
+      USER = 'user',
+    }
+    class User extends BaseEntity {
+      @PrimaryKey({ autoIncrement: true })
+      id: number;
+
+      @Enum(() => Role)
+      role: Role;
+    }
+
+    Entity()(User);
+
+    const migrator = new Migrator();
+    await migrator.initConfigFile();
+    await migrator.createMigration( 'test');
+    const migrationFilePath = path.join(__dirname, '/test.sql');
+    const migrationContent = fs.readFileSync(migrationFilePath, {encoding: 'utf-8'});
+
+    expect(migrationContent).toContain("ALTER TABLE \"public\".\"user\" DROP CONSTRAINT \"user_role_key\";\nALTER TABLE \"public\".\"user\" DROP COLUMN IF EXISTS \"role\";\nCREATE TYPE \"public_user_role_enum\" AS ENUM ('admin', 'user');\nALTER TABLE \"public\".\"user\" ADD COLUMN \"role\" \"public_user_role_enum\" NOT NULL;")
+    expect(migrationContent.split('\n').length).toEqual(4)
+    await execute(migrationContent);
+  });
+
+  it('should alter property enum values', async () => {
+    const DDL = `
+        CREATE TYPE "public_user_role_enum" AS ENUM ('admin', 'user');
+        CREATE TABLE "public"."user" ("id" SERIAL PRIMARY KEY UNIQUE,"role" public_user_role_enum NOT NULL);
+    `;
+    await execute(DDL);
+    enum Role {
+      ADMIN = 'admin',
+      USER = 'user',
+      MODERATOR = 'moderator',
+    }
+    class User extends BaseEntity {
+      @PrimaryKey({ autoIncrement: true })
+      id: number;
+
+      @Enum(() => Role)
+      role: Role;
+    }
+
+    Entity()(User);
+
+    const migrator = new Migrator();
+    await migrator.initConfigFile();
+    await migrator.createMigration( 'test');
+    const migrationFilePath = path.join(__dirname, '/test.sql');
+    const migrationContent = fs.readFileSync(migrationFilePath, {encoding: 'utf-8'});
+
+    expect(migrationContent).toContain("ALTER TABLE \"public\".\"user\" ALTER COLUMN \"role\" TYPE varchar(255);DROP TYPE IF EXISTS \"public_user_role_enum\";CREATE TYPE \"public_user_role_enum\" AS ENUM ('admin', 'user', 'moderator');ALTER TABLE \"public\".\"user\" ALTER COLUMN \"role\" TYPE \"public_user_role_enum\" USING \"role\"::text::\"public_user_role_enum\"")
+    expect(migrationContent.split('\n').length).toEqual(1)
+    await execute(migrationContent);
+  });
+
+  it('should alter property enum to string', async () => {
+    const DDL = `
+        CREATE TYPE "public_user_role_enum" AS ENUM ('admin', 'user');
+        CREATE TABLE "public"."user" ("id" SERIAL PRIMARY KEY UNIQUE,"role" public_user_role_enum NOT NULL);
+    `;
+    await execute(DDL);
+    class User extends BaseEntity {
+      @PrimaryKey({ autoIncrement: true })
+      id: number;
+
+      @Property()
+      role: string;
+    }
+
+    Entity()(User);
+
+    const migrator = new Migrator();
+    await migrator.initConfigFile();
+    await migrator.createMigration( 'test');
+    const migrationFilePath = path.join(__dirname, '/test.sql');
+    const migrationContent = fs.readFileSync(migrationFilePath, {encoding: 'utf-8'});
+
+    expect(migrationContent).toContain("ALTER TABLE \"public\".\"user\" ALTER COLUMN \"role\" TYPE character varying(255);\nDROP TYPE IF EXISTS \"public_user_role_enum\";")
+    expect(migrationContent.split('\n').length).toEqual(2)
     await execute(migrationContent);
   });
 })

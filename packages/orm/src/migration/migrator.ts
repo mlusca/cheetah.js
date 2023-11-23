@@ -119,7 +119,6 @@ export class Migrator {
 
       tableDiff.colDiffs.reverse().forEach(colDiff => {
         const colName = colDiff.colName;
-
         if (!colChangesMap.has(colName)) {
           colChangesMap.set(colName, []);
         }
@@ -137,15 +136,19 @@ export class Migrator {
               (this.orm.driverInstance as DriverInterface).getAddColumn(schema, tableName, colName, colDiff, colDiffInstructions);
               break;
             case 'DELETE':
+              if (colDiff.colChanges?.enumItems && colDiff.colChanges?.enumItems.length === 0) {
+                colDiffInstructions.push((this.orm.driverInstance as DriverInterface).getDropTypeEnumInstruction({ name: `${schema}_${tableName}_${colName}_enum` }, schema, tableName))
+                return;
+              }
               (this.orm.driverInstance as DriverInterface).getDropColumn(colDiffInstructions, schema, tableName, colName);
               break;
             case 'ALTER':
               this.applyColumnChanges(colDiff, colDiffInstructions, schema, tableName, colName);
               break;
             case "INDEX":
+
               if (colDiff.indexTables) {
                 colDiff.indexTables.forEach(index => {
-                  // if already exists instruction for this index, skip
                   if (colDiffInstructions.find(instruction => instruction.includes(index.name))) {
                     return;
                   }
@@ -229,6 +232,10 @@ export class Migrator {
       sqlInstructions.push( (this.orm.driverInstance as DriverInterface).getAlterTableType(schema, tableName, colName, colDiff));
     }
 
+    if (colDiff.colChanges?.enumItems) {
+      sqlInstructions.push( (this.orm.driverInstance as DriverInterface).getAlterTableEnumInstruction(schema, tableName, colName, colDiff));
+    }
+
     if (colDiff.colChanges) {
       if (colDiff.colChanges.default !== undefined) {
         sqlInstructions.push((this.orm.driverInstance as DriverInterface).getAlterTableDefaultInstruction(schema, tableName, colName, colDiff));
@@ -246,7 +253,7 @@ export class Migrator {
         if (colDiff.colChanges.unique) {
           sqlInstructions.push((this.orm.driverInstance as DriverInterface).getAddUniqueConstraint(schema, tableName, colName));
         } else {
-          sqlInstructions.push((this.orm.driverInstance as DriverInterface).getDropConstraint({name: `${tableName}_${colName}_key`}, schema, tableName));
+          // sqlInstructions.push((this.orm.driverInstance as DriverInterface).getDropConstraint({name: `${tableName}_${colName}_key`}, schema, tableName));
         }
       }
 
