@@ -103,6 +103,7 @@ export type Statement<T> = {
   statement?: 'select' | 'insert' | 'update' | 'delete';
   table?: string;
   alias?: string;
+  customSchema?: string;
   columns?: Array<keyof T>;
   join?: JoinStatement<T>[];
   selectJoin?: Statement<T>[];
@@ -114,11 +115,13 @@ export type Statement<T> = {
   limit?: number;
   offset?: number;
 
-  selectJoinProperty?: string
+  joinProperty?: string
   fkKey?: string;
   primaryKey?: string;
   originAlias?: string;
+  originProperty?: string;
   joinEntity?: Function;
+  originEntity?: Function;
 }
 
 interface SnapshotColumnInfo {
@@ -336,7 +339,7 @@ export type QueryOrderMap<T> = {
 };
 export type EntityField<T, P extends string = never> = AutoPath<T, P, '*'>;
 export interface FindOptions<T, P extends string = never> {
-  // populate?: readonly AutoPath<T, P>[] | boolean;
+  load?: readonly AutoPath<T, P>[];
   orderBy?: (QueryOrderMap<T> & {
     0?: never;
   }) | QueryOrderMap<T>[];
@@ -344,6 +347,7 @@ export interface FindOptions<T, P extends string = never> {
   limit?: number;
   offset?: number;
   fields?: readonly EntityField<T, P>[];
+  schema?: string;
   loadStrategy?: 'select' | 'joined';
 }
 export type FindOneOption<T, P extends string = never> = Omit<FindOptions<T, P>, 'limit'|'offset'>

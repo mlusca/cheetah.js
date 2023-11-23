@@ -1,8 +1,20 @@
 {
   "name": "@cheetah.js/orm",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "A simple ORM for Cheetah.js",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": "./dist/index.js"
+    }
+  },
   "scripts": {
     "compile": "sudo rm -rf ./dist && tsc && bun run build.ts"
   },

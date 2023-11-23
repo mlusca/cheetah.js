@@ -12,6 +12,7 @@ import { EntityStorage, Options } from './domain/entities';
 import { Orm } from './orm';
 import { LoggerService } from '@cheetah.js/core';
 import { ValueObject } from './common/value-object';
+import { BaseEntity } from '@cheetah.js/orm/domain/base-entity';
 
 export class SqlBuilder<T> {
   private readonly driver: DriverInterface;
@@ -52,20 +53,20 @@ export class SqlBuilder<T> {
   }
 
   insert(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): SqlBuilder<T> {
-    const { tableName, schema } = this.getTableName();
+    const {tableName, schema} = this.getTableName();
     processValuesForInsert(values);
     this.statements.statement = 'insert';
     this.statements.alias = this.getAlias(tableName);
     this.statements.table = `"${schema}"."${tableName}"`;
     this.statements.values = this.withUpdatedValues(
       this.withDefaultValues(values, this.entity),
-      this.entity
+      this.entity,
     );
     return this;
   }
 
   update(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): SqlBuilder<T> {
-    const { tableName, schema } = this.getTableName();
+    const {tableName, schema} = this.getTableName();
     processValuesForUpdate(values);
     this.statements.statement = 'update';
     this.statements.alias = this.getAlias(tableName);
@@ -79,7 +80,7 @@ export class SqlBuilder<T> {
       return this;
     }
 
-    this.statements.where = this.conditionToSql(where, this.statements.alias!);
+    this.statements.where = this.conditionToSql(where, this.statements.alias!, this.model);
     return this;
   }
 
@@ -102,6 +103,64 @@ export class SqlBuilder<T> {
     return this;
   }
 
+  load(load: string[]): SqlBuilder<T> {
+    load?.forEach(relationshipPath => {
+      this.addJoinForRelationshipPath(this.entity, relationshipPath);
+    });
+    if (this.statements.join) {
+      this.statements.join = this.statements.join?.reverse()
+    }
+
+    if (this.statements.selectJoin) {
+      this.statements.selectJoin = this.statements.selectJoin?.reverse()
+    }
+
+    return this;
+  }
+
+  private addJoinForRelationshipPath(entity: Options, relationshipPath: string) {
+    const relationshipNames = relationshipPath.split('.');
+    let currentEntity = entity;
+    let currentAlias = this.statements.alias!;
+    let statement = this.statements.strategy === 'joined' ? this.statements.join : this.statements.selectJoin;
+    let nameAliasProperty = this.statements.strategy === 'joined' ? 'joinAlias' : 'alias';
+
+    relationshipNames.forEach((relationshipName, index) => {
+      const relationship = currentEntity.relations.find(rel => rel.propertyKey === relationshipName);
+
+      if (!relationship) {
+        // @ts-ignore
+        throw new Error(`Relationship "${relationshipName}" not found in entity "${currentEntity.name}"`);
+      }
+
+      const isLastRelationship = index === relationshipNames.length - 1;
+
+      if (index === (relationshipNames.length - 2 >= 0 ? relationshipNames.length - 2 : 0)) {
+        const join = statement?.find(j => j.joinProperty === relationshipName);
+        if (join) {
+          // @ts-ignore
+          currentAlias = join[nameAliasProperty];
+        }
+      }
+
+      if (relationship.relation === 'many-to-one' && isLastRelationship) {
+        this.applyJoin(relationship, {}, currentAlias);
+        statement = this.statements.strategy === 'joined' ? this.statements.join : this.statements.selectJoin;
+        currentAlias = statement[statement.length - 1][nameAliasProperty];
+      }
+
+      currentEntity = this.entityStorage.get(relationship.entity() as Function)!;
+    });
+  }
+
+  private getPrimaryKeyColumnName(entity: Options): string {
+    // Lógica para obter o nome da coluna de chave primária da entidade
+    // Aqui você pode substituir por sua própria lógica, dependendo da estrutura do seu projeto
+    // Por exemplo, se a chave primária for sempre 'id', você pode retornar 'id'.
+    // Se a lógica for mais complexa, você pode adicionar um método na classe Options para obter a chave primária.
+    return 'id';
+  }
+
   async execute(): Promise<{ query: any; startTime: number; sql: string }> {
     if (!this.statements.columns) {
       this.statements.columns = this.generateColumns();
@@ -109,6 +168,7 @@ export class SqlBuilder<T> {
       this.extractAliasForColumns();
       this.filterInvalidColumns();
     }
+    this.statements.join = this.statements.join?.reverse()
     this.includeUpdatedColumns();
     const result = await this.driver.executeStatement(this.statements);
     this.logExecution(result);
@@ -166,40 +226,103 @@ export class SqlBuilder<T> {
   }
 
   private async handleSelectJoin(entities: any, models): Promise<void> {
-    if (this.statements.selectJoin && this.statements.selectJoin.length > 0) {
-      for (const join of this.statements.selectJoin) {
-        const ids = entities[`${join.originAlias}_${join.primaryKey}`];
+    if (!this.statements.selectJoin || this.statements.selectJoin.length === 0) {
+      return;
+    }
 
-        if (join.where) {
-          join.where = `${join.where} AND ${join.alias}."${join.fkKey}" = ${this.t(ids)}`;
-        } else {
-          join.where = `${join.alias}."${join.fkKey}" IN (${ids
-            .map((id: any) => this.t(id))
-            .join(', ')})`;
+    for (const join of this.statements.selectJoin.reverse()) {
+      let ids = entities[`${join.originAlias}_${join.primaryKey}`];
+      if (typeof ids === 'undefined') {
+        // get of models
+        const selectJoined = this.statements.selectJoin.find(j => j.joinEntity === join.originEntity);
+
+        if (!selectJoined) {
+          continue;
         }
-
-        if (join.columns && join.columns.length > 0) {
-          join.columns = (join.columns.map(
-            (column) => `${join.alias}."${column}" as "${join.alias}_${column}"`
-          ) as any[]);
-        } else {
-          join.columns = this.getColumnsEntity(join.joinEntity, join.alias) as any;
-        }
-
-        const child = await this.driver.executeStatement(join);
-        this.logger.debug(`SQL: ${child.sql} [${Date.now() - child.startTime}ms]`);
-
-        const property = this.entityStorage.get(this.model)!.relations.find(
-          (rel) => rel.propertyKey === join.selectJoinProperty
-        );
-        const values = child.query.rows.map((row: any) =>
-          this.transformToModel(join.joinEntity, join, row)
-        );
-        models[join.selectJoinProperty] = property.type === Array ? [...values] : values[0];
+        ids = this.findIdRecursively(models, selectJoined, join);
       }
 
-      return models as any;
+      if (Array.isArray(ids)) {
+        ids = ids.map((id: any) => this.t(id)).join(', ')
+      }
+
+      if (join.where) {
+        join.where = `${join.where} AND ${join.alias}."${join.fkKey}" IN (${ids})`;
+      } else {
+        join.where = `${join.alias}."${join.fkKey}" IN (${ids})`;
+      }
+
+      if (join.columns && join.columns.length > 0) {
+        join.columns = (join.columns.map(
+          // @ts-ignore
+          (column) => `${join.alias}."${column}" as "${join.alias}_${column}"`,
+        ) as any[]);
+      } else {
+        join.columns = this.getColumnsEntity(join.joinEntity, join.alias) as any;
+      }
+
+      const child = await this.driver.executeStatement(join);
+      this.logger.debug(`SQL: ${child.sql} [${Date.now() - child.startTime}ms]`);
+
+      const property = this.entityStorage.get(this.model)!.relations.find(
+        (rel) => rel.propertyKey === join.joinProperty,
+      );
+      const values = child.query.rows.map((row: any) =>
+        this.transformToModel(join.joinEntity, join, row),
+      );
+
+      const path = this.getPathForSelectJoin(join);
+      this.setValueByPath(models, path, property?.type === Array ? [...values] : values[0]);
     }
+
+    return models as any;
+  }
+
+  getPathForSelectJoin(selectJoin: Statement<any>): string[] | null {
+    const path = this.getPathForSelectJoinRecursive(this.statements, selectJoin);
+    return path.reverse();
+  }
+
+  private setValueByPath(obj: any, path: string[], value: any) {
+    let currentObj = obj;
+
+    for (let i = 0; i < path.length - 1; i++) {
+      const key = path[i];
+      currentObj[key] = currentObj[key] || {};
+      currentObj = currentObj[key];
+    }
+
+    currentObj[path[path.length - 1]] = value;
+  }
+
+  private getPathForSelectJoinRecursive(statements: Statement<any>, selectJoin: Statement<any>): string[] | null {
+    const originJoin = this.statements.selectJoin.find(j => j.joinEntity === selectJoin.originEntity);
+    let pathInJoin = [];
+
+    if (!originJoin) {
+      return [selectJoin.joinProperty]
+    }
+
+    if (originJoin.originEntity !== statements.originEntity) {
+      pathInJoin = this.getPathForSelectJoinRecursive(statements, originJoin);
+    }
+
+    return [selectJoin.joinProperty, ...pathInJoin];
+  }
+
+  private findIdRecursively(models: any, selectJoined: any, join: any): any {
+    let ids = models[selectJoined.originProperty][join.primaryKey];
+
+    if (typeof ids === 'undefined') {
+      const nextSelectJoined = this.statements.selectJoin.find(j => j.joinEntity === selectJoined.originEntity);
+
+      if (nextSelectJoined) {
+        // Chamada recursiva para a próxima camada
+        ids = this.findIdRecursively(models, nextSelectJoined, join);
+      }
+    }
+
+    return ids;
   }
 
 
@@ -300,7 +423,7 @@ export class SqlBuilder<T> {
     const joinMap = new Map<string, JoinStatement<any>>()
     const joinSelectMap = new Map<string, Statement<any>>()
     this.statements.join?.forEach(join => joinMap.set(join.joinProperty, join))
-    this.statements.selectJoin?.forEach(join => joinSelectMap.set(join.selectJoinProperty, join))
+    this.statements.selectJoin?.forEach(join => joinSelectMap.set(join.joinProperty, join))
 
     for (let i = 0; i < entities.length; i++) {
       if (i === 0) {
@@ -353,7 +476,7 @@ export class SqlBuilder<T> {
     return `(${conditions.join(` ${operator} `)})`;
   }
 
-  private conditionToSql(condition: FilterQuery<T>, alias: string): string {
+  private conditionToSql(condition: FilterQuery<T>, alias: string, model: Function): string {
     const sqlParts = [];
     const operators = ['$eq', '$ne', '$in', '$nin', '$like', '$gt', '$gte', '$lt', '$lte', '$and', '$or'];
 
@@ -365,8 +488,8 @@ export class SqlBuilder<T> {
       if (!operators.includes(key)) {
         this.lastKeyNotOperator = key;
       }
-
-      const relationShip = this.entity.relations?.find(rel => rel.propertyKey === key);
+      const entity = this.entityStorage.get(model)
+      const relationShip = entity.relations?.find(rel => rel.propertyKey === key);
       if (relationShip) {
         const sql = this.applyJoin(relationShip, value, alias);
         if (this.statements.strategy === 'joined') {
@@ -383,7 +506,7 @@ export class SqlBuilder<T> {
         sqlParts.push(this.addInConditionToSql(key, value, alias));
       } else {
         if (['$or', '$and'].includes(key)) {
-          sqlParts.push(this.addLogicalOperatorToSql(value.map((cond: any) => this.conditionToSql(cond, alias)), key.toUpperCase().replace('$', '') as 'AND' | 'OR'));
+          sqlParts.push(this.addLogicalOperatorToSql(value.map((cond: any) => this.conditionToSql(cond, alias, model)), key.toUpperCase().replace('$', '') as 'AND' | 'OR'));
         }
 
         for (const operator of operators) {
@@ -418,7 +541,7 @@ export class SqlBuilder<T> {
                 break;
               case '$and':
               case '$or':
-                const parts = value[operator].map((cond: any) => this.conditionToSql(cond, alias))
+                const parts = value[operator].map((cond: any) => this.conditionToSql(cond, alias, model))
                 sqlParts.push(this.addLogicalOperatorToSql(parts, operator.toUpperCase().replace('$', '') as 'AND' | 'OR'));
                 break;
             }
@@ -454,15 +577,15 @@ export class SqlBuilder<T> {
       }
     }
     const joinAlias = `${this.getAlias(joinTableName)}`;
-    const joinWhere = this.conditionToSql(value, joinAlias)
+    const joinWhere = this.conditionToSql(value, joinAlias, relationShip.entity() as Function);
     let on = '';
 
     switch (relationShip.relation) {
       case "one-to-many":
-        on = `${joinAlias}.${this.getFkKey(relationShip)} = ${alias}.${originPrimaryKey}`;
+        on = `${joinAlias}."${this.getFkKey(relationShip)}" = ${alias}."${originPrimaryKey}"`;
         break;
       case "many-to-one":
-        on = `${alias}.${relationShip.propertyKey as string} = ${joinAlias}.${this.getFkKey(relationShip)}`;
+        on = `${alias}."${relationShip.propertyKey as string}" = ${joinAlias}."${this.getFkKey(relationShip)}"`;
         break;
     }
 
@@ -487,20 +610,22 @@ export class SqlBuilder<T> {
     } else {
 
       this.statements.selectJoin = this.statements.selectJoin || [];
+
       this.statements.selectJoin.push({
         statement: 'select',
         columns: this.originalColumns.filter(column => column.startsWith(`${relationShip.propertyKey as string}`)).map(column => column.split('.')[1]) || [],
         table: `"${joinSchema || 'public'}"."${joinTableName}"`,
         alias: joinAlias,
         where: joinWhere,
-        selectJoinProperty: relationShip.propertyKey as string,
+        joinProperty: relationShip.propertyKey as string,
         fkKey: this.getFkKey(relationShip),
         primaryKey: originPrimaryKey,
         originAlias: alias,
+        originProperty: relationShip.propertyKey as string,
         joinEntity: (relationShip.entity() as Function),
+        originEntity: relationShip.originalEntity as Function,
       })
     }
-
     return joinWhere;
   }
 
@@ -628,6 +753,7 @@ export class SqlBuilder<T> {
     if (e.relations) {
       for (const relation of e.relations) {
         if (relation.relation === 'many-to-one') {
+          // @ts-ignore
           columns.push(`${alias}."${relation.propertyKey}" as "${alias}_${relation.propertyKey}"`)
         }
       }
@@ -686,6 +812,12 @@ function processValuesForInsert<T>(values: Partial<{ [K in keyof T]: ValueOrInst
   for (const value in values) {
     if (extendsFrom(ValueObject, values[value].constructor.prototype)) {
       values[value] = (values[value] as ValueObject<any, any>).getValue();
+      continue;
+    }
+
+    if (values[value] instanceof BaseEntity) {
+      // @ts-ignore
+      values[value] = (values[value] as BaseEntity).id; // TODO: get primary key
     }
   }
 }
@@ -697,6 +829,7 @@ function processValuesForUpdate<T>(values: Partial<{ [K in keyof T]: ValueOrInst
     }
   }
 }
+
 function extendsFrom(baseClass, instance): boolean {
   let proto = Object.getPrototypeOf(instance);
   while (proto) {

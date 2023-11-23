@@ -382,7 +382,7 @@ describe('Creation, update and deletion of entities', () => {
     expect(result.addresses[0].id).toEqual(address.id);
     expect(result.addresses[0].address).toBeUndefined();
     expect(mockLogger).toHaveBeenCalledTimes(3);
-    expect((mockLogger as jest.Mock).mock.calls[2][0]).toStartWith("SQL: SELECT u1.\"id\" as u1_id, a1.\"id\" as a1_id FROM \"public\".\"user\" u1 LEFT JOIN public.address a1 ON a1.user = u1.id WHERE ((a1.id = 1)) LIMIT 1");
+    expect((mockLogger as jest.Mock).mock.calls[2][0]).toStartWith("SQL: SELECT u1.\"id\" as u1_id, a1.\"id\" as a1_id FROM \"public\".\"user\" u1 LEFT JOIN public.address a1 ON a1.\"user\" = u1.\"id\" WHERE ((a1.id = 1)) LIMIT 1");
   })
 
   test('When find with orderBy defined', async () => {
@@ -402,7 +402,7 @@ describe('Creation, update and deletion of entities', () => {
 
     expect(result.id).toEqual(user.id);
     expect(mockLogger).toHaveBeenCalledTimes(3);
-    expect((mockLogger as jest.Mock).mock.calls[2][0]).toStartWith("SQL: SELECT u1.\"id\" as u1_id, a1.\"id\" as a1_id FROM \"public\".\"user\" u1 LEFT JOIN public.address a1 ON a1.user = u1.id WHERE ((a1.id = 1)) ORDER BY u1.\"id\" DESC, a1.\"address\" DESC LIMIT 1");
+    expect((mockLogger as jest.Mock).mock.calls[2][0]).toStartWith("SQL: SELECT u1.\"id\" as u1_id, a1.\"id\" as a1_id FROM \"public\".\"user\" u1 LEFT JOIN public.address a1 ON a1.\"user\" = u1.\"id\" WHERE ((a1.id = 1)) ORDER BY u1.\"id\" DESC, a1.\"address\" DESC LIMIT 1");
   })
 
   test('When find with limit defined', async () => {
@@ -536,7 +536,7 @@ describe('Creation, update and deletion of entities', () => {
     expect(mockLogger).toHaveBeenCalledTimes(4);
     expect(mockLogger).not.toHaveBeenCalledTimes(5)
     expect((mockLogger as jest.Mock).mock.calls[2][0]).toStartWith("SQL: SELECT u1.\"id\" as u1_id FROM \"public\".\"user\" u1 LIMIT 1");
-    expect((mockLogger as jest.Mock).mock.calls[3][0]).toStartWith("SQL: SELECT a1.\"id\" as \"a1_id\" FROM \"public\".\"address\" a1 WHERE (a1.id = 3) AND a1.\"user\" = 1");
+    expect((mockLogger as jest.Mock).mock.calls[3][0]).toStartWith("SQL: SELECT a1.\"id\" as \"a1_id\" FROM \"public\".\"address\" a1 WHERE (a1.id = 3) AND a1.\"user\" IN (1)");
   })
 
 
