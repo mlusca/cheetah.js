@@ -1,6 +1,7 @@
 import { PROPERTIES, PROPERTIES_METADATA } from '../constants';
 import { getDefaultLength } from '../utils';
 import { Metadata } from '@cheetah.js/core';
+import { Index } from './index.decorator';
 
 export type PropertyOptions = {
   isPrimary?: boolean;
@@ -9,6 +10,7 @@ export type PropertyOptions = {
   length?: number;
   hidden?: boolean;
   unique?: boolean;
+  index?: boolean;
   dbType?: 'varchar' | 'text' | 'int' | 'bigint' | 'float' | 'double' | 'decimal' | 'date' | 'datetime' | 'time' | 'timestamp' | 'boolean' | 'json' | 'jsonb' | 'enum' | 'array' | 'uuid';
   autoIncrement?: boolean;
   isEnum?: boolean;
@@ -32,6 +34,10 @@ export function Property(options?: PropertyOptions): PropertyDecorator {
       const indexes: {name: string, properties: string[]}[] = Metadata.get('indexes', target.constructor) || [];
       indexes.push({name: `[TABLE]_pkey`, properties: [propertyKey as string]});
       Metadata.set('indexes', indexes, target.constructor);
+    }
+
+    if (options.index) {
+      Index({properties: [propertyKey as string]})(target, propertyKey);
     }
 
     properties.forEach((property: Prop) => {

@@ -20,6 +20,12 @@ export class OrmService {
           const nullables: string[] = [];
           const defaults: { [key: string]: any } = {};
 
+          const extendsClass = classDeclaration.getBaseClass();
+          if (extendsClass) {
+            const extendsProperties = extendsClass.getProperties();
+            properties.push(...extendsProperties)
+          }
+
           properties.forEach(property => {
             const propertyName = property.getName();
             const isNullable = property.hasQuestionToken();
@@ -36,6 +42,9 @@ export class OrmService {
                   break;
                 case SyntaxKind.NumericLiteral:
                   defaults[propertyName] = parseFloat(initializer.getText());
+                  break;
+                case SyntaxKind.NewExpression:
+                case SyntaxKind.CallExpression:
                   break;
                 default:
                   defaults[propertyName] = () => initializer.getText();

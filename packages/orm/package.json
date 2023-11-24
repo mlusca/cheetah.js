@@ -1,6 +1,6 @@
 {
   "name": "@cheetah.js/orm",
-  "version": "0.1.20",
+  "version": "0.1.25",
   "description": "A simple ORM for Cheetah.js",
   "main": "dist/index.js",
   "module": "dist/index.js",

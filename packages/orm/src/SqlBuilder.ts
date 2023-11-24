@@ -61,25 +61,26 @@ export class SqlBuilder<T> {
   insert(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): SqlBuilder<T> {
     const {tableName, schema} = this.getTableName();
     processValuesForInsert(values);
-    this.statements.instance = upEntity(values, this.model, 'insert')
     this.statements.statement = 'insert';
+    this.statements.instance = upEntity(values, this.model, 'insert')
     this.statements.alias = this.getAlias(tableName);
     this.statements.table = `"${schema}"."${tableName}"`;
     this.statements.values = this.withUpdatedValues(
       this.withDefaultValues(values, this.entity),
       this.entity,
     );
+    this.reflectToValues();
     return this;
   }
 
   update(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): SqlBuilder<T> {
     const {tableName, schema} = this.getTableName();
     processValuesForUpdate(values);
-    this.statements.instance = upEntity(values, this.model, 'update')
     this.statements.statement = 'update';
     this.statements.alias = this.getAlias(tableName);
     this.statements.table = `${schema}.${tableName}`;
     this.statements.values = this.withUpdatedValues(values, this.entity);
+    this.statements.instance = upEntity(values, this.model, 'update')
     return this;
   }
 

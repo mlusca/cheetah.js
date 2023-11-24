@@ -2,11 +2,12 @@ import { afterEach, beforeEach, describe, expect, jest, setSystemTime, test } fr
 import { app, execute, mockLogger, purgeDatabase, startDatabase } from '../node-database';
 import { BaseEntity, Entity, ManyToOne, OneToMany, PrimaryKey, Property } from '../../src';
 import { Email } from '../../src/common/email.vo';
+import { v4 } from 'uuid';
 
 @Entity()
 class UserTest extends BaseEntity {
   @PrimaryKey()
-  id: number;
+  id: string = v4();
 
   @Property()
   createdAt: Date = new Date();
@@ -455,7 +456,7 @@ describe('Creation, update and deletion of entities', () => {
     const DLL = `
         CREATE TABLE "usertest"
         (
-            "id"        SERIAL PRIMARY KEY,
+            "id"        uuid PRIMARY KEY,
             "createdAt" timestamp,
             "updatedAt" timestamp
         );
@@ -466,12 +467,10 @@ describe('Creation, update and deletion of entities', () => {
     await execute(DLL)
 
     Entity()(UserTest)
-    const created = await UserTest.create({
-      id: 1,
-    })
+    const created = await UserTest.create({})
 
     expect(created).toBeInstanceOf(UserTest);
-    expect(created!.id).toEqual(1);
+    expect(created!.id).toHaveLength(36);
     expect(created!.createdAt).toEqual(dateNow);
     expect(created!.updatedAt).toEqual(dateNow);
   })
