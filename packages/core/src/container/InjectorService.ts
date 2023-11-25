@@ -191,7 +191,7 @@ export class InjectorService {
    * @param options
    * @returns The class constructed.
    */
-  public invoke(token: TokenProvider, locals?: LocalsContainer, options: any = {}): Type {
+  public invoke(token: TokenProvider, locals?: LocalsContainer, options: any = {}): any {
     if (locals && locals.has(token)) {
       return locals.get(token)
     }

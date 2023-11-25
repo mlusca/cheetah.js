@@ -65,9 +65,13 @@ export class Cheetah {
     return this;
   }
 
+  public init() {
+    this.injector.loadModule(createContainer(), this.config, this.router)
+  }
+
   async listen(port: number = 3000) {
     process.on('SIGTERM', () => this.injector.callHook(EventType.OnApplicationShutdown))
-    this.injector.loadModule(createContainer(), this.config, this.router)
+    this.init()
     this.createHttpServer(port)
   }
 
