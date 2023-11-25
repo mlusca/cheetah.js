@@ -3,7 +3,6 @@ import {
   EventType,
   InjectorService,
   LocalsContainer,
-  MiddlewareRes,
   TokenRouteWithProvider,
 } from '@cheetah.js/core';
 
@@ -23,10 +22,10 @@ class Router {
 
     injector.callHook(EventType.OnResponse, { context, result })
 
-    return this.mountResponse(result);
+    return this.mountResponse(result, context);
   }
 
-  private mountResponse(result: any) {
+  private mountResponse(result: any, context: Context) {
     let payload: string | any;
     let contentType: string;
 
@@ -48,7 +47,7 @@ class Router {
         contentType = 'text/plain';
     }
 
-    return new Response(payload, {status: 200, headers: {'Content-Type': contentType}});
+    return new Response(payload, {status: context.getResponseStatus() || 200, headers: {'Content-Type': contentType}});
   }
 }
 

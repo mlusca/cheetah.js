@@ -11,6 +11,7 @@ export class Context {
   headers: Record<string, any> = {};
   locals: Record<string, any> = {};
 
+  private resultStatus: number = 200;
   private constructor() {}
 
   static async createFromRequest(url: any, request: Request, server: Serve) {
@@ -51,5 +52,13 @@ export class Context {
 
   setParam(param: Record<string, any>) {
     this.param = param;
+  }
+
+  setResponseStatus(status: number) {
+    this.resultStatus = status;
+  }
+
+  getResponseStatus() {
+    return this.resultStatus;
   }
 }

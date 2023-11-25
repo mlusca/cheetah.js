@@ -1,6 +1,6 @@
 {
   "name": "@cheetah.js/core",
-  "version": "0.1.17",
+  "version": "0.1.20",
   "description": "Cheetah.js is a framework for building web applications object oriented with TypeScript and Bun.sh.",
   "keywords": [
     "bun",
