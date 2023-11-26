@@ -47,7 +47,7 @@ class Router {
         contentType = 'text/plain';
     }
 
-    return new Response(payload, {status: context.getResponseStatus() || 200, headers: {'Content-Type': contentType}});
+    return new Response(payload, {status: context.getResponseStatus() || 201, headers: {'Content-Type': contentType}});
   }
 }
 
