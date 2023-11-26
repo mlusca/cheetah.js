@@ -292,6 +292,7 @@ export type Relationship<T> = {
   entity: () => EntityName<T>;
   originalEntity?: EntityName<T>;
   propertyKey: string | symbol;
+  columnName: string;
 } & Partial<PropertyOptions>;
 
 export type Cast<T, R> = T extends R ? T : R;

@@ -25,6 +25,33 @@ class UserValue extends BaseEntity {
   email: Email
 }
 
+@Entity()
+class Address extends BaseEntity {
+  @PrimaryKey()
+  id: number;
+
+  @Property()
+  address: string;
+
+  @Property()
+  userOwner: number;
+}
+
+@Entity()
+class UserCamel extends BaseEntity {
+  @PrimaryKey()
+  id: number;
+
+  @Property()
+  emailUser: string;
+
+  @Property({ columnName: 'date' })
+  createdAt: Date;
+
+  @ManyToOne(() => Address)
+  addressUser: Address;
+}
+
 describe('Creation, update and deletion of entities', () => {
 
   const DLL = `
@@ -40,7 +67,7 @@ describe('Creation, update and deletion of entities', () => {
       (
           "id"      SERIAL PRIMARY KEY,
           "address" varchar(255) NOT NULL,
-          "user"    integer REFERENCES "user" ("id")
+          "user_owner"    integer REFERENCES "user" ("id")
       );
   `;
 
@@ -52,20 +79,8 @@ describe('Creation, update and deletion of entities', () => {
     @Property()
     email: string;
 
-    @OneToMany(() => Address, (address) => address.user)
+    @OneToMany(() => Address, (address) => address.userOwner)
     addresses: Address[];
-  }
-
-  @Entity()
-  class Address extends BaseEntity {
-    @PrimaryKey()
-    id: number;
-
-    @Property()
-    address: string;
-
-    @Property()
-    user: number;
   }
 
   @Entity()
@@ -166,7 +181,7 @@ describe('Creation, update and deletion of entities', () => {
     });
     const address = await Address.create({
       address: 'Street 1',
-      user: user.id,
+      userOwner: user.id,
       id: 1,
     });
 
@@ -368,7 +383,7 @@ describe('Creation, update and deletion of entities', () => {
     const user = await createUser();
     const address = await Address.create({
       address: 'Street 1',
-      user: user.id,
+      userOwner: user.id,
       id: 1,
     });
 
@@ -383,7 +398,7 @@ describe('Creation, update and deletion of entities', () => {
     expect(result.addresses[0].id).toEqual(address.id);
     expect(result.addresses[0].address).toBeUndefined();
     expect(mockLogger).toHaveBeenCalledTimes(3);
-    expect((mockLogger as jest.Mock).mock.calls[2][0]).toStartWith("SQL: SELECT u1.\"id\" as u1_id, a1.\"id\" as a1_id FROM \"public\".\"user\" u1 LEFT JOIN public.address a1 ON a1.\"user\" = u1.\"id\" WHERE ((a1.id = 1)) LIMIT 1");
+    expect((mockLogger as jest.Mock).mock.calls[2][0]).toStartWith("SQL: SELECT u1.\"id\" as u1_id, a1.\"id\" as a1_id FROM \"public\".\"user\" u1 LEFT JOIN public.address a1 ON a1.\"user_owner\" = u1.\"id\" WHERE ((a1.id = 1)) LIMIT 1");
   })
 
   test('When find with orderBy defined', async () => {
@@ -391,7 +406,7 @@ describe('Creation, update and deletion of entities', () => {
     const user = await createUser();
     const address = await Address.create({
       address: 'Street 1',
-      user: user.id,
+      userOwner: user.id,
       id: 1,
     });
 
@@ -403,7 +418,7 @@ describe('Creation, update and deletion of entities', () => {
 
     expect(result.id).toEqual(user.id);
     expect(mockLogger).toHaveBeenCalledTimes(3);
-    expect((mockLogger as jest.Mock).mock.calls[2][0]).toStartWith("SQL: SELECT u1.\"id\" as u1_id, a1.\"id\" as a1_id FROM \"public\".\"user\" u1 LEFT JOIN public.address a1 ON a1.\"user\" = u1.\"id\" WHERE ((a1.id = 1)) ORDER BY u1.\"id\" DESC, a1.\"address\" DESC LIMIT 1");
+    expect((mockLogger as jest.Mock).mock.calls[2][0]).toStartWith("SQL: SELECT u1.\"id\" as u1_id, a1.\"id\" as a1_id FROM \"public\".\"user\" u1 LEFT JOIN public.address a1 ON a1.\"user_owner\" = u1.\"id\" WHERE ((a1.id = 1)) ORDER BY u1.\"id\" DESC, a1.\"address\" DESC LIMIT 1");
   })
 
   test('When find with limit defined', async () => {
@@ -454,11 +469,11 @@ describe('Creation, update and deletion of entities', () => {
     setSystemTime(dateNow)
 
     const DLL = `
-        CREATE TABLE "usertest"
+        CREATE TABLE "user_test"
         (
             "id"        uuid PRIMARY KEY,
-            "createdAt" timestamp,
-            "updatedAt" timestamp
+            "created_at" timestamp,
+            "updated_at" timestamp
         );
     `;
 
@@ -477,7 +492,7 @@ describe('Creation, update and deletion of entities', () => {
 
   test('When have a column with value-object', async () => {
     const DLL = `
-        CREATE TABLE "uservalue"
+        CREATE TABLE "user_value"
         (
             "id"    SERIAL PRIMARY KEY,
             "email" varchar(255) NOT NULL
@@ -516,7 +531,7 @@ describe('Creation, update and deletion of entities', () => {
     const user = await createUser();
     const address = await Address.create({
       address: 'Street 1',
-      user: user.id,
+      userOwner: user.id,
       id: 3,
     });
 
@@ -535,7 +550,84 @@ describe('Creation, update and deletion of entities', () => {
     expect(mockLogger).toHaveBeenCalledTimes(4);
     expect(mockLogger).not.toHaveBeenCalledTimes(5)
     expect((mockLogger as jest.Mock).mock.calls[2][0]).toStartWith("SQL: SELECT u1.\"id\" as u1_id FROM \"public\".\"user\" u1 LIMIT 1");
-    expect((mockLogger as jest.Mock).mock.calls[3][0]).toStartWith("SQL: SELECT a1.\"id\" as \"a1_id\" FROM \"public\".\"address\" a1 WHERE (a1.id = 3) AND a1.\"user\" IN (1)");
+    expect((mockLogger as jest.Mock).mock.calls[3][0]).toStartWith("SQL: SELECT a1.\"id\" as \"a1_id\" FROM \"public\".\"address\" a1 WHERE (a1.id = 3) AND a1.\"user_owner\" IN (1)");
+  })
+
+  test('When have a property camelCase', async () => {
+    const DLL = `
+        CREATE TABLE "user_camel"
+        (
+            "id"              SERIAL PRIMARY KEY,
+            "email_user"      varchar(255) NOT NULL,
+            "date"            timestamp    NOT NULL,
+            "address_user_id" integer REFERENCES "address" ("id")
+        );
+    `;
+    await execute(DDL_ADDRESS)
+    await execute(DLL)
+    Entity()(Address)
+    Entity()(UserCamel)
+
+    await User.create({
+      email: 'test@test.com',
+      id: 1,
+    })
+
+    const address = await Address.create({
+      address: 'Street 1',
+      userOwner: 1,
+      id: 1,
+    })
+
+    await UserCamel.create({
+      emailUser: 'test@test.com',
+      createdAt: new Date(),
+      id: 1,
+      addressUser: address
+    });
+    const user = await UserCamel.findOne({
+      emailUser: 'test@test.com',
+      addressUser: {
+        id: 1
+      }
+    })
+
+    expect(user).toBeInstanceOf(UserCamel);
+    expect(user!.id).toEqual(1);
+    expect(user!.emailUser).toEqual('test@test.com');
+    expect(user!.addressUser.id).toEqual(address.id);
+    expect(user!.addressUser.address).toEqual(address.address);
+    expect(user!.addressUser.userOwner).toEqual(address.userOwner);
+  });
+
+  test('When have a property oneToMany camelCase', async () => {
+    await execute(DDL_ADDRESS)
+    Entity()(User)
+    Entity()(Address)
+
+    await User.create({
+      email: 'test@test.com',
+      id: 1,
+    })
+
+    const address = await Address.create({
+      address: 'Street 1',
+      userOwner: 1,
+      id: 1,
+    })
+
+    const user = await User.findOne({
+      addresses: {
+        id: 1
+      }
+    })
+
+    expect(user).toBeInstanceOf(User);
+    expect(user!.id).toEqual(1);
+    expect(user!.email).toEqual('test@test.com');
+    expect(user.addresses[0].id).toEqual(address.id);
+    expect(user.addresses[0].address).toEqual(address.address);
+    expect(user.addresses[0].userOwner).toEqual(address.userOwner);
   })
 
 

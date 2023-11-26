@@ -38,7 +38,7 @@ export class PgDriver implements DriverInterface {
       } else {
         sql += `"${colDiff.colName}" ${isAutoIncrement ? 'SERIAL' : colDiff.colType + (colDiff.colLength ? `(${colDiff.colLength})` : '')}`;
       }
-      if (!isAutoIncrement && !colDiff.colChanges?.nullable) {
+      if (!colDiff.colChanges?.nullable) {
         sql += ' NOT NULL';
       }
 

@@ -1,7 +1,7 @@
 import { Metadata, Service } from '@cheetah.js/core';
 import { PropertyOptions } from '../decorators/property.decorator';
 import { ColumnsInfo, Relationship, SnapshotIndexInfo, SnapshotTable } from '../driver/driver.interface';
-import { getDefaultLength } from '../utils';
+import { getDefaultLength, toSnakeCase } from '../utils';
 
 export type Property = {
   options: PropertyOptions;
@@ -31,7 +31,8 @@ export class EntityStorage {
   add(entity: { target: Function, options: any }, properties: {
     [key: string]: Property
   }, relations: Relationship<any>[], hooks: { type: string, propertyName: string }[]) {
-    const entityName = entity.options?.tableName || entity.target.name.toLowerCase();
+    const entityName = entity.options?.tableName || toSnakeCase(entity.target.name);
+
     const indexes = Metadata.get('indexes', entity.target) || [];
     this.entities.set(entity.target, {
       properties: properties,
@@ -75,7 +76,7 @@ export class EntityStorage {
 
     let properties: ColumnsInfo[] = Object.entries(values.properties).map(([key, value]) => {
       return {
-        name: key,
+        name: value.options.columnName,
         type: value.options.dbType ?? value.type.name,
         nullable: value.options?.nullable,
         default: value.options?.default,
@@ -92,13 +93,13 @@ export class EntityStorage {
       const type = this.getFkType(relation)
 
       return {
-        name: relation.propertyKey as string,
+        name: relation.columnName as string,
         type,
         nullable: relation.nullable,
         unique: relation.unique,
         length: relation.length || getDefaultLength(type),
         default: relation.default,
-        autoIncrement: relation.autoIncrement,
+        autoIncrement: this.getFkIncrement(relation),
         primary: relation.isPrimary,
         foreignKeys: [
           {
@@ -136,6 +137,15 @@ export class EntityStorage {
     }
 
     return entity.properties[this.getFkKey(relation)].type.name
+  }
+
+  private getFkIncrement(relation: Relationship<any>): any {
+    const entity = this.get(relation.entity() as any)
+    if (!entity) {
+      return 'unknown'
+    }
+
+    return entity.properties[this.getFkKey(relation)].options.autoIncrement
   }
 
   /**

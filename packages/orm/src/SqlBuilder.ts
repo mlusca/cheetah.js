@@ -39,9 +39,8 @@ export class SqlBuilder<T> {
   select(columns?: AutoPath<T, never, '*'>[]): SqlBuilder<T> {
     const tableName = this.entity.tableName || (this.model as Function).name.toLowerCase();
     const schema = this.entity.schema || 'public';
-
     this.statements.statement = 'select';
-    this.statements.columns = columns;
+    this.statements.columns = columns
     this.originalColumns = columns || [];
     this.statements.alias = this.getAlias(tableName);
     this.statements.table = `"${schema}"."${tableName}"`;
@@ -60,7 +59,8 @@ export class SqlBuilder<T> {
 
   insert(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): SqlBuilder<T> {
     const {tableName, schema} = this.getTableName();
-    processValuesForInsert(values);
+    // @ts-ignore
+    values = processValuesForInsert(values, this.entity);
     this.statements.statement = 'insert';
     this.statements.instance = upEntity(values, this.model, 'insert')
     this.statements.alias = this.getAlias(tableName);
@@ -75,7 +75,8 @@ export class SqlBuilder<T> {
 
   update(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): SqlBuilder<T> {
     const {tableName, schema} = this.getTableName();
-    processValuesForUpdate(values);
+    // @ts-ignore
+    values = processValuesForUpdate(values, this.entity);
     this.statements.statement = 'update';
     this.statements.alias = this.getAlias(tableName);
     this.statements.table = `${schema}.${tableName}`;
@@ -89,6 +90,15 @@ export class SqlBuilder<T> {
       return this;
     }
 
+    const newWhere = {};
+    for (const key in where) {
+      if (where[key] instanceof Object){
+        newWhere[key] = where[key];
+        continue;
+      }
+      newWhere[getColumnName(key, this.entity)] = where[key];
+    }
+    where = newWhere;
     this.statements.where = this.conditionToSql(where, this.statements.alias!, this.model);
     return this;
   }
@@ -623,7 +633,7 @@ export class SqlBuilder<T> {
         on = `${joinAlias}."${this.getFkKey(relationShip)}" = ${alias}."${originPrimaryKey}"`;
         break;
       case "many-to-one":
-        on = `${alias}."${relationShip.propertyKey as string}" = ${joinAlias}."${this.getFkKey(relationShip)}"`;
+        on = `${alias}."${relationShip.columnName as string}" = ${joinAlias}."${this.getFkKey(relationShip)}"`;
         break;
     }
 
@@ -682,14 +692,16 @@ export class SqlBuilder<T> {
     }
 
     const match = /\.(?<propriedade>[\w]+)/.exec(relationShip.fkKey.toString());
-    return match ? match.groups!.propriedade : '';
+    const propertyKey = match ? match.groups!.propriedade : '';
+    const entity = this.entityStorage.get(relationShip.entity() as Function)!;
+    const property = Object.entries(entity.properties).find(([key, _value]) => key === propertyKey)?.[1];
+    return property.options.columnName;
   }
 
   // private conditionLogicalOperatorToSql<T extends typeof BaseEntity>(conditions: Condition<T>[], operator: 'AND' | 'OR'): string {
   //   const sqlParts = conditions.map(cond => this.conditionToSql(cond));
   //   return this.addLogicalOperatorToSql(sqlParts, operator);
   // }
-
 
   private getEntity(model: new () => T) {
     const entity = this.entityStorage.get((model as Function));
@@ -722,22 +734,27 @@ export class SqlBuilder<T> {
     }
 
     Object.entries(data).forEach(([key, value]) => {
-      const [alias, prop] = key.split('_');
+      const index = key.indexOf('_');
+      const alias = key.substring(0, index);
+      const prop = key.substring(index + 1);
+
       const entity = entitiesByAlias[alias];
       if (!entity) {
         return;
       }
 
-      const entityProperty = entitiesOptions.get(alias)!.properties[prop]
+      const ep = Object.entries(entitiesOptions.get(alias)!.properties).find(([_, value]) => value.options.columnName === prop);
+      const entityProperty = ep?.[1]
+      const keyProperty = ep?.[0];
+
       if (entityProperty) {
         if (this.extendsFrom(ValueObject, entityProperty.type.prototype)) {
           // @ts-ignore
-          entity[prop] = new entityProperty.type(value);
+          entity[keyProperty] = new entityProperty.type(value);
           return;
         }
 
-        // @ts-ignore
-        entity[prop] = value;
+        entity[keyProperty] = value;
       }
     });
 
@@ -788,13 +805,13 @@ export class SqlBuilder<T> {
       throw new Error('Entity not found');
     }
 
-    const columns = Object.keys(e.properties).map(key => `${alias}."${key}" as "${alias}_${key}"`)
+    const columns = Object.keys(e.properties).map(key => `${alias}."${e.properties[key].options.columnName}" as "${alias}_${e.properties[key].options.columnName}"`)
 
     if (e.relations) {
       for (const relation of e.relations) {
         if (relation.relation === 'many-to-one') {
           // @ts-ignore
-          columns.push(`${alias}."${relation.propertyKey}" as "${alias}_${relation.propertyKey}"`)
+          columns.push(`${alias}."${relation.columnName}" as "${alias}_${relation.columnName}"`)
         }
       }
     }
@@ -828,8 +845,8 @@ export class SqlBuilder<T> {
     const property = Object.entries(entityOptions.properties).filter(([_, value]) => value.options.onUpdate);
 
     property.forEach(([key, property]) => {
-      values[key] = property.options.onUpdate!();
-      this.updatedColumns.push(`${this.statements.alias}."${key}" as "${this.statements.alias}_${key}"`)
+      values[property.options.columnName] = property.options.onUpdate!();
+      this.updatedColumns.push(`${this.statements.alias}."${property.options.columnName}" as "${this.statements.alias}_${property.options.columnName}"`)
     });
 
     return values;
@@ -869,37 +886,68 @@ export class SqlBuilder<T> {
         continue;
       }
       if (this.entity.properties[key]) {
-        this.statements.values[key] = this.statements.instance[key];
+        this.statements.values[this.entity.properties[key].options.columnName] = this.statements.instance[key];
         continue;
       }
-      if (this.entity.relations.find(rel => rel.propertyKey === key)) {
-        this.statements.values[key] = this.statements.instance[key];
+      const rel = this.entity.relations.find(rel => rel.propertyKey === key)
+      if (rel) {
+        this.statements.values[rel.columnName] = this.statements.instance[key];
       }
     }
   }
 }
 
 
-function processValuesForInsert<T>(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): void {
+function processValuesForInsert<T>(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>, options: Options): Record<string, any> {
+  const newValue = {};
   for (const value in values) {
+    const columnName = getColumnName(value, options);
     if (extendsFrom(ValueObject, values[value].constructor.prototype)) {
-      values[value] = (values[value] as ValueObject<any, any>).getValue();
+      newValue[columnName] = (values[value] as ValueObject<any, any>).getValue();
       continue;
     }
 
     if (values[value] instanceof BaseEntity) {
       // @ts-ignore
-      values[value] = (values[value] as BaseEntity).id; // TODO: get primary key
+      newValue[columnName] = (values[value] as BaseEntity).id; // TODO: get primary key
+      continue;
     }
+
+    newValue[columnName] = values[value];
   }
+  return newValue;
 }
 
-function processValuesForUpdate<T>(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): void {
+function processValuesForUpdate<T>(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>, options: Options): Record<string, any> {
+  const newValue = {};
   for (const value in values) {
     if (extendsFrom(ValueObject, values[value].constructor.prototype)) {
-      values[value] = (values[value] as ValueObject<any, any>).getValue();
+      newValue[getColumnName(value, options)] = (values[value] as ValueObject<any, any>).getValue();
+      continue;
     }
+
+    newValue[getColumnName(value, options)] = values[value];
   }
+
+  return newValue;
+}
+
+function getColumnName(propertyKey: string, entity: Options): string {
+  const property = entity.properties[propertyKey];
+  const relation = entity.relations?.find(rel => rel.propertyKey === propertyKey);
+
+  if (propertyKey.startsWith('$')) {
+    return propertyKey;
+  }
+
+  if (!property) {
+    if (relation) {
+      return relation.columnName || propertyKey;
+    }
+    throw new Error('Property not found');
+  }
+
+  return property.options.columnName || propertyKey;
 }
 
 function extendsFrom(baseClass, instance): boolean {
@@ -936,7 +984,7 @@ function upEntity(values: any, entity: Function, moment: 'insert' | 'update' = u
     }
 
     if (key in values) {
-      instance[key] = values[key];
+      instance[key] = values[property.options.columnName];
     }
   })
 
@@ -944,10 +992,22 @@ function upEntity(values: any, entity: Function, moment: 'insert' | 'update' = u
     for (const relation of relations) {
       if (relation.relation === 'many-to-one') {
         // @ts-ignore
-        instance[relation.propertyKey] = instance[relation.propertyKey];
+        instance[relation.propertyKey] = values[relation.columnName];
       }
     }
   }
 
   return instance;
+}
+
+function convertWhereObj(where: any, entity: any): any {
+  let newWhere = {};
+  for (const key in where) {
+    if (where[key] instanceof Object) {  // Se o valor atual é um objeto, chame a mesma função recursivamente
+      newWhere[getColumnName(key, entity)] = convertWhereObj(where[key], entity)
+    } else {
+      newWhere[getColumnName(key, entity)] = where[key];
+    }
+  }
+  return newWhere;
 }

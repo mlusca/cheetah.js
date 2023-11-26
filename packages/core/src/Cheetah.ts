@@ -75,6 +75,10 @@ export class Cheetah {
     this.createHttpServer(port)
   }
 
+  public getHttpServer() {
+    return this.server
+  }
+
   getInjector() {
     return this.injector;
   }

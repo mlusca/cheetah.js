@@ -29,7 +29,7 @@ describe('Relationship entities', () => {
       (
           "id"      SERIAL PRIMARY KEY,
           "address" varchar(255) NOT NULL,
-          "user"    integer REFERENCES "user" ("id")
+          "user_id" integer REFERENCES "user" ("id")
       );
   `;
 
@@ -38,7 +38,7 @@ describe('Relationship entities', () => {
       (
           "id"      SERIAL PRIMARY KEY,
           "street"  varchar(255) NOT NULL,
-          "address" integer REFERENCES "address" ("id")
+          "address_id" integer REFERENCES "address" ("id")
       );
   `;
 
@@ -131,7 +131,7 @@ describe('Relationship entities', () => {
     expect(findWithLoadSelect[0].address.user).toBeInstanceOf(User);
     expect(findWithLoadSelect[0].address.user.email).toBe('test@test.com');
     expect(mockLogger).toHaveBeenCalledTimes(7)
-    expect((mockLogger as jest.Mock).mock.calls[3][0]).toStartWith("SQL: SELECT s1.\"id\" as \"s1_id\", s1.\"street\" as \"s1_street\", s1.\"address\" as \"s1_address\", u1.\"id\" as \"u1_id\", u1.\"email\" as \"u1_email\", a1.\"id\" as \"a1_id\", a1.\"address\" as \"a1_address\", a1.\"user\" as \"a1_user\" FROM \"public\".\"street\" s1 LEFT JOIN public.address a1 ON s1.\"address\" = a1.\"id\" LEFT JOIN public.user u1 ON a1.\"user\" = u1.\"id\" WHERE (((u1.id = 1)))");
+    expect((mockLogger as jest.Mock).mock.calls[3][0]).toStartWith("SQL: SELECT s1.\"id\" as \"s1_id\", s1.\"street\" as \"s1_street\", s1.\"address_id\" as \"s1_address_id\", u1.\"id\" as \"u1_id\", u1.\"email\" as \"u1_email\", a1.\"id\" as \"a1_id\", a1.\"address\" as \"a1_address\", a1.\"user_id\" as \"a1_user_id\" FROM \"public\".\"street\" s1 LEFT JOIN public.address a1 ON s1.\"address_id\" = a1.\"id\" LEFT JOIN public.user u1 ON a1.\"user_id\" = u1.\"id\" WHERE (((u1.id = 1)))");
   });
 
   it('should load relationship', async () => {

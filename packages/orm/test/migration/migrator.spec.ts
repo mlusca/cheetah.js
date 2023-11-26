@@ -148,8 +148,8 @@ describe('Migration', () => {
     const migrationContent = fs.readFileSync(migrationFilePath, {encoding: 'utf-8'});
 
     expect(migrationContent).toContain("ALTER TABLE \"public\".\"user\" DROP CONSTRAINT \"user_email_key\";");
-    expect(migrationContent).toContain("ALTER TABLE \"public\".\"address\" ADD COLUMN \"user\" numeric(11) NOT NULL;");
-    expect(migrationContent).toContain("ALTER TABLE \"public\".\"address\" ADD CONSTRAINT \"address_user_fk\" FOREIGN KEY (\"user\") REFERENCES \"user\" (\"id\");")
+    expect(migrationContent).toContain("ALTER TABLE \"public\".\"address\" ADD COLUMN \"user_id\" numeric(11) NOT NULL;");
+    expect(migrationContent).toContain("ALTER TABLE \"public\".\"address\" ADD CONSTRAINT \"address_user_id_fk\" FOREIGN KEY (\"user_id\") REFERENCES \"user\" (\"id\");")
     await execute(migrationContent);
   });
 
@@ -245,8 +245,8 @@ describe('Migration', () => {
     expect(migrationContent).toContain("CREATE TABLE \"public\".\"user\" (\"id\" numeric(11) NOT NULL PRIMARY KEY UNIQUE,\"email\" character varying(255) NOT NULL);")
     expect(migrationContent).toContain("CREATE INDEX \"id_email_index\" ON \"public\".\"user\" (\"id\", \"email\");")
     expect(migrationContent).toContain("CREATE INDEX \"email_index\" ON \"public\".\"user\" (\"email\");\n")
-    expect(migrationContent).toContain("CREATE TABLE \"public\".\"address\" (\"id\" numeric(11) NOT NULL PRIMARY KEY UNIQUE,\"user\" numeric(11) NOT NULL);")
-    expect(migrationContent).toContain("ALTER TABLE \"public\".\"address\" ADD CONSTRAINT \"address_user_fk\" FOREIGN KEY (\"user\") REFERENCES \"user\" (\"id\");")
+    expect(migrationContent).toContain("CREATE TABLE \"public\".\"address\" (\"id\" numeric(11) NOT NULL PRIMARY KEY UNIQUE,\"user_id\" numeric(11) NOT NULL);")
+    expect(migrationContent).toContain("ALTER TABLE \"public\".\"address\" ADD CONSTRAINT \"address_user_id_fk\" FOREIGN KEY (\"user_id\") REFERENCES \"user\" (\"id\");")
     expect(migrationContent.split('\n').length).toEqual(5)
     await execute(migrationContent);
   });
@@ -290,7 +290,7 @@ describe('Migration', () => {
     const migrationFilePath = path.join(__dirname, '/test.sql');
     const migrationContent = fs.readFileSync(migrationFilePath, {encoding: 'utf-8'});
 
-    expect(migrationContent).toContain("CREATE TABLE \"public\".\"user\" (\"id\" SERIAL PRIMARY KEY UNIQUE,\"email\" text NOT NULL);")
+    expect(migrationContent).toContain("CREATE TABLE \"public\".\"user\" (\"id\" SERIAL NOT NULL PRIMARY KEY UNIQUE,\"email\" text NOT NULL);")
     expect(migrationContent.split('\n').length).toEqual(1)
     await execute(migrationContent);
   });
@@ -316,7 +316,7 @@ describe('Migration', () => {
     const migrationFilePath = path.join(__dirname, '/test.sql');
     const migrationContent = fs.readFileSync(migrationFilePath, {encoding: 'utf-8'});
 
-    expect(migrationContent).toContain("CREATE TYPE \"public_user_role_enum\" AS ENUM ('admin', 'user');CREATE TABLE \"public\".\"user\" (\"id\" SERIAL PRIMARY KEY UNIQUE,\"role\" \"public_user_role_enum\" NOT NULL);")
+    expect(migrationContent).toContain("CREATE TYPE \"public_user_role_enum\" AS ENUM ('admin', 'user');CREATE TABLE \"public\".\"user\" (\"id\" SERIAL NOT NULL PRIMARY KEY UNIQUE,\"role\" \"public_user_role_enum\" NOT NULL);")
     expect(migrationContent.split('\n').length).toEqual(1)
     await execute(migrationContent);
   });

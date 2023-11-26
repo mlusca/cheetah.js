@@ -1,5 +1,5 @@
 import { PROPERTIES, PROPERTIES_METADATA } from '../constants';
-import { getDefaultLength } from '../utils';
+import { getDefaultLength, toSnakeCase } from '../utils';
 import { Metadata } from '@cheetah.js/core';
 import { Index } from './index.decorator';
 
@@ -13,6 +13,7 @@ export type PropertyOptions = {
   index?: boolean;
   dbType?: 'varchar' | 'text' | 'int' | 'bigint' | 'float' | 'double' | 'decimal' | 'date' | 'datetime' | 'time' | 'timestamp' | 'boolean' | 'json' | 'jsonb' | 'enum' | 'array' | 'uuid';
   autoIncrement?: boolean;
+  columnName?: string;
   isEnum?: boolean;
   enumItems?: string[]|number[];
   onUpdate?: () => any;
@@ -26,7 +27,9 @@ export function Property(options?: PropertyOptions): PropertyDecorator {
     const properties: Prop[] = Metadata.get(PROPERTIES, target.constructor) || [];
     const type = Metadata.getType(target, propertyKey);
     const length = (options && options.length) || getDefaultLength(type.name);
+
     options = {length, ...options};
+    options['columnName'] = options?.columnName || toSnakeCase(propertyKey as string);
     properties.push({propertyKey, options});
     Metadata.set(PROPERTIES, properties, target.constructor);
 
@@ -48,4 +51,3 @@ export function Property(options?: PropertyOptions): PropertyDecorator {
     });
   };
 }
-
