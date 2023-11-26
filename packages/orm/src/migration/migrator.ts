@@ -14,6 +14,13 @@ export class Migrator {
   entities: EntityStorage = new EntityStorage();
 
   constructor() {
+    this.orm = Orm.getInstance();
+    if (this.orm === undefined)
+      this.orm = new Orm(new LoggerService(new InjectorService()));
+
+    this.entities = EntityStorage.getInstance();
+    if (this.entities === undefined)
+      this.entities = new EntityStorage();
   }
 
   async initConfigFile(basePath: string = process.cwd()) {
@@ -33,8 +40,6 @@ export class Migrator {
       }
     }
 
-    this.orm = new Orm(new LoggerService(new InjectorService()));
-    this.entities = new EntityStorage();
     const serv = new OrmService(this.orm, this.entities)
     await serv.onInit(this.config);
   }

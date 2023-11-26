@@ -19,10 +19,16 @@ export class Context {
     if (request.method === 'GET') {
       context.setQuery(url);
     } else {
-      // @ts-ignore
-      context.setBody(await request.formData());
+      if (request.headers.get('content-type').includes('application/json')) {
+        context.body = await request.json();
+      } else if (request.headers.get('content-type').includes('application/x-www-form-urlencoded')) {
+        context.setBody(await request.formData());
+      } else if (request.headers.get('content-type').includes('multipart/form-data')) {
+        context.setBody(await request.formData());
+      } else {
+        context.body = { body: await request.text() };
+      }
     }
-
     context.setReq(request);
     // @ts-ignore
     context.setHeaders(request.headers);
@@ -34,7 +40,7 @@ export class Context {
     this.query = new URLSearchParams(query)
   }
 
-  private setBody(body: FormData) {
+  private setBody(body: any) {
     for (const [key, value] of body.entries()) {
       this.body[key] = value;
     }
