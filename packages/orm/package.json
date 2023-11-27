@@ -1,6 +1,6 @@
 {
   "name": "@cheetah.js/orm",
-  "version": "0.1.30",
+  "version": "0.1.31",
   "description": "A simple ORM for Cheetah.js",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -37,7 +37,7 @@
     "pg": "^8.11.3"
   },
   "peerDependencies": {
-    "@cheetah.js/core": "^0.1.22",
+    "@cheetah.js/core": "^0.1.24",
     "pg": "^8.11.3"
   },
   "peerDependenciesMeta": {
