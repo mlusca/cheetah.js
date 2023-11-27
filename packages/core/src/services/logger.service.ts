@@ -16,7 +16,13 @@ export class LoggerService implements LoggerAdapter {
 
   constructor(private injector: InjectorService){
     const pinoConfig = this.injector.applicationConfig.logger || {};
-    // @ts-ignore
+    pinoConfig['transport'] = pinoConfig.transport || {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        ignore: 'pid,hostname',
+      },
+    }
     this.logger = Pino(pinoConfig);
   }
 
