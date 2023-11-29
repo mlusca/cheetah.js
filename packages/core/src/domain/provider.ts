@@ -15,6 +15,7 @@ export class Provider {
   private _provide: TokenProvider
   // @ts-ignore
   private _useClass: Type
+  private _useValue?: any;
   public hooks?: Record<string, ProviderHookCallback>;
   public path?: string;
 
@@ -58,6 +59,14 @@ export class Provider {
         return hooks;
       }, {} as any);
     }
+  }
+
+  get useValue() {
+    return this._useValue;
+  }
+
+  set useValue(value: () => any) {
+    this._useValue = value();
   }
 
   get provide() {

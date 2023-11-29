@@ -1,51 +1,26 @@
 {
-  "name": "@cheetah.js/orm",
+  "name": "@cheetah.js/swagger",
   "version": "0.1.31",
-  "description": "A simple ORM for Cheetah.js",
-  "main": "dist/index.js",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    "./package.json": "./package.json",
-    ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "require": "./dist/index.js"
-    }
-  },
+  "description": "Generate automatically swagger.json from your cheetah.js project",
+  "main": "src/index.ts",
   "scripts": {
     "compile": "sudo rm -rf ./dist && tsc && bun run build.ts"
   },
   "dependencies": {
-    "commander": "^11.1.0",
-    "reflect-metadata": "^0.1.13",
-    "ts-morph": "^20.0.0",
-    "uuid": "^9.0.1"
+    "openapi-types": "^12.1.3"
+  },
+  "devDependencies": {
+    "@apidevtools/swagger-parser": "^10.1.0",
+    "@types/swagger-ui": "^3.52.2"
   },
   "repository": {
     "type": "git",
     "url": "git+ssh://git@github.com:mlusca/cheetah.js.git"
   },
-  "bin": {
-    "cheetah-orm": "./dist/cheetah.js"
-  },
-  "devDependencies": {
-    "@types/pg": "^8.10.9",
-    "@types/uuid": "^9.0.6",
-    "pg": "^8.11.3"
-  },
   "peerDependencies": {
-    "@cheetah.js/core": "^0.1.24",
-    "pg": "^8.11.3"
+    "@cheetah.js/core": "^0.1.25"
   },
-  "peerDependenciesMeta": {
-    "pg": {
-      "optional": true
-    }
-  },
-  "author": "",
+  "author": "Lucas Mota",
   "license": "MIT",
   "publishConfig": {
     "access": "public"
@@ -53,13 +28,7 @@
   "keywords": [
     "cheetah",
     "cheetah.js",
-    "orm",
-    "database",
-    "sql",
-    "postgres",
-    "postgresql",
-    "bun",
-    "value-object"
+    "swagger"
   ],
   "gitHead": "726879b8d699b9abf35e80aa64ada630c8ced14d"
 }
