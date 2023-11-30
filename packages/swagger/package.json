@@ -1,8 +1,20 @@
 {
   "name": "@cheetah.js/swagger",
-  "version": "0.1.31",
+  "version": "0.1.33",
   "description": "Generate automatically swagger.json from your cheetah.js project",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": "./dist/index.js"
+    }
+  },
   "scripts": {
     "compile": "sudo rm -rf ./dist && tsc && bun run build.ts"
   },
@@ -18,7 +30,7 @@
     "url": "git+ssh://git@github.com:mlusca/cheetah.js.git"
   },
   "peerDependencies": {
-    "@cheetah.js/core": "^0.1.25"
+    "@cheetah.js/core": "^0.1.26"
   },
   "author": "Lucas Mota",
   "license": "MIT",

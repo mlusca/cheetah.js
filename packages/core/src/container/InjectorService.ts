@@ -207,8 +207,8 @@ export class InjectorService {
 
     const deps = this.getConstructorDependencies(provider.useClass);
     let construct: (deps: TokenProvider[]) => any;
-    if (provider.useClass) construct = (deps: TokenProvider[]) => new provider.useClass(...deps);
-    else construct = (deps: TokenProvider[]) => provider.useValue;
+    if (provider.useValue) construct = (deps: TokenProvider[]) => provider.useValue;
+    else construct = (deps: TokenProvider[]) => new provider.useClass(...deps);
 
     let instance: any;
 
@@ -217,7 +217,9 @@ export class InjectorService {
     if (isRequestScope(provider, deps, this)) {
       scope = ProviderScope.REQUEST;
     }
-    const services = deps.filter((t) => !isPrimitiveType(t)).map((token) => this.invoke(getClassOrSymbol(token), locals));
+    let services = [];
+    if (!provider.useValue)
+      services = deps.filter((t) => !isPrimitiveType(t)).map((token) => this.invoke(getClassOrSymbol(token), locals));
     instance = construct(services);
 
     switch (scope) {
@@ -246,7 +248,7 @@ export class InjectorService {
     const cachedMethod = this.historyMethods.get(instance);
     let methodInfo;
 
-    if (cachedMethod) {
+    if (cachedMethod && cachedMethod[methodName]) {
       methodInfo = cachedMethod[methodName];
     } else {
       methodInfo = this.cacheMethodInfo(instance, methodName);

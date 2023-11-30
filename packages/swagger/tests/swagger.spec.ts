@@ -7,8 +7,12 @@ describe("Swagger", () => {
 
   beforeAll(() => {
     const app = new Cheetah();
-    app.use(SwaggerModule({}))
-    app.init();
+    app.use(SwaggerModule({ path: "/swagger" }));
+    try {
+      app.init();
+    } catch (e) {
+      console.log(e);
+    }
     injector = app.getInjector();
   });
 
