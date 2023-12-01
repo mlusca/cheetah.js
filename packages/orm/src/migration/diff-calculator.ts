@@ -151,7 +151,7 @@ export class DiffCalculator {
     const colType = colT.type;
     const length = entityCol.length ?? colT.len;
 
-    if (bdCol.type !== colType || bdCol.length !== length) {
+    if (!bdCol.type.includes(colType) || bdCol.length !== length) {
       if (colType === 'USER-DEFINED') {
         colDiffs.push({
           actionType: 'DELETE',
@@ -283,13 +283,13 @@ export class DiffCalculator {
       case "varchar":
         return {type: 'character varying', len: 255};
       case "Boolean":
-        return {type: "boolean"};
+        return {type: "boolean", len: null};
       case "Date":
         return {type: "timestamp"};
       case "Object":
-        return {type: "json"};
+        return {type: "json", len: null};
       case 'uuid':
-        return {type: 'uuid'};
+        return {type: 'uuid', len: null };
       case 'text':
         return {type: 'text'};
       default:

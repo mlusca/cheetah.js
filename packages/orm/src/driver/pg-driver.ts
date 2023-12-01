@@ -219,6 +219,7 @@ export class PgDriver implements DriverInterface {
 
     const indexes = await this.index(tableName, options) || [];
     const constraints = await this.constraints(tableName, options) || [];
+
     let enums = await this.getEnums(tableName, schema)
     // @ts-ignore
     enums = enums.reduce((acc, curr) => {
@@ -267,11 +268,14 @@ export class PgDriver implements DriverInterface {
 
   async index(tableName: string, options: any): Promise<SnapshotIndexInfo[] | undefined> {
     const schema = (options && options.schema) || 'public';
-    const result = await this.client.query(
+    let result = await this.client.query(
       `SELECT indexname AS index_name, indexdef AS column_name, tablename AS table_name
        FROM pg_indexes
        WHERE tablename = '${tableName}' AND schemaname = '${schema}'`
     );
+
+    //@ts-ignore
+    result.rows = result.rows.filter(row => row.index_name.includes('_pkey') || !row.column_name.includes('UNIQUE INDEX'))
 
     return result.rows.map(row => {
       return {

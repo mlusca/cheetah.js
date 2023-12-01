@@ -258,7 +258,7 @@ export class Migrator {
         if (colDiff.colChanges.unique) {
           sqlInstructions.push((this.orm.driverInstance as DriverInterface).getAddUniqueConstraint(schema, tableName, colName));
         } else {
-          // sqlInstructions.push((this.orm.driverInstance as DriverInterface).getDropConstraint({name: `${tableName}_${colName}_key`}, schema, tableName));
+          sqlInstructions.push((this.orm.driverInstance as DriverInterface).getDropConstraint({name: `${tableName}_${colName}_key`}, schema, tableName));
         }
       }
 
