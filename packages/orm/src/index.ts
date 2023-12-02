@@ -7,6 +7,7 @@ export * from './decorators/event-hook.decorator';
 export * from './orm'
 export * from './orm.service'
 export * from './domain/base-entity'
+export { EntityStorage, Options as EntityOptions, Property as EntityProperty } from './domain/entities'
 export * from './driver/pg-driver'
 export * from './utils'
 export * from './driver/driver.interface'
