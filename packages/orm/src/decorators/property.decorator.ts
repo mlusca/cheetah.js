@@ -1,7 +1,8 @@
-import { PROPERTIES, PROPERTIES_METADATA } from '../constants';
-import { getDefaultLength, toSnakeCase } from '../utils';
-import { Metadata } from '@cheetah.js/core';
-import { Index } from './index.decorator';
+import { PROPERTIES, PROPERTIES_METADATA } from "../constants";
+import { extendsFrom, getDefaultLength, toSnakeCase } from "../utils";
+import { Metadata } from "@cheetah.js/core";
+import { Index } from "./index.decorator";
+import { ValueObject } from "..";
 
 export type PropertyOptions = {
   isPrimary?: boolean;
@@ -11,16 +12,35 @@ export type PropertyOptions = {
   hidden?: boolean;
   unique?: boolean;
   index?: boolean;
-  dbType?: 'varchar' | 'text' | 'int' | 'bigint' | 'float' | 'double' | 'decimal' | 'date' | 'datetime' | 'time' | 'timestamp' | 'boolean' | 'json' | 'jsonb' | 'enum' | 'array' | 'uuid';
+  precision?: number;
+  scale?: number;
+  dbType?:
+    | "varchar"
+    | "text"
+    | "int"
+    | "bigint"
+    | "float"
+    | "double"
+    | "decimal"
+    | "date"
+    | "datetime"
+    | "time"
+    | "timestamp"
+    | "boolean"
+    | "json"
+    | "jsonb"
+    | "enum"
+    | "array"
+    | "uuid";
   autoIncrement?: boolean;
   columnName?: string;
   isEnum?: boolean;
-  enumItems?: string[]|number[];
+  enumItems?: string[] | number[];
   onUpdate?: () => any;
   onInsert?: () => any;
-}
+};
 
-export type Prop = { propertyKey: any, options: PropertyOptions | undefined };
+export type Prop = { propertyKey: any; options: PropertyOptions | undefined };
 
 export function Property(options?: PropertyOptions): PropertyDecorator {
   return (target, propertyKey) => {
@@ -28,25 +48,34 @@ export function Property(options?: PropertyOptions): PropertyDecorator {
     const type = Metadata.getType(target, propertyKey);
     const length = (options && options.length) || getDefaultLength(type.name);
 
-    options = {length, ...options};
-    options['columnName'] = options?.columnName || toSnakeCase(propertyKey as string);
-    properties.push({propertyKey, options});
+    options = { length, ...options };
+    options["columnName"] = options?.columnName || toSnakeCase(propertyKey as string);
+
+    if (extendsFrom(ValueObject, type.prototype)) {
+      let instance = new type(null, true).getDatabaseValues();
+      options["length"] = instance.max;
+      options["precision"] = instance.precision;
+      options["scale"] = instance.scale;
+      instance = null; // Garbage collector
+    }
+
+    properties.push({ propertyKey, options });
     Metadata.set(PROPERTIES, properties, target.constructor);
 
     if (options.isPrimary) {
-      const indexes: {name: string, properties: string[]}[] = Metadata.get('indexes', target.constructor) || [];
-      indexes.push({name: `[TABLE]_pkey`, properties: [propertyKey as string]});
-      Metadata.set('indexes', indexes, target.constructor);
+      const indexes: { name: string; properties: string[] }[] = Metadata.get("indexes", target.constructor) || [];
+      indexes.push({ name: `[TABLE]_pkey`, properties: [propertyKey as string] });
+      Metadata.set("indexes", indexes, target.constructor);
     }
 
     if (options.index) {
-      Index({properties: [propertyKey as string]})(target, propertyKey);
+      Index({ properties: [propertyKey as string] })(target, propertyKey);
     }
 
     properties.forEach((property: Prop) => {
       const types = Metadata.get(PROPERTIES_METADATA, target.constructor) || {};
       const type = Metadata.getType(target, property.propertyKey);
-      types[property.propertyKey] = {type, options: property.options};
+      types[property.propertyKey] = { type, options: property.options };
       Metadata.set(PROPERTIES_METADATA, types, target.constructor);
     });
   };

@@ -13,6 +13,7 @@ import { Orm } from './orm';
 import { LoggerService } from '@cheetah.js/core';
 import { ValueObject } from './common/value-object';
 import { BaseEntity } from './domain/base-entity';
+import { extendsFrom } from './utils';
 
 export class SqlBuilder<T> {
   private readonly driver: DriverInterface;
@@ -528,7 +529,7 @@ export class SqlBuilder<T> {
     const operators = ['$eq', '$ne', '$in', '$nin', '$like', '$gt', '$gte', '$lt', '$lte', '$and', '$or'];
 
     for (let [key, value] of Object.entries(condition)) {
-      if (this.extendsFrom(ValueObject, value.constructor.prototype)) {
+      if (extendsFrom(ValueObject, value.constructor.prototype)) {
         value = (value as ValueObject<any, any>).getValue();
       }
 
@@ -748,7 +749,7 @@ export class SqlBuilder<T> {
       const keyProperty = ep?.[0];
 
       if (entityProperty) {
-        if (this.extendsFrom(ValueObject, entityProperty.type.prototype)) {
+        if (extendsFrom(ValueObject, entityProperty.type.prototype)) {
           // @ts-ignore
           entity[keyProperty] = new entityProperty.type(value);
           return;
@@ -852,18 +853,6 @@ export class SqlBuilder<T> {
     return values;
   }
 
-  private extendsFrom(baseClass, instance) {
-    if (!instance) return false;
-    let proto = Object.getPrototypeOf(instance);
-    while (proto) {
-      if (proto === baseClass.prototype) {
-        return true;
-      }
-      proto = Object.getPrototypeOf(proto);
-    }
-    return false;
-  }
-
   public callHook(type: string, model?: any) {
     const hooks = this.statements.hooks?.filter(hook => hook.type === type) || [];
     const instance = model || this.statements.instance;
@@ -948,17 +937,6 @@ function getColumnName(propertyKey: string, entity: Options): string {
   }
 
   return property.options.columnName || propertyKey;
-}
-
-function extendsFrom(baseClass, instance): boolean {
-  let proto = Object.getPrototypeOf(instance);
-  while (proto) {
-    if (proto === baseClass.prototype) {
-      return true;
-    }
-    proto = Object.getPrototypeOf(proto);
-  }
-  return false;
 }
 
 function upEntity(values: any, entity: Function, moment: 'insert' | 'update' = undefined) {

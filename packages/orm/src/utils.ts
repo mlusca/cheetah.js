@@ -7,3 +7,15 @@ export function toSnakeCase(propertyKey1: string) {
 
   return propertyKey1.replace(/([A-Z])/g, '_$1').toLowerCase();
 }
+
+export function extendsFrom(baseClass, instance) {
+  if (!instance) return false;
+  let proto = Object.getPrototypeOf(instance);
+  while (proto) {
+    if (proto === baseClass.prototype) {
+      return true;
+    }
+    proto = Object.getPrototypeOf(proto);
+  }
+  return false;
+}

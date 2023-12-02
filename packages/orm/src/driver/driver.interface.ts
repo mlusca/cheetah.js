@@ -190,6 +190,8 @@ export type ColumnsInfo = {
   autoIncrement?: boolean;
   length?: number;
   isEnum?: boolean;
+  precision?: number;
+  scale?: number;
   enumItems?: string[] | number[];
   foreignKeys?: ForeignKeyInfo[];
 }
