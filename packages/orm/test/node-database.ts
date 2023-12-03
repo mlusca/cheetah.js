@@ -1,7 +1,7 @@
 
 import { Orm, OrmService, PgDriver } from '@cheetah.js/orm';
 import { EntityStorage } from 'packages/orm/src/domain/entities';
-import { LoggerService } from '@cheetah.js/core/services/logger.service';
+import { LoggerService } from '@cheetah.js/core';
 import { spyOn } from 'bun:test';
 
 const loggerInstance = new LoggerService({applicationConfig: {logger: { level: 'info'}}} as any)

@@ -1,9 +1,10 @@
 import { Metadata, OnApplicationInit, Service } from '@cheetah.js/core';
 import { EntityStorage, Property } from './domain/entities';
 import { ENTITIES, EVENTS_METADATA, PROPERTIES_METADATA, PROPERTIES_RELATIONS } from './constants';
-import { globbySync } from 'globby';
 import { Project, SyntaxKind } from 'ts-morph';
 import { Orm } from './orm';
+import * as globby from 'globby';
+
 
 @Service()
 export class OrmService {
@@ -62,7 +63,7 @@ export class OrmService {
   @OnApplicationInit()
   async onInit(customConfig: any = {}) {
 
-    const configFile = globbySync('cheetah.config.ts', {absolute: true});
+    const configFile = globby.sync('cheetah.config.ts', {absolute: true});
     if (configFile.length === 0) {
       console.log('No config file found!')
       return;
@@ -75,7 +76,7 @@ export class OrmService {
     await this.orm.connect();
 
     if (typeof config.default.entities === 'string') {
-      const files = globbySync([config.default.entities, '!node_modules'], {gitignore: true, absolute: true})
+      const files = globby.sync([config.default.entities, '!node_modules'], {gitignore: true, absolute: true})
 
       for (const file of files) {
         await import(file)
@@ -117,7 +118,7 @@ export class OrmService {
       const patterns = [`${dir}/**/*.(ts|js)`, "!**/node_modules/**"];
 
       try {
-        return globbySync(patterns, {gitignore: true});
+        return globby.sync(patterns, {gitignore: true});
       } catch (error) {
         console.error('Erro ao obter arquivos:', error);
         return [];
