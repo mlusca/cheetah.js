@@ -1,3 +1,3 @@
-import { createParamDecorator } from '@cheetah.js/core';
+import { createParamDecorator } from "./http.decorators";
 
 export const Inject = createParamDecorator(() => {});

@@ -1,5 +1,6 @@
 import Pino from "pino";
-import { InjectorService, Service } from '@cheetah.js/core';
+import { Service } from "../commons/decorators/service.decorator";
+import { InjectorService } from "../container/InjectorService";
 
 export interface LoggerAdapter {
   info(message: string, ...args: any[]): void;
@@ -10,7 +11,6 @@ export interface LoggerAdapter {
   trace(message: string, ...args: any[]): void;
 }
 
-@Service()
 export class LoggerService implements LoggerAdapter {
   private logger: Pino.Logger;
 

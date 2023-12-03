@@ -1,6 +1,7 @@
 import { Env } from 'bun';
 import { TokenProvider, TokenProviderOpts } from '../commons';
-import { CheetahMiddleware, Provider, ProviderScope, setValue } from '@cheetah.js/core';
+import { setValue } from '..';
+import { CheetahMiddleware, Provider, ProviderScope } from '../domain';
 
 export type TokenRoute = { method: string, path: string, methodName: string, middlewares: CheetahMiddleware[] }
 export type TokenRouteWithProvider = TokenRoute & { provider: Provider }

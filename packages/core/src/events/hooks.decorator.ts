@@ -1,4 +1,6 @@
-import { CONTROLLER_EVENTS, EventType, Metadata, OnEvent } from '@cheetah.js/core';
+import { CONTROLLER_EVENTS } from "../constants"
+import { Metadata } from "../domain"
+import { OnEvent, EventType } from "./on-event"
 
 export function OnApplicationInit(): MethodDecorator {
     return (target, propertyKey: any) => {

@@ -1,4 +1,5 @@
-import { Context, TokenRouteWithProvider, TokenRouteWithProviderMap } from '@cheetah.js/core';
+import { TokenRouteWithProvider, TokenRouteWithProviderMap } from "../container";
+import { Context } from "../domain";
 
 const parseUrl = require('parseurl-fast');
 

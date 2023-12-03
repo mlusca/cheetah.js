@@ -1,4 +1,4 @@
-import { Type } from '@cheetah.js/core';
+import { Type } from "../commons";
 
 /**
  * Get the class constructor

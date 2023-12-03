@@ -1,5 +1,5 @@
-import { GlobalProvider, Provider, ProviderType } from '@cheetah.js/core';
-import { TokenProvider } from '../commons';
+import { GlobalProvider, TokenProvider } from '../commons';
+import { Provider, ProviderType } from '../domain';
 
 export class Container extends Map<TokenProvider, Provider> {
   /**

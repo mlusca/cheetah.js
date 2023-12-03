@@ -1,20 +1,24 @@
-import {ProviderType} from './provider-type';
-import {ProviderScope} from './provider-scope';
-import {classOf, isClass, methodsOf, TokenProvider, Type} from '@cheetah.js/core';
 
-export type ProviderHookCallback<T = any> = (instance: T, ...args: any[]) => Promise<void> | void;
+import { ProviderType } from "./provider-type";
+import { ProviderScope } from "./provider-scope";
+import { TokenProvider, Type, methodsOf } from "..";
+import { isClass, classOf } from "../utils";
+
+export type ProviderHookCallback<T = any> = (
+  instance: T,
+  ...args: any[]
+) => Promise<void> | void;
 
 export class Provider {
-
   /**
    * Token group provider to retrieve all provider from the same type
    */
   public type: TokenProvider | ProviderType = ProviderType.PROVIDER;
   public deps: TokenProvider[] = [];
-  public instance: any
-  private _provide: TokenProvider
+  public instance: any;
+  private _provide: TokenProvider;
   // @ts-ignore
-  private _useClass: Type
+  private _useClass: Type;
   private _useValue?: any;
   public hooks?: Record<string, ProviderHookCallback>;
   public path?: string;
@@ -49,15 +53,19 @@ export class Provider {
     if (isClass(value)) {
       this._useClass = classOf(value);
 
-      this.hooks = methodsOf(this._useClass).reduce((hooks, {propertyKey}) => {
-        if (String(propertyKey).startsWith('$')) {
-          return {
-            ...hooks,
-            [propertyKey]: (instance: any, ...args: any[]) => instance[propertyKey](...args),
-          };
-        }
-        return hooks;
-      }, {} as any);
+      this.hooks = methodsOf(this._useClass).reduce(
+        (hooks, { propertyKey }) => {
+          if (String(propertyKey).startsWith("$")) {
+            return {
+              ...hooks,
+              [propertyKey]: (instance: any, ...args: any[]) =>
+                instance[propertyKey](...args),
+            };
+          }
+          return hooks;
+        },
+        {} as any
+      );
     }
   }
 
@@ -70,12 +78,12 @@ export class Provider {
   }
 
   get provide() {
-    return this._provide
+    return this._provide;
   }
 
   set provide(value: TokenProvider) {
     if (!value) {
-      return
+      return;
     }
 
     this._provide = value;
@@ -86,6 +94,6 @@ export class Provider {
   }
 
   isChild(): boolean {
-    return !!this.parent
+    return !!this.parent;
   }
 }

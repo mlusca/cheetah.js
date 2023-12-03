@@ -1,6 +1,9 @@
 import { ProviderType } from '../../domain/provider-type';
 import { Provider } from '../../domain/provider';
-import { getClassOrSymbol, InjectorService, LocalsContainer, ProviderScope } from '@cheetah.js/core';
+import { ProviderScope } from '../../domain/provider-scope';
+import { getClassOrSymbol } from '../../utils';
+import { InjectorService } from '../../container/InjectorService';
+import { LocalsContainer } from '../../domain/LocalsContainer';
 
 export interface ResolvedInvokeOptions {
     token: TokenProvider;

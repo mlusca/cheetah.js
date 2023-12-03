@@ -1,4 +1,5 @@
-import { CheetahMiddleware, CONTROLLER_MIDDLEWARES, ROUTE_MIDDLEWARES } from '@cheetah.js/core';
+import { CONTROLLER_MIDDLEWARES, ROUTE_MIDDLEWARES } from "../../constants"
+import { CheetahMiddleware } from "../../domain/CheetahMiddleware"
 
 
 export function Middleware(...middlewares: (new () => CheetahMiddleware)[]): ClassDecorator & MethodDecorator {

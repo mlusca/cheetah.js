@@ -1,6 +1,6 @@
 {
   "name": "@cheetah.js/orm",
-  "version": "0.1.36",
+  "version": "0.1.39",
   "description": "A simple ORM for Cheetah.js",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -28,16 +28,13 @@
     "type": "git",
     "url": "git+ssh://git@github.com:mlusca/cheetah.js.git"
   },
-  "bin": {
-    "cheetah-orm": "./dist/cheetah.js"
-  },
   "devDependencies": {
     "@types/pg": "^8.10.9",
     "@types/uuid": "^9.0.6",
     "pg": "^8.11.3"
   },
   "peerDependencies": {
-    "@cheetah.js/core": "^0.1.27",
+    "@cheetah.js/core": "^0.1.32",
     "pg": "^8.11.3"
   },
   "peerDependenciesMeta": {

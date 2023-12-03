@@ -1,5 +1,7 @@
 import { Serve } from 'bun';
-import { Injectable, ProviderScope } from '@cheetah.js/core';
+import { Injectable } from '../commons/decorators/Injectable.decorator';
+import { ProviderScope } from './provider-scope';
+
 
 @Injectable({ scope: ProviderScope.REQUEST })
 export class Context {

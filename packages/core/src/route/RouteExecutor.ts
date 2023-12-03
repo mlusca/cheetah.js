@@ -1,10 +1,6 @@
-import {
-  Context,
-  EventType,
-  InjectorService,
-  LocalsContainer,
-  TokenRouteWithProvider,
-} from '@cheetah.js/core';
+import { InjectorService, TokenRouteWithProvider } from "../container";
+import { Context, LocalsContainer } from "../domain";
+import { EventType } from "../events";
 
 class Router {
   public async executeRoute(route: TokenRouteWithProvider, injector: InjectorService, context: Context, locals: LocalsContainer): Promise<Response> {

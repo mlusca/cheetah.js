@@ -1,12 +1,11 @@
 {
   "compilerOptions": {
-    "module": "ES2022",
-    "target": "ES2022",
+    "module": "commonjs",
+    "target": "ES2021",
     //        "lib": ["es2022"],
     "declaration": true,
     "sourceMap": true,
     "esModuleInterop": true,
-    "moduleResolution": "bundler",
     "preserveConstEnums": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,

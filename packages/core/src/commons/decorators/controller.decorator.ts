@@ -1,4 +1,7 @@
-import { ProviderScope, registerController } from '@cheetah.js/core'
+import { CONTROLLER } from "../../constants"
+import { Metadata } from "../../domain/Metadata"
+import { ProviderScope } from "../../domain/provider-scope"
+
 
 type ControllerOptions = {
   path?: string,
@@ -8,10 +11,14 @@ type ControllerOptions = {
 
 export function Controller(options?: ControllerOptions): ClassDecorator {
   return (target) => {
-    registerController({provide: target, ...options})
+    const controllers = Metadata.get(CONTROLLER, Reflect) || []
+    controllers.push({provide: target, ...options})
+    Metadata.set(CONTROLLER, controllers, Reflect)
 
-    options?.children && options.children.forEach((child: any[]) => {
-      registerController({provide: child, parent: target})
-    })
+    // registerController({provide: target, ...options})
+
+    // options?.children && options.children.forEach((child: any[]) => {
+    //   registerController({provide: child, parent: target})
+    // })
   }
 }

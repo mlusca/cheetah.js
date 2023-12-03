@@ -1,5 +1,7 @@
 import 'reflect-metadata';
-import { classOf, ROUTE_PARAM, Type } from '@cheetah.js/core';
+import { Type } from '../commons/registries/ProviderControl';
+import { ROUTE_PARAM } from '../constants';
+import { classOf } from '../utils';
 
 /**
 * Metadata key

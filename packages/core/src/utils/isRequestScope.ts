@@ -1,5 +1,6 @@
-import { InjectorService, Provider, ProviderScope, TokenProvider } from '@cheetah.js/core';
-
+import { TokenProvider } from "../commons";
+import { InjectorService } from "../container";
+import { Provider, ProviderScope } from "../domain";
 
 /**
  * Check if the provider is a request scope or have some dependency that is a request scope

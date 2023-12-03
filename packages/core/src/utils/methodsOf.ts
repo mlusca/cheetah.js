@@ -1,7 +1,7 @@
 import {classOf} from "./classOf";
 import {ancestorsOf} from "./ancestorsOf";
 import {prototypeOf} from "./prototypeOf";
-import { Type } from '@cheetah.js/core';
+import { Type } from "../commons";
 
 /**
  * Return all methods for a given class.

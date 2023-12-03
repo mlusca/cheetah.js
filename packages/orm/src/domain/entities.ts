@@ -109,7 +109,7 @@ export class EntityStorage {
           unique: relation.unique,
           length: relation.length || getDefaultLength(type),
           default: relation.default,
-          autoIncrement: this.getFkIncrement(relation),
+          autoIncrement: relation.autoIncrement,
           primary: relation.isPrimary,
           precision: relation.precision,
           scale: relation.scale,

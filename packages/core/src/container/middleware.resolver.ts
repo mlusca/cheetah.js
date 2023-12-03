@@ -1,6 +1,8 @@
 import { InjectorService } from './InjectorService';
-import { CheetahMiddleware, Context, LocalsContainer } from '@cheetah.js/core'; // not change
 import { TokenRouteWithProvider } from './ContainerConfiguration';
+import { CheetahMiddleware } from '../domain/CheetahMiddleware';
+import { LocalsContainer } from '../domain/LocalsContainer';
+import { Context } from '../domain/Context';
 
 class MiddlewareResolver {
   public async resolveMiddlewares(route: TokenRouteWithProvider, injector: InjectorService, local: LocalsContainer) {

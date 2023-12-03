@@ -1,5 +1,5 @@
+import { Property } from './property.decorator';
 import { ClassType, EnumOptions } from '../driver/driver.interface';
-import { Property } from '@cheetah.js/orm/decorators/property.decorator';
 
 export function Enum(options: EnumOptions<any> | (() => ClassType)): PropertyDecorator {
   const isEnum = true;

@@ -1,6 +1,6 @@
-import { Context } from '@cheetah.js/core';
-import { CheetahClosure } from './CheetahClosure';
+import { CheetahClosure } from "./CheetahClosure";
+import { Context } from "./Context";
 
 export interface CheetahMiddleware {
-  handle(context: Context, next: CheetahClosure): void
+  handle(context: Context, next: CheetahClosure): void;
 }

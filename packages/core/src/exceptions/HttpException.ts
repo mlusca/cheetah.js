@@ -1,4 +1,4 @@
-import { isObject } from '@cheetah.js/core';
+import { isObject } from "../utils";
 
 
 export class HttpException {
