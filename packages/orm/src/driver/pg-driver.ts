@@ -247,6 +247,9 @@ export class PgDriver implements DriverInterface {
           foreignKeys: this.getForeignKeys(constraints, row),
           isEnum: row.data_type === 'USER-DEFINED',
           enumItems: row.data_type === 'USER-DEFINED' ? enums[`${schema}_${tableName}_${row.column_name}_enum`] : undefined,
+          precision: row.numeric_precision,
+          scale: row.numeric_scale,
+          isDecimal: row.data_type === 'numeric',
         }
       })
     }

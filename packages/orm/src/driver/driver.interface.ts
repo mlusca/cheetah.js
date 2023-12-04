@@ -192,6 +192,7 @@ export type ColumnsInfo = {
   isEnum?: boolean;
   precision?: number;
   scale?: number;
+  isDecimal?: boolean;
   enumItems?: string[] | number[];
   foreignKeys?: ForeignKeyInfo[];
 }
@@ -212,6 +213,8 @@ export type ColDiff = {
     autoIncrement?: boolean;
     enumItems?: string[] | number[];
     enumModified?: boolean;
+    precision?: number;
+    scale?: number;
     foreignKeys?: ForeignKeyInfo[];
   };
 }
