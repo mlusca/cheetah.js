@@ -303,17 +303,23 @@ const user = await User.findOne({
 
 ### [Migrations](#migrations)
 Cheetah ORM is capable of creating and running migrations.
+To do this, you need to install our cli package:
+
+```bash
+bun install @cheetah.js/cli
+```
+
 You must have the connection configuration file in the project root "cheetah.config.ts".
 To create a migration, run the command below:
 
 ```bash
-bun cheetah-orm migration:generate
+bunx cli migration:generate
 ```
 This command will create a migration file in the path defined in the configuration file, differentiating your entities created with the database.
 
 #### Example:
 ```bash
-bun cheetah-orm migration:run
+bunx cli cheetah-orm migration:run
 ```
 This command will run all migrations that have not yet been run.
 

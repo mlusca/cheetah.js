@@ -13,7 +13,7 @@ export class Context {
   headers: Record<string, any> = {};
   locals: Record<string, any> = {};
 
-  private resultStatus: number = 200;
+  private resultStatus: number;
   private constructor() {}
 
   static async createFromRequest(url: any, request: Request, server: Serve) {
