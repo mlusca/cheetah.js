@@ -14,11 +14,5 @@ export function Controller(options?: ControllerOptions): ClassDecorator {
     const controllers = Metadata.get(CONTROLLER, Reflect) || []
     controllers.push({provide: target, ...options})
     Metadata.set(CONTROLLER, controllers, Reflect)
-
-    // registerController({provide: target, ...options})
-
-    // options?.children && options.children.forEach((child: any[]) => {
-    //   registerController({provide: child, parent: target})
-    // })
   }
 }

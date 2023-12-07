@@ -1,6 +1,8 @@
-import { Container, Controller, Get, InjectorService } from "@cheetah.js/core";
+import { Controller, Get, InjectorService, OnApplicationInit, TokenRouteWithProvider } from "@cheetah.js/core";
 import { OpenAPIV3 } from "openapi-types";
 import { SwaggerUIOptions } from "swagger-ui";
+
+import { ClassDeclaration, Project } from 'ts-morph';
 
 export const filterPaths = (
   paths: Record<string, any>,
@@ -64,6 +66,20 @@ export const filterPaths = (
 
   return newPaths;
 };
+
+// export function convertToOpenApiRoute(routes: [string, string, TokenRouteWithProvider][]){
+//   const newRoutes: Record<string, any> = {};
+//
+//   for (const [key, value] of Object.entries(routes)){
+//     const [method, path, route] = value;
+//     if (!newRoutes[path]) newRoutes[path] = {};
+//     newRoutes[path][method] = route;
+//   }
+//
+//   const project = new Project();
+//
+//   return newRoutes;
+// }
 
 export interface CheetahSwaggerConfig {
   /**
@@ -140,15 +156,19 @@ export interface CheetahSwaggerConfig {
 }
 
 let path = "/swagger";
+export let config: CheetahSwaggerConfig = {};
+
+export function useConfig(newConfig: CheetahSwaggerConfig) {
+  config = newConfig;
+}
 
 @Controller()
 export class SwaggerService {
-  private injector;
+  private routes: OpenAPIV3.PathsObject<{}, {}> = {};
+  constructor(private injector: InjectorService) {
+    const version = config.version || "5.9.0";
 
-  constructor(private config: CheetahSwaggerConfig) {
-    const version = this.config.version || "5.9.0";
-
-    this.config = {
+    config = {
       documentation: {},
       version: "5.9.0",
       excludeStaticFile: true,
@@ -159,9 +179,9 @@ export class SwaggerService {
       autoDarkMode: true,
       ...config,
     };
-    path = this.config.path;
+    path = config.path;
 
-    this.setDocumentation(this.config.documentation);
+    this.setDocumentation(config.documentation);
   }
 
   setDocumentation(documentation: CheetahSwaggerConfig["documentation"]): void {
@@ -169,25 +189,25 @@ export class SwaggerService {
       title: "Cheetah.js",
       description: "Cheetah.js API documentation",
       version: "0.0.0",
-      ...this.config.documentation?.info,
+      ...config.documentation?.info,
     };
 
-    this.config.documentation = {
-      ...this.config.documentation,
+    config.documentation = {
+      ...config.documentation,
       info,
     };
   }
 
   @Get(`${path}`)
-  onApplicationInit() {
-    const relativePath = this.config.path.startsWith("/")
-      ? this.config.path
-      : `/${this.config.path}`;
+  ui() {
+    const relativePath = config.path.startsWith("/")
+      ? config.path
+      : `/${config.path}`;
 
     const combinedSwaggerOptions = {
       url: `${relativePath}/json`,
       dom_id: "#swagger-ui",
-      ...this.config.swaggerOptions,
+      ...config.swaggerOptions,
     };
     const stringifiedSwaggerOptions = JSON.stringify(
       combinedSwaggerOptions,
@@ -206,17 +226,17 @@ export class SwaggerService {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${this.config.documentation.info.title}</title>
+<title>${config.documentation.info.title}</title>
 <meta
 name="description"
-content="${this.config.documentation.info.description}"
+content="${config.documentation.info.description}"
 />
 <meta
 name="og:description"
-content="${this.config.documentation.info.description}"
+content="${config.documentation.info.description}"
 />
 ${
-  this.config.autoDarkMode && typeof this.config.theme === "string"
+  config.autoDarkMode && typeof config.theme === "string"
     ? `
 <style>
 @media (prefers-color-scheme: dark) {
@@ -236,16 +256,16 @@ ${
     : ""
 }
 ${
-  typeof this.config.theme === "string"
-    ? `<link rel="stylesheet" href="${this.config.theme}" />`
-    : `<link rel="stylesheet" media="(prefers-color-scheme: light)" href="${this.config.theme.light}" />
-<link rel="stylesheet" media="(prefers-color-scheme: dark)" href="${this.config.theme.dark}" />`
+  typeof config.theme === "string"
+    ? `<link rel="stylesheet" href="${config.theme}" />`
+    : `<link rel="stylesheet" media="(prefers-color-scheme: light)" href="${config.theme.light}" />
+<link rel="stylesheet" media="(prefers-color-scheme: dark)" href="${config.theme.dark}" />`
 }
 </head>
 <body>
 <div id="swagger-ui"></div>
 <script src="https://unpkg.com/swagger-ui-dist@${
-        this.config.version
+        config.version
       }/swagger-ui-bundle.js" crossorigin></script>
 <script>
 window.onload = () => {
@@ -262,35 +282,143 @@ window.onload = () => {
     );
   }
 
+  @OnApplicationInit()
+  onApplicationInit() {
+    const swaggerObject = {
+      openapi: '3.0.0',
+      info: {
+        title: 'API Title',
+        version: '1.0.0',
+      },
+      paths: {},
+    };
+    const project = new Project({skipLoadingLibFiles: true, tsConfigFilePath: process.cwd() + '/tsconfig.json'});
+    const sourceFiles = project.getSourceFiles()
+      /**
+       * Search controllers classes
+       */
+      // Percorra todos os arquivos de origem
+      for (const sourceFile of sourceFiles) {
+        // Obtenha todas as classes no arquivo de origem
+        const classes = sourceFile.getClasses();
+
+        // Percorra todas as classes
+        for (const cls of classes) {
+          // Verifique se a classe tem um decorador 'Controller'
+          const controllerDecorator = cls.getDecorator('Controller');
+          if (controllerDecorator) {
+            // Obtenha o prefixo do controlador do decorador 'Controller'
+            const controllerPrefix = controllerDecorator.getArguments()[0]?.getText();
+
+            // Percorra todos os métodos na classe
+            for (const method of cls.getMethods()) {
+              // Verifique se o método tem um decorador HTTP
+              const httpDecorator = method.getDecorators().find(decorator => ['Get', 'Post', 'Put', 'Delete'].includes(decorator.getName()));
+              if (httpDecorator) {
+                // Obtenha o caminho da rota do decorador HTTP
+                let routePath = httpDecorator.getArguments()[0]?.getText();
+                routePath = controllerPrefix + routePath;
+
+                // Obtenha o tipo de método HTTP do nome do decorador
+                const httpMethod = httpDecorator.getName().toLowerCase();
+
+                // Adicione a rota ao objeto Swagger
+                if (!swaggerObject.paths[routePath]) {
+                  swaggerObject.paths[routePath] = {};
+                }
+                swaggerObject.paths[routePath][httpMethod] = {
+                  summary: method.getJsDocs().map(jsDoc => jsDoc.getComment()).join('\n'),
+                  // Adicione mais propriedades conforme necessário
+                };
+              }
+            }
+          }
+        }
+      }
+
+      console.log(swaggerObject)
+  }
+
+  private parseRoutesMethods(classDeclaration: ClassDeclaration) {
+    const methods = classDeclaration.getMethods().filter(method => {
+      const decorator = method.getDecorator('Get') || method.getDecorator('Post') || method.getDecorator('Put') || method.getDecorator('Delete') || method.getDecorator('Patch');
+      if (decorator) {
+        return true;
+      }
+      return false;
+    });
+
+    methods.forEach(method => {
+      const decorator = method.getDecorator('Get') || method.getDecorator('Post') || method.getDecorator('Put') || method.getDecorator('Delete') || method.getDecorator('Patch');
+      if (decorator) {
+        const methodType = decorator.getName().toLowerCase();
+        const summary = method.getJsDocs().map(jsDoc => jsDoc.getComment()).join('\n');
+        const response = method.getReturnType().getText();
+        decorator.getArguments()
+        const parameters = method.getParameters().map(parameter => {
+          if (parameter.getDecorator('Body') || parameter.getDecorator('Query')) {
+            const type = parameter.getType().getText();
+            const name = parameter.getName();
+            return {
+              name: name,
+              in: type === 'Body' ? 'body' : 'query',
+              required: true,
+              schema: {
+                type: type,
+              }
+            }
+          }
+        });
+        const route = {
+          path: path,
+          method: methodType,
+          controller: classDeclaration.getName(),
+          action: method.getName(),
+          middleware: [],
+          provider: classDeclaration.getName(),
+        };
+        console.log(path, methodType)
+        this.routes[path] = {
+          ...this.routes[path],
+          [methodType]: {
+            summary: summary,
+            parameters: parameters,
+          }
+        };
+      }
+    });
+  }
+
   @Get(`${path}/json`)
   getDocumentation() {
+    // console.log(convertToOpenApiRoute(this.injector.router.history), 'lu')
     // const routes = t
     return {
       openapi: "3.0.3",
       ...{
-        ...this.config.documentation,
+        ...config.documentation,
         info: {
           title: "Cheetah.js Documentation",
           description: "Development documentation",
           version: "0.0.0",
-          ...this.config.documentation.info,
+          ...config.documentation.info,
         },
       },
-      paths: filterPaths(
-        {},
-        {
-          excludeStaticFile: this.config.excludeStaticFile,
-          exclude: Array.isArray(this.config.exclude)
-            ? this.config.exclude
-            : [this.config.exclude],
-        }
-      ),
+      paths: this.routes,
+      // paths: filterPaths(
+      //   {},
+      //   {
+      //     excludeStaticFile: config.excludeStaticFile,
+      //     exclude: Array.isArray(config.exclude)
+      //       ? config.exclude
+      //       : [config.exclude],
+      //   }
+      // ),
       components: {
-        ...this.config.documentation.components,
+        ...config.documentation.components,
         schemas: {
-          // @ts-ignore
-          ...app.definitions?.type,
-          ...this.config.documentation.components?.schemas,
+          // ...app.definitions?.type,
+          ...config.documentation.components?.schemas,
         },
       },
     } satisfies OpenAPIV3.Document;

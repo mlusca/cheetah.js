@@ -37,13 +37,14 @@ import {
 import { Container } from "./container";
 import { registerProvider } from "../commons";
 import { MiddlewareRes } from './middleware.resolver';
+import { CachePort } from '../cache/cache.port';
 
 @Injectable()
 export class InjectorService {
   settings = new ContainerConfiguration();
   container: Container = new Container();
   applicationConfig: ApplicationConfig = {};
-  router = new Memoirist();
+  router: Memoirist<TokenRouteWithProvider>;
   private historyMethods: WeakMap<
     any,
     { [key: string]: { args: any; params: any } }
@@ -277,6 +278,7 @@ export class InjectorService {
       throw new Error("Provider not found.");
 
     const deps = this.getConstructorDependencies(provider.useClass);
+
     let construct: (deps: TokenProvider[]) => any;
     if (provider.useValue)
       construct = (deps: TokenProvider[]) => provider.useValue;
@@ -431,6 +433,7 @@ export class InjectorService {
       Context,
       LoggerService,
       DefaultRoutesCheetah,
+      CachePort,
     ];
     this.applicationConfig.providers = this.applicationConfig.providers || [];
     this.applicationConfig.providers.push(...defaults);

@@ -157,5 +157,30 @@ import { Cheetah } from '@cheetah.js/core';
 new Cheetah().useLogger(CustomServiceLogger)
 ```
 
+### Caching
+Cheetah.js provides a simple caching system using the CachePort service.
+```javascript
+import { Cheetah, CachePort, CheetahMiddleware, CheetahClosure, Context } from '@cheetah.js/core';
+
+@Service()
+export class LoggerMiddleware implements CheetahMiddleware {
+    constructor(private cache: CachePort) {}
+
+    handle(context: Context, next: CheetahClosure) {
+        this.cache.set('key', 'value');
+        next();
+    }
+}
+```
+For custom cache driver, only implement the CachePort interface in your provider.
+```javascript
+import { CachePort, Service } from '@cheetah.js/core';
+
+@Service({ provide: CachePort })
+export class CustomCache implements CachePort {
+    // implements
+}
+```
+
 ### Contributing
 Contributions are welcome! Feel free to open issues and submit pull requests.

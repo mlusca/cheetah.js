@@ -28,10 +28,5 @@ export function Injectable(options: Partial<Provider> = {}): ClassDecorator {
       ...(options.provide ? { useClass: target } : { provide: target }),
     });
     Metadata.set(PROVIDER, providers, Reflect);
-
-    // registerProvider({
-    //     ...options,
-    //     ...(options.provide ? {useClass: target} : {provide: target})
-    // });
   };
 }

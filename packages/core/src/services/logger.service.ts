@@ -23,6 +23,7 @@ export class LoggerService implements LoggerAdapter {
         ignore: 'pid,hostname',
       },
     }
+
     this.logger = Pino(pinoConfig);
   }
 
@@ -48,5 +49,9 @@ export class LoggerService implements LoggerAdapter {
 
   trace(message: string, ...args: any[]) {
     this.logger.trace(message, ...args);
+  }
+
+  getLogger(): Pino.Logger {
+    return this.logger;
   }
 }
