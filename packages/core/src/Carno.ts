@@ -21,12 +21,20 @@ import type { CarnoMiddleware } from './middleware/CarnoMiddleware';
 
 export type MiddlewareHandler = (ctx: Context) => Response | void | Promise<Response | void>;
 
+export type MiddlewareClass = new (...args: any[]) => CarnoMiddleware;
+
+export type MiddlewareEntry = MiddlewareHandler | MiddlewareClass;
+
+type ResolvedMiddleware =
+    | { kind: 'function'; handler: MiddlewareHandler }
+    | { kind: 'class'; instance: CarnoMiddleware };
+
 /**
  * Carno plugin configuration.
  */
 export interface CarnoConfig {
     exports?: (Token | ProviderConfig)[];
-    globalMiddlewares?: MiddlewareHandler[];
+    globalMiddlewares?: MiddlewareEntry[];
     disableStartupLog?: boolean;
     cors?: CorsConfig;
     validation?: ValidatorAdapter | boolean | (new (...args: any[]) => ValidatorAdapter);
@@ -68,7 +76,7 @@ const INTERNAL_ERROR_RESPONSE = new Response(
 export class Carno {
     private _controllers: (new (...args: any[]) => any)[] = [];
     private _services: (Token | ProviderConfig)[] = [];
-    private _middlewares: MiddlewareHandler[] = [];
+    private _middlewares: MiddlewareEntry[] = [];
     private routes: Record<string, Record<string, Response | Function> | Response | Function> = {};
     private container = new Container();
     private corsHandler: CorsHandler | null = null;
@@ -186,7 +194,7 @@ export class Carno {
     /**
      * Register one or more global middlewares.
      */
-    middlewares(handler: MiddlewareHandler | MiddlewareHandler[]): this {
+    middlewares(handler: MiddlewareEntry | MiddlewareEntry[]): this {
         const items = Array.isArray(handler) ? handler : [handler];
         this._middlewares.push(...items);
         return this;
@@ -343,7 +351,7 @@ export class Carno {
     private compileController(
         ControllerClass: new (...args: any[]) => any,
         parentPath: string = '',
-        inheritedMiddlewares: MiddlewareHandler[] = []
+        inheritedMiddlewares: MiddlewareEntry[] = []
     ): void {
         const meta: ControllerMeta = Reflect.getMetadata(CONTROLLER_META, ControllerClass) || { path: '' };
         const basePath = parentPath + (meta.path || '');
@@ -354,7 +362,7 @@ export class Carno {
         // Extract controller-level middlewares (applied to all routes of this controller)
         const controllerMiddlewares = middlewares
             .filter(m => !m.target)
-            .map(m => m.handler as MiddlewareHandler);
+            .map(m => m.handler as MiddlewareEntry);
 
         // Combine inherited middlewares with this controller's middlewares
         // This combined list is passed down to children and applied to current routes
@@ -367,7 +375,7 @@ export class Carno {
             // Middlewares specific to this route handler
             const routeMiddlewares = middlewares
                 .filter(m => m.target === route.handlerName)
-                .map(m => m.handler as MiddlewareHandler);
+                .map(m => m.handler as MiddlewareEntry);
 
             // Get parameter types for validation
             const paramTypes: any[] = Reflect.getMetadata('design:paramtypes', ControllerClass.prototype, route.handlerName) || [];
@@ -443,7 +451,7 @@ export class Carno {
     private createHandler(
         compiled: { fn: Function; isAsync: boolean },
         params: ParamMetadata[],
-        middlewares: MiddlewareHandler[],
+        middlewares: ResolvedMiddleware[],
         bodyDtoType?: any
     ): Function {
         const handler = compiled.fn;
@@ -498,44 +506,81 @@ export class Carno {
             };
         }
 
-        // With middlewares - full pipeline
-        return async (req: Request) => {
-            const ctx = new Context(req, (req as any).params || {});
-
-            for (const middleware of middlewares) {
-                const result = await middleware(ctx);
-
-                if (result instanceof Response) {
-                    return applyCors ? applyCors(result, req) : result;
-                }
-            }
-
+        // With middlewares - onion pipeline
+        const coreHandler = async (ctx: Context) => {
             // Validate body if validator is configured
             if (validator && bodyDtoType) {
                 await ctx.parseBody();
                 validator.validateOrThrow(bodyDtoType, ctx.body);
             }
 
-            const result = compiled.isAsync
+            return compiled.isAsync
                 ? await handler(ctx)
                 : handler(ctx);
+        };
 
-            const response = this.buildResponse(result);
+        const chain = this.buildMiddlewareChain(
+            middlewares,
+            coreHandler,
+            this.buildResponse.bind(this)
+        );
+
+        return async (req: Request) => {
+            const ctx = new Context(req, (req as any).params || {});
+            const response = await chain(ctx);
 
             return applyCors ? applyCors(response, req) : response;
         };
     }
 
-    private resolveMiddleware(middleware: any): MiddlewareHandler {
-        // Check if it's a class with a handle method
+    private resolveMiddleware(middleware: MiddlewareEntry): ResolvedMiddleware {
         if (typeof middleware === 'function' && middleware.prototype?.handle) {
-            // Instantiate via Container and bind the handle method
-            const instance = this.container.get(middleware) as CarnoMiddleware;
-            return (ctx: Context) => instance.handle(ctx, () => { });
+            const instance = this.container.get(middleware as MiddlewareClass) as CarnoMiddleware;
+            return { kind: 'class', instance };
         }
 
         // Already a function
-        return middleware;
+        return { kind: 'function', handler: middleware as MiddlewareHandler };
+    }
+
+    /**
+     * Build an onion-style middleware chain.
+     * Wraps from inside-out so each middleware can run code before and after next().
+     */
+    private buildMiddlewareChain(
+        middlewares: ResolvedMiddleware[],
+        coreHandler: (ctx: Context) => any | Promise<any>,
+        buildResponseFn: (result: any) => Response
+    ): (ctx: Context) => Promise<Response> {
+        let chain: (ctx: Context) => Promise<Response> = async (ctx: Context) => {
+            const result = await coreHandler(ctx);
+            return buildResponseFn(result);
+        };
+
+        for (let i = middlewares.length - 1; i >= 0; i--) {
+            const mw = middlewares[i];
+            const nextLayer = chain;
+
+            if (mw.kind === 'function') {
+                chain = async (ctx: Context) => {
+                    const result = await mw.handler(ctx);
+                    if (result instanceof Response) {
+                        return result;
+                    }
+                    return nextLayer(ctx);
+                };
+            } else {
+                chain = async (ctx: Context) => {
+                    let response: Response | undefined;
+                    await mw.instance.handle(ctx, async () => {
+                        response = await nextLayer(ctx);
+                    });
+                    return response ?? new Response(null, { status: 200 });
+                };
+            }
+        }
+
+        return chain;
     }
 
     /**
