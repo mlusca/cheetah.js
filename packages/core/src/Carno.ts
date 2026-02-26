@@ -23,7 +23,7 @@ export type MiddlewareHandler = (ctx: Context) => Response | void | Promise<Resp
 
 export type MiddlewareClass = new (...args: any[]) => CarnoMiddleware;
 
-export type MiddlewareEntry = MiddlewareHandler | MiddlewareClass;
+export type MiddlewareEntry = MiddlewareHandler | MiddlewareClass | CarnoMiddleware;
 
 type ResolvedMiddleware =
     | { kind: 'function'; handler: MiddlewareHandler }
@@ -539,6 +539,11 @@ export class Carno {
             return { kind: 'class', instance };
         }
 
+        // Pre-built instance with handle method
+        if (typeof middleware === 'object' && middleware !== null && 'handle' in middleware) {
+            return { kind: 'class', instance: middleware as CarnoMiddleware };
+        }
+
         // Already a function
         return { kind: 'function', handler: middleware as MiddlewareHandler };
     }
@@ -572,9 +577,14 @@ export class Carno {
             } else {
                 chain = async (ctx: Context) => {
                     let response: Response | undefined;
-                    await mw.instance.handle(ctx, async () => {
+                    const result = await mw.instance.handle(ctx, async () => {
                         response = await nextLayer(ctx);
+                        return response;
                     });
+                    // If middleware returned a Response, use it (enables response transformation)
+                    if (result instanceof Response) {
+                        return result;
+                    }
                     return response ?? new Response(null, { status: 200 });
                 };
             }

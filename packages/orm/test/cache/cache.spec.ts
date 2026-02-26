@@ -114,21 +114,21 @@ describe('ORM Cache System', () => {
       });
       resetQueryCounter();
 
-      // When - First call with 100ms TTL
+      // When - First call with 1000ms TTL
       await productRepo.find({
         where: { name: 'Mouse' },
-        cache: 100,
+        cache: 1000,
       });
 
       const queriesAfterFirst = getQueryCount();
 
       // Wait for cache to expire
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
       // When - Second call after TTL
       await productRepo.find({
         where: { name: 'Mouse' },
-        cache: 100,
+        cache: 1000,
       });
 
       const queriesAfterSecond = getQueryCount();
@@ -244,7 +244,7 @@ describe('ORM Cache System', () => {
       await productRepo.create({ name: 'Keyboard', price: 200 });
       resetQueryCounter();
 
-      const expireAt = new Date(Date.now() + 150);
+      const expireAt = new Date(Date.now() + 1500);
 
       // When - First call (should hit database)
       const firstCall = await productRepo.find({
@@ -263,7 +263,7 @@ describe('ORM Cache System', () => {
       const queriesAfterSecond = getQueryCount();
 
       // Wait for cache to expire
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 1700));
 
       // When - Third call after expiry (should hit database again)
       const thirdCall = await productRepo.find({
