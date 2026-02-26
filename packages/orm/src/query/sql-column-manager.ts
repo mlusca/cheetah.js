@@ -54,9 +54,11 @@ export class SqlColumnManager {
       return [];
     }
 
-    return this.statements.join.flatMap(join =>
-      this.getColumnsForEntity(join.joinEntity!, join.joinAlias),
-    );
+    return this.statements.join
+      .filter(join => join.joinEntity)
+      .flatMap(join =>
+        this.getColumnsForEntity(join.joinEntity!, join.joinAlias),
+      );
   }
 
   private getPropertyColumns(entityOptions: Options, alias: string): string[] {
@@ -75,7 +77,7 @@ export class SqlColumnManager {
     }
 
     return entityOptions.relations
-      .filter(relation => relation.relation === 'many-to-one')
+      .filter(relation => relation.relation === 'many-to-one' || relation.relation === 'one-to-one-owner')
       .map(relation => {
         const col = this.quoteId(relation.columnName);
         const aliasedCol = this.quoteId(`${alias}_${relation.columnName}`);

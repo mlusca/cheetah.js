@@ -172,3 +172,66 @@ export class LoggerMiddleware implements CarnoMiddleware {
   }
 }
 ```
+
+## Response Transformation
+
+Middlewares can transform the response by capturing the return value of `next()`:
+
+```ts
+@Service()
+export class ResponseTransformerMiddleware implements CarnoMiddleware {
+  async handle(ctx: Context, next: CarnoClosure): Promise<Response> {
+    const response = await next();
+
+    // Modify headers, body, etc.
+    const headers = new Headers(response.headers);
+    headers.set('X-Custom-Header', 'value');
+
+    return new Response(response.body, {
+      status: response.status,
+      headers,
+    });
+  }
+}
+```
+
+## Built-in Middleware
+
+### CompressionMiddleware
+
+Automatically compresses HTTP responses using **gzip**, **brotli** or **deflate**. Uses Bun's native compression APIs — zero external dependencies.
+
+Only responses that exceed a size threshold and match compressible content types are compressed.
+
+```ts
+import { Carno, CompressionMiddleware } from '@carno.js/core';
+
+const app = new Carno()
+  .middlewares([new CompressionMiddleware()])
+  .controllers([MyController]);
+
+app.listen(3000);
+```
+
+#### Custom Configuration
+
+```ts
+new CompressionMiddleware({
+  threshold: 512,           // Min bytes to compress (default: 1024)
+  encodings: ['gzip'],      // Encoding preference (default: ['br', 'gzip'])
+  gzipLevel: 9,             // Gzip level 0-9 (default: 6)
+  brotliQuality: 6,         // Brotli quality 0-11 (default: 4)
+  compressibleTypes: [       // Content-Type patterns (default: text/*, json, xml, svg)
+    'text/',
+    'application/json',
+  ],
+})
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `threshold` | `1024` | Minimum response size in bytes to trigger compression |
+| `encodings` | `['br', 'gzip']` | Preferred encoding order (matched against `Accept-Encoding`) |
+| `gzipLevel` | `6` | Gzip compression level (-1 to 9) |
+| `brotliQuality` | `4` | Brotli compression quality (0-11) |
+| `compressibleTypes` | `['text/', 'application/json', ...]` | Content-Type patterns to compress |

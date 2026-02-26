@@ -489,7 +489,7 @@ export class SqlBuilder<T> {
         rel => rel.propertyKey === join.joinProperty
       );
 
-      return relationship?.relation === 'one-to-many';
+      return relationship?.relation === 'one-to-many' || relationship?.relation === 'many-to-many';
     });
   }
 
@@ -591,7 +591,7 @@ export class SqlBuilder<T> {
         rel => rel.propertyKey === join.joinProperty
       );
 
-      if (relationship?.relation === 'one-to-many') {
+      if (relationship?.relation === 'one-to-many' || relationship?.relation === 'many-to-many') {
         const joinedModels = rows.map(row =>
           this.modelTransformer.transform(join.joinEntity, { alias: join.joinAlias }, row)
         );
@@ -874,7 +874,7 @@ export class SqlBuilder<T> {
 
   private reflectRelation(key: string): void {
     const rel = this.entity.relations.find(rel => rel.propertyKey === key);
-    if (rel) {
+    if (rel && (rel.relation === 'many-to-one' || rel.relation === 'one-to-one-owner')) {
       this.statements.values[rel.columnName] = this.statements.instance[key];
     }
   }

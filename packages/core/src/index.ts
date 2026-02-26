@@ -51,6 +51,10 @@ export type { RouteMatch } from './router/RadixRouter';
 export { CorsHandler } from './cors/CorsHandler';
 export type { CorsConfig, CorsOrigin } from './cors/CorsHandler';
 
+// Compression
+export { CompressionMiddleware } from './compression/CompressionMiddleware';
+export type { CompressionConfig } from './compression/CompressionMiddleware';
+
 // Validation
 export type { ValidatorAdapter, ValidationResult, ValidationError, ValidationConfig } from './validation/ValidatorAdapter';
 export { Schema, getSchema, VALIDATION_SCHEMA } from './validation/ValidatorAdapter';

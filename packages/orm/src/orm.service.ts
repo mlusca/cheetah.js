@@ -6,6 +6,7 @@ import { Orm } from './orm';
 import * as globby from 'globby';
 import { Relationship } from './driver/driver.interface';
 import path from 'path';
+import { toSnakeCase } from './utils';
 
 
 @Service()
@@ -326,6 +327,35 @@ export class OrmService {
       }
 
       this.storage.add(entity, properties, relationships, hooks);
+    }
+
+    this.resolveManyToManyRelations();
+  }
+
+  private resolveManyToManyRelations(): void {
+    for (const [entityClass, options] of this.storage.entries()) {
+      for (const relation of options.relations) {
+        if (relation.relation !== 'many-to-many') continue;
+
+        const relatedEntity = this.storage.get(relation.entity() as Function);
+        if (!relatedEntity) continue;
+
+        // Auto-generate pivot table name if not provided
+        if (!relation.pivotTable) {
+          const tables = [options.tableName, relatedEntity.tableName].sort();
+          relation.pivotTable = `${tables[0]}_${tables[1]}`;
+        }
+
+        // Auto-generate inverseJoinColumn if not provided
+        if (!relation.inverseJoinColumn) {
+          relation.inverseJoinColumn = `${relatedEntity.tableName}_id`;
+        }
+
+        // Ensure joinColumn uses the actual table name from storage
+        if (relation.joinColumn === `${toSnakeCase(entityClass.name)}_id`) {
+          relation.joinColumn = `${options.tableName}_id`;
+        }
+      }
     }
   }
 

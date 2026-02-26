@@ -474,13 +474,16 @@ export type FilterQuery<T> =
 
 export type Relationship<T> = {
   isRelation?: boolean;
-  relation: "one-to-many" | "many-to-one";
+  relation: "one-to-many" | "many-to-one" | "one-to-one-owner" | "one-to-one-inverse" | "many-to-many";
   type: Function;
   fkKey?: (string & keyof T) | ((e: T) => any);
   entity: () => EntityName<T>;
   originalEntity?: EntityName<T>;
   propertyKey: string | symbol;
   columnName: string;
+  pivotTable?: string;
+  joinColumn?: string;
+  inverseJoinColumn?: string;
 } & Partial<PropertyOptions>;
 
 export type Cast<T, R> = T extends R ? T : R;
