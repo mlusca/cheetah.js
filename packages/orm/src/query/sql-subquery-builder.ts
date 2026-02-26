@@ -86,17 +86,45 @@ export class SqlSubqueryBuilder {
     const outerPkKey = this.getOuterPrimaryKey(relationship, outerModel);
     const relatedPkKey = this.getRelatedPrimaryKey(relationship);
 
-    if (relationship.relation === 'one-to-many') {
+    if (relationship.relation === 'one-to-many' || relationship.relation === 'one-to-one-inverse') {
       const fk = this.quoteId(fkKey);
       const pk = this.quoteId(outerPkKey);
 
       return `${subqueryAlias}.${fk} = ${outerAlias}.${pk}`;
     }
 
+    if (relationship.relation === 'many-to-many') {
+      return this.buildManyToManyCorrelation(relationship, outerAlias, subqueryAlias, outerPkKey);
+    }
+
     const outerFk = this.quoteId(relationship.columnName as string);
     const relatedPk = this.quoteId(relatedPkKey);
 
     return `${outerAlias}.${outerFk} = ${subqueryAlias}.${relatedPk}`;
+  }
+
+  private buildManyToManyCorrelation(
+    relationship: Relationship<any>,
+    outerAlias: string,
+    subqueryAlias: string,
+    outerPkKey: string,
+  ): string {
+    const pivotTable = relationship.pivotTable!;
+    const joinColumn = this.quoteId(relationship.joinColumn!);
+    const inverseJoinColumn = this.quoteId(relationship.inverseJoinColumn!);
+    const outerPk = this.quoteId(outerPkKey);
+    const relatedPkKey = this.getRelatedPrimaryKey(relationship);
+    const relatedPk = this.quoteId(relatedPkKey);
+
+    const schema = this.getRelatedSchema(relationship);
+    const qualifiedPivot = this.qualifyTable(schema, pivotTable);
+
+    return `${subqueryAlias}.${relatedPk} IN (SELECT ${inverseJoinColumn} FROM ${qualifiedPivot} WHERE ${joinColumn} = ${outerAlias}.${outerPk})`;
+  }
+
+  private getRelatedSchema(relationship: Relationship<any>): string {
+    const entity = this.entityStorage.get(relationship.entity() as Function);
+    return entity?.schema || 'public';
   }
 
   private getOuterPrimaryKey(relationship: Relationship<any>, outerModel?: Function): string {

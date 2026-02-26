@@ -2,6 +2,8 @@ export * from './decorators/entity.decorator';
 export * from './decorators/property.decorator';
 export * from './decorators/primary-key.decorator';
 export * from './decorators/one-many.decorator';
+export * from './decorators/one-one.decorator';
+export * from './decorators/many-many.decorator';
 export * from './decorators/index.decorator';
 export * from './decorators/unique.decorator';
 export * from './decorators/event-hook.decorator';

@@ -88,6 +88,9 @@ export class ModelTransformer {
 
   private addJoinedInstances(statement: Statement<any>, instanceMap: Record<string, any>, data: any, cachedAliases: Set<string>): void {
     statement.join!.forEach(join => {
+      // Skip pivot table joins (no entity class)
+      if (!join.joinEntity) return;
+
       const primaryKey = this.extractPrimaryKeyFromData(join.joinEntity!, join.joinAlias, data);
       const { instance: joinInstance, wasCached } = this.createInstance(join.joinEntity!, primaryKey);
 
@@ -227,9 +230,9 @@ export class ModelTransformer {
       return { key: entry[0], property: entry[1] };
     }
 
-    // If not found, try to find in relations (many-to-one)
+    // If not found, try to find in relations (many-to-one or one-to-one-owner)
     const relation = options.relations?.find(
-      (rel) => rel.columnName === columnName && rel.relation === 'many-to-one',
+      (rel) => rel.columnName === columnName && (rel.relation === 'many-to-one' || rel.relation === 'one-to-one-owner'),
     );
 
     if (relation) {

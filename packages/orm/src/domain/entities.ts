@@ -297,6 +297,82 @@ export class EntityStorage {
     };
   }
 
+  /**
+   * Generates snapshot tables for all ManyToMany pivot tables in the given entity.
+   */
+  snapshotPivotTables(values: Options): SnapshotTable[] {
+    if (!values.relations) {
+      return [];
+    }
+
+    return values.relations
+      .filter((rel) => rel.relation === 'many-to-many')
+      .map((rel) => this.buildPivotSnapshot(values, rel));
+  }
+
+  private buildPivotSnapshot(values: Options, relation: Relationship<any>): SnapshotTable {
+    const relatedEntity = this.get(relation.entity() as any);
+    const pivotTable = relation.pivotTable!;
+    const schema = values.schema || "public";
+    const joinColumn = relation.joinColumn!;
+    const inverseJoinColumn = relation.inverseJoinColumn!;
+
+    const ownerPkType = this.getFkType({ ...relation, relation: 'many-to-one' } as any);
+    const inversePkType = relatedEntity
+      ? this.getRelatedPkType(relatedEntity)
+      : 'int';
+
+    return {
+      tableName: pivotTable,
+      schema,
+      columns: [
+        {
+          name: joinColumn,
+          type: ownerPkType,
+          nullable: false,
+          length: getDefaultLength(ownerPkType),
+          foreignKeys: [{
+            referencedTableName: values.tableName,
+            referencedColumnName: this.getOwnerPkColumnName(values),
+          }],
+        },
+        {
+          name: inverseJoinColumn,
+          type: inversePkType,
+          nullable: false,
+          length: getDefaultLength(inversePkType),
+          foreignKeys: [{
+            referencedTableName: relatedEntity!.tableName,
+            referencedColumnName: relatedEntity!._primaryKeyColumnName || 'id',
+          }],
+        },
+      ],
+      indexes: [
+        {
+          table: pivotTable,
+          indexName: `${joinColumn}_index`,
+          columnName: joinColumn,
+        },
+        {
+          table: pivotTable,
+          indexName: `${inverseJoinColumn}_index`,
+          columnName: inverseJoinColumn,
+        },
+      ],
+    };
+  }
+
+  private getOwnerPkColumnName(entity: Options): string {
+    return entity._primaryKeyColumnName || 'id';
+  }
+
+  private getRelatedPkType(entity: Options): string {
+    const pkProp = entity._primaryKeyPropertyName || 'id';
+    const property = entity.properties[pkProp];
+    if (!property) return 'int';
+    return property.options?.dbType || property.type?.name || 'int';
+  }
+
   private snapshotColumns(values: Options): ColumnsInfo[] {
     let properties: ColumnsInfo[] = Object.entries(values.properties).map(([_key, value]) => {
       return {
@@ -318,7 +394,7 @@ export class EntityStorage {
     let relations: ColumnsInfo[] =
       values.relations &&
       values.relations
-        .filter((relation) => relation.relation === 'many-to-one')
+        .filter((relation) => relation.relation === 'many-to-one' || relation.relation === 'one-to-one-owner')
         .map((relation) => {
           const type = this.getFkType(relation);
 

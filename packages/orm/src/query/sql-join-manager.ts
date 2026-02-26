@@ -82,6 +82,10 @@ export class SqlJoinManager<T> {
   }
 
   applyJoin(relationShip: Relationship<any>, value: FilterQuery<any>, alias: string): string {
+    if (relationShip.relation === 'many-to-many') {
+      return this.applyManyToManyJoin(relationShip, value, alias);
+    }
+
     const { tableName, schema } = this.getTableName();
     const {
       tableName: joinTableName,
@@ -104,6 +108,95 @@ export class SqlJoinManager<T> {
     }
 
     return joinWhere;
+  }
+
+  private applyManyToManyJoin(relationShip: Relationship<any>, value: FilterQuery<any>, alias: string): string {
+    const { schema } = this.getTableName();
+    const relatedEntityOptions = this.entityStorage.get(relationShip.entity() as Function) || {
+      tableName: (relationShip.entity() as Function).name.toLowerCase(),
+      schema: 'public',
+    };
+    const relatedTableName = relatedEntityOptions.tableName;
+    const relatedSchema = relatedEntityOptions.schema || 'public';
+
+    const pivotTable = relationShip.pivotTable!;
+    const joinColumn = relationShip.joinColumn!;
+    const inverseJoinColumn = relationShip.inverseJoinColumn!;
+    const originPrimaryKey = this.getPrimaryKey();
+
+    const relatedPkName = (relatedEntityOptions as any)._primaryKeyColumnName || 'id';
+
+    if (this.statements.strategy === 'joined') {
+      // First JOIN: entity -> pivot table
+      const pivotAlias = this.getAliasCallback(pivotTable);
+      const pivotOn = `${alias}.${this.quoteId(originPrimaryKey)} = ${pivotAlias}.${this.quoteId(joinColumn)}`;
+
+      this.statements.join = this.statements.join || [];
+      this.statements.join.push({
+        joinAlias: pivotAlias,
+        joinTable: pivotTable,
+        joinSchema: schema || 'public',
+        joinWhere: '',
+        joinProperty: `__pivot_${relationShip.propertyKey as string}`,
+        originAlias: alias,
+        originSchema: schema || 'public',
+        originTable: this.entity.tableName,
+        propertyKey: `__pivot_${relationShip.propertyKey as string}`,
+        type: 'LEFT',
+        on: pivotOn,
+        originalEntity: relationShip.originalEntity as Function,
+        hooks: undefined,
+      });
+
+      // Second JOIN: pivot table -> related entity
+      const relatedAlias = this.getAliasCallback(relatedTableName);
+      const relatedOn = `${pivotAlias}.${this.quoteId(inverseJoinColumn)} = ${relatedAlias}.${this.quoteId(relatedPkName)}`;
+      const joinWhere = this.conditionBuilder.build(value, relatedAlias, relationShip.entity() as Function);
+
+      this.statements.join.push({
+        joinAlias: relatedAlias,
+        joinTable: relatedTableName,
+        joinSchema: relatedSchema,
+        joinWhere: joinWhere,
+        joinProperty: relationShip.propertyKey as string,
+        originAlias: alias,
+        originSchema: schema || 'public',
+        originTable: this.entity.tableName,
+        propertyKey: relationShip.propertyKey,
+        joinEntity: relationShip.entity() as Function,
+        type: 'LEFT',
+        on: relatedOn,
+        originalEntity: relationShip.originalEntity as Function,
+        hooks: (relatedEntityOptions as any).hooks,
+      });
+
+      return joinWhere;
+    } else {
+      // Select strategy: use subquery through pivot
+      const relatedAlias = this.getAliasCallback(relatedTableName);
+      const joinWhere = this.conditionBuilder.build(value, relatedAlias, relationShip.entity() as Function);
+
+      this.statements.selectJoin = this.statements.selectJoin || [];
+      this.statements.selectJoin.push({
+        statement: 'select',
+        columns: [],
+        table: this.qualifyTable(relatedSchema, relatedTableName),
+        alias: relatedAlias,
+        where: joinWhere,
+        joinProperty: relationShip.propertyKey as string,
+        fkKey: relatedPkName,
+        primaryKey: originPrimaryKey,
+        originAlias: alias,
+        originProperty: relationShip.propertyKey as string,
+        joinEntity: relationShip.entity() as Function,
+        originEntity: relationShip.originalEntity as Function,
+        hooks: (relatedEntityOptions as any).hooks,
+        // Store pivot info for select strategy processing
+        customSchema: `pivot:${pivotTable}:${joinColumn}:${inverseJoinColumn}`,
+      });
+
+      return joinWhere;
+    }
   }
 
   async handleSelectJoin(entities: any, models): Promise<void> {
@@ -140,9 +233,11 @@ export class SqlJoinManager<T> {
 
     switch (relationShip.relation) {
       case "one-to-many":
+      case "one-to-one-inverse":
         on = `${joinAlias}.${fkKey} = ${alias}.${pk}`;
         break;
       case "many-to-one":
+      case "one-to-one-owner":
         const col = this.quoteId(relationShip.columnName as string);
         on = `${alias}.${col} = ${joinAlias}.${fkKey}`;
         break;
@@ -219,13 +314,37 @@ export class SqlJoinManager<T> {
       ids = ids.map((id: any) => this.formatValue(id)).join(', ');
     }
 
-    this.updateJoinWhere(join, ids);
+    // ManyToMany select strategy: use pivot table subquery
+    if (join.customSchema && typeof join.customSchema === 'string' && join.customSchema.startsWith('pivot:')) {
+      this.updateManyToManyJoinWhere(join, ids);
+    } else {
+      this.updateJoinWhere(join, ids);
+    }
+
     this.updateJoinColumns(join);
 
     const child = await this.driver.executeStatement(join);
     this.logger.debug(`SQL: ${child.sql} [${Date.now() - child.startTime}ms]`);
 
     this.attachJoinResults(join, child, models);
+  }
+
+  private updateManyToManyJoinWhere(join: any, ids: any): void {
+    const parts = join.customSchema.split(':');
+    const pivotTable = parts[1];
+    const joinColumn = parts[2];
+    const inverseJoinColumn = parts[3];
+    const schema = join.originEntity ? (this.entityStorage.get(join.originEntity)?.schema || 'public') : 'public';
+    const qualifiedPivot = this.qualifyTable(schema, pivotTable);
+    const fkCol = this.quoteId(join.fkKey);
+
+    const subquery = `${join.alias}.${fkCol} IN (SELECT ${this.quoteId(inverseJoinColumn)} FROM ${qualifiedPivot} WHERE ${this.quoteId(joinColumn)} IN (${ids}))`;
+
+    if (join.where) {
+      join.where = `${join.where} AND ${subquery}`;
+    } else {
+      join.where = subquery;
+    }
   }
 
   private async processSelectJoinBatch(join: any, entities: any[], models: any[]): Promise<void> {
@@ -252,7 +371,13 @@ export class SqlJoinManager<T> {
       .map((id: any) => this.formatValue(id))
       .join(', ');
 
-    this.updateJoinWhere(join, idsString);
+    // ManyToMany select strategy: use pivot table subquery
+    if (join.customSchema && typeof join.customSchema === 'string' && join.customSchema.startsWith('pivot:')) {
+      this.updateManyToManyJoinWhere(join, idsString);
+    } else {
+      this.updateJoinWhere(join, idsString);
+    }
+
     this.updateJoinColumns(join);
 
     const result = await this.driver.executeStatement(join);
