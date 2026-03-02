@@ -20,7 +20,7 @@
     "@types/node": "^24.9.1",
     "bun-types": "latest",
     "cross-env": "^10.1.0",
-    "lerna": "^7.4.2",
+    "lerna": "^9.0.5",
     "typescript": "^5.9.3"
   },
   "repository": {
