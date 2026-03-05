@@ -54,6 +54,8 @@ describe('ORM Cache System', () => {
     return mockLogger.mock.calls.length - initialCallCount;
   };
 
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
   beforeEach(async () => {
     await cacheService.clear();
     await startDatabase();
@@ -107,35 +109,43 @@ describe('ORM Cache System', () => {
 
     test('should expire cache after TTL', async () => {
       // Given
-      resetQueryCounter();
-      await productRepo.create({
+      const product = await productRepo.create({
         name: 'Mouse',
         price: 50,
       });
-      resetQueryCounter();
+      const ttl = 1000;
 
-      // When - First call with 1000ms TTL
-      await productRepo.find({
-        where: { name: 'Mouse' },
-        cache: 1000,
+      // When - First call (should cache "Mouse")
+      const firstCall = await productRepo.findById(product.id, {
+        cache: ttl,
       });
 
-      const queriesAfterFirst = getQueryCount();
+      // Update data directly in DB to avoid ORM cache invalidation on write
+      await execute(`
+        UPDATE "product"
+        SET "name" = 'Mouse Updated'
+        WHERE "id" = ${product.id};
+      `);
 
-      // Wait for cache to expire
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      // When - Second call after TTL
-      await productRepo.find({
-        where: { name: 'Mouse' },
-        cache: 1000,
+      // Still before TTL expiry - should return cached value
+      const secondCall = await productRepo.findById(product.id, {
+        cache: ttl,
       });
 
-      const queriesAfterSecond = getQueryCount();
+      // Wait past TTL, then cache must expire and return updated value
+      await sleep(ttl + 700);
+
+      const thirdCall = await productRepo.findById(product.id, {
+        cache: ttl,
+      });
 
       // Then
-      expect(queriesAfterFirst).toBe(1);
-      expect(queriesAfterSecond).toBe(2);
+      expect(firstCall).toBeDefined();
+      expect(firstCall!.name).toBe('Mouse');
+      expect(secondCall).toBeDefined();
+      expect(secondCall!.name).toBe('Mouse');
+      expect(thirdCall).toBeDefined();
+      expect(thirdCall!.name).toBe('Mouse Updated');
     });
 
     test('should cache findOne with TTL', async () => {
@@ -240,46 +250,41 @@ describe('ORM Cache System', () => {
   describe('Cache with Date (cache: Date)', () => {
     test('should cache query result until Date expires', async () => {
       // Given
-      resetQueryCounter();
-      await productRepo.create({ name: 'Keyboard', price: 200 });
-      resetQueryCounter();
+      const product = await productRepo.create({ name: 'Keyboard', price: 200 });
+      const expireAt = new Date(Date.now() + 2000);
 
-      const expireAt = new Date(Date.now() + 1500);
-
-      // When - First call (should hit database)
-      const firstCall = await productRepo.find({
-        where: { name: 'Keyboard' },
+      // When - First call (should cache original value)
+      const firstCall = await productRepo.findById(product.id, {
         cache: expireAt,
       });
 
-      const queriesAfterFirst = getQueryCount();
+      // Update data directly in DB to avoid ORM cache invalidation on write
+      await execute(`
+        UPDATE "product"
+        SET "name" = 'Keyboard Updated'
+        WHERE "id" = ${product.id};
+      `);
 
-      // When - Second call before expiry (should return from cache)
-      const secondCall = await productRepo.find({
-        where: { name: 'Keyboard' },
+      // Before expiry, should still return cached value
+      const secondCall = await productRepo.findById(product.id, {
         cache: expireAt,
       });
-
-      const queriesAfterSecond = getQueryCount();
 
       // Wait for cache to expire
-      await new Promise((resolve) => setTimeout(resolve, 1700));
+      await sleep(2300);
 
       // When - Third call after expiry (should hit database again)
-      const thirdCall = await productRepo.find({
-        where: { name: 'Keyboard' },
+      const thirdCall = await productRepo.findById(product.id, {
         cache: expireAt,
       });
 
-      const queriesAfterThird = getQueryCount();
-
       // Then
-      expect(firstCall.length).toBe(1);
-      expect(secondCall.length).toBe(1);
-      expect(thirdCall.length).toBe(1);
-      expect(queriesAfterFirst).toBe(1);
-      expect(queriesAfterSecond).toBe(1);
-      expect(queriesAfterThird).toBe(2);
+      expect(firstCall).toBeDefined();
+      expect(firstCall!.name).toBe('Keyboard');
+      expect(secondCall).toBeDefined();
+      expect(secondCall!.name).toBe('Keyboard');
+      expect(thirdCall).toBeDefined();
+      expect(thirdCall!.name).toBe('Keyboard Updated');
     });
 
     test('should not cache when Date is in the past', async () => {
