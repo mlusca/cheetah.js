@@ -107,35 +107,43 @@ describe('ORM Cache System', () => {
 
     test('should expire cache after TTL', async () => {
       // Given
-      resetQueryCounter();
       await productRepo.create({
         name: 'Mouse',
         price: 50,
       });
-      resetQueryCounter();
 
-      // When - First call with 1000ms TTL
-      await productRepo.find({
+      // When - First call with 1000ms TTL (caches the result)
+      const firstCall = await productRepo.find({
         where: { name: 'Mouse' },
         cache: 1000,
       });
 
-      const queriesAfterFirst = getQueryCount();
+      expect(firstCall.length).toBe(1);
+      expect(firstCall[0].name).toBe('Mouse');
 
-      // Wait for cache to expire (extra margin for slow CI runners)
+      // Modify data directly via raw SQL (bypasses ORM cache invalidation)
+      await execute(`UPDATE "product" SET "name" = 'Rat' WHERE "name" = 'Mouse'`);
+
+      // Second call within TTL - should return cached (stale) data
+      const secondCall = await productRepo.find({
+        where: { name: 'Mouse' },
+        cache: 1000,
+      });
+
+      expect(secondCall.length).toBe(1);
+      expect(secondCall[0].name).toBe('Mouse'); // Still cached
+
+      // Wait for cache to expire
       await new Promise((resolve) => setTimeout(resolve, 2500));
 
-      // When - Second call after TTL
-      await productRepo.find({
+      // Third call after TTL - cache expired, DB returns no rows
+      // because the record was renamed to 'Rat'
+      const thirdCall = await productRepo.find({
         where: { name: 'Mouse' },
         cache: 1000,
       });
 
-      const queriesAfterSecond = getQueryCount();
-
-      // Then
-      expect(queriesAfterFirst).toBe(1);
-      expect(queriesAfterSecond).toBe(2);
+      expect(thirdCall.length).toBe(0); // Proves cache expired and fresh DB query ran
     });
 
     test('should cache findOne with TTL', async () => {
@@ -240,46 +248,42 @@ describe('ORM Cache System', () => {
   describe('Cache with Date (cache: Date)', () => {
     test('should cache query result until Date expires', async () => {
       // Given
-      resetQueryCounter();
       await productRepo.create({ name: 'Keyboard', price: 200 });
-      resetQueryCounter();
 
       const expireAt = new Date(Date.now() + 3000);
 
-      // When - First call (should hit database)
+      // When - First call (should hit database and cache result)
       const firstCall = await productRepo.find({
         where: { name: 'Keyboard' },
         cache: expireAt,
       });
 
-      const queriesAfterFirst = getQueryCount();
+      expect(firstCall.length).toBe(1);
+      expect(firstCall[0].name).toBe('Keyboard');
 
-      // When - Second call before expiry (should return from cache)
+      // Modify data directly via raw SQL (bypasses ORM cache invalidation)
+      await execute(`UPDATE "product" SET "name" = 'Piano' WHERE "name" = 'Keyboard'`);
+
+      // When - Second call before expiry (should return cached stale data)
       const secondCall = await productRepo.find({
         where: { name: 'Keyboard' },
         cache: expireAt,
       });
 
-      const queriesAfterSecond = getQueryCount();
+      expect(secondCall.length).toBe(1);
+      expect(secondCall[0].name).toBe('Keyboard'); // Still cached
 
-      // Wait for cache to expire (extra margin for slow CI runners)
+      // Wait for cache to expire (Date-based TTL)
       await new Promise((resolve) => setTimeout(resolve, 4500));
 
-      // When - Third call after expiry (should hit database again)
+      // When - Third call after expiry (Date is in the past, cache bypassed)
       const thirdCall = await productRepo.find({
         where: { name: 'Keyboard' },
         cache: expireAt,
       });
 
-      const queriesAfterThird = getQueryCount();
-
-      // Then
-      expect(firstCall.length).toBe(1);
-      expect(secondCall.length).toBe(1);
-      expect(thirdCall.length).toBe(1);
-      expect(queriesAfterFirst).toBe(1);
-      expect(queriesAfterSecond).toBe(1);
-      expect(queriesAfterThird).toBe(2);
+      // Then - DB query returns no rows because 'Keyboard' was renamed to 'Piano'
+      expect(thirdCall.length).toBe(0); // Proves cache expired and fresh DB query ran
     });
 
     test('should not cache when Date is in the past', async () => {
