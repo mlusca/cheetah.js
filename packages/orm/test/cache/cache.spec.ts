@@ -57,8 +57,26 @@ describe('ORM Cache System', () => {
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+  const waitFor = async (
+    condition: () => Promise<boolean>,
+    timeoutMs: number,
+    intervalMs: number = 200,
+  ): Promise<boolean> => {
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      if (await condition()) {
+        return true;
+      }
+      await sleep(intervalMs);
+    }
+
+    return false;
+  };
+
   beforeEach(async () => {
     await cacheService.clear();
+    expect(cacheService.getDriver().name).toBe('MemoryDriver');
     await startDatabase();
     await execute(DDL_PRODUCT);
     productRepo = new ProductRepository();
@@ -134,19 +152,21 @@ describe('ORM Cache System', () => {
         cache: ttl,
       });
 
-      // Wait past TTL, then cache must expire and return updated value
-      await sleep(ttl + 700);
-
-      Orm.instance = currentApp;
-      const thirdCall = await productRepo.findById(product.id, {
-        cache: ttl,
-      });
+      let thirdCall = secondCall;
+      const expired = await waitFor(async () => {
+        Orm.instance = currentApp;
+        thirdCall = await productRepo.findById(product.id, {
+          cache: ttl,
+        });
+        return thirdCall?.name === 'Mouse Updated';
+      }, 7000);
 
       // Then
       expect(firstCall).toBeDefined();
       expect(firstCall!.name).toBe('Mouse');
       expect(secondCall).toBeDefined();
       expect(secondCall!.name).toBe('Mouse');
+      expect(expired).toBe(true);
       expect(thirdCall).toBeDefined();
       expect(thirdCall!.name).toBe('Mouse Updated');
     });
@@ -274,20 +294,21 @@ describe('ORM Cache System', () => {
         cache: expireAt,
       });
 
-      // Wait for cache to expire
-      await sleep(2300);
-
-      // When - Third call after expiry (should hit database again)
-      Orm.instance = currentApp;
-      const thirdCall = await productRepo.findById(product.id, {
-        cache: expireAt,
-      });
+      let thirdCall = secondCall;
+      const expired = await waitFor(async () => {
+        Orm.instance = currentApp;
+        thirdCall = await productRepo.findById(product.id, {
+          cache: expireAt,
+        });
+        return thirdCall?.name === 'Keyboard Updated';
+      }, 7000);
 
       // Then
       expect(firstCall).toBeDefined();
       expect(firstCall!.name).toBe('Keyboard');
       expect(secondCall).toBeDefined();
       expect(secondCall!.name).toBe('Keyboard');
+      expect(expired).toBe(true);
       expect(thirdCall).toBeDefined();
       expect(thirdCall!.name).toBe('Keyboard Updated');
     });

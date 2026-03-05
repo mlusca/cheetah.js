@@ -81,5 +81,7 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
-        run: bun test --max-concurrency 1
+        run: |
+          bun test packages/core packages/queue packages/schedule packages/static
+          bun test packages/orm --max-concurrency 1
         
