@@ -3,6 +3,7 @@ import { app, cacheService, execute, mockLogger, purgeDatabase, startDatabase } 
 import {
   BaseEntity,
   Entity,
+  Orm,
   PrimaryKey,
   Property,
   Repository,
@@ -113,21 +114,22 @@ describe('ORM Cache System', () => {
         name: 'Mouse',
         price: 50,
       });
+      const currentApp = app;
       const ttl = 1000;
 
       // When - First call (should cache "Mouse")
+      Orm.instance = currentApp;
       const firstCall = await productRepo.findById(product.id, {
         cache: ttl,
       });
 
       // Update data directly in DB to avoid ORM cache invalidation on write
-      await execute(`
-        UPDATE "product"
-        SET "name" = 'Mouse Updated'
-        WHERE "id" = ${product.id};
-      `);
+      await currentApp.driverInstance.executeSql(
+        `UPDATE product SET name = 'Mouse Updated' WHERE id = ${product.id};`
+      );
 
       // Still before TTL expiry - should return cached value
+      Orm.instance = currentApp;
       const secondCall = await productRepo.findById(product.id, {
         cache: ttl,
       });
@@ -135,6 +137,7 @@ describe('ORM Cache System', () => {
       // Wait past TTL, then cache must expire and return updated value
       await sleep(ttl + 700);
 
+      Orm.instance = currentApp;
       const thirdCall = await productRepo.findById(product.id, {
         cache: ttl,
       });
@@ -251,21 +254,22 @@ describe('ORM Cache System', () => {
     test('should cache query result until Date expires', async () => {
       // Given
       const product = await productRepo.create({ name: 'Keyboard', price: 200 });
+      const currentApp = app;
       const expireAt = new Date(Date.now() + 2000);
 
       // When - First call (should cache original value)
+      Orm.instance = currentApp;
       const firstCall = await productRepo.findById(product.id, {
         cache: expireAt,
       });
 
       // Update data directly in DB to avoid ORM cache invalidation on write
-      await execute(`
-        UPDATE "product"
-        SET "name" = 'Keyboard Updated'
-        WHERE "id" = ${product.id};
-      `);
+      await currentApp.driverInstance.executeSql(
+        `UPDATE product SET name = 'Keyboard Updated' WHERE id = ${product.id};`
+      );
 
       // Before expiry, should still return cached value
+      Orm.instance = currentApp;
       const secondCall = await productRepo.findById(product.id, {
         cache: expireAt,
       });
@@ -274,6 +278,7 @@ describe('ORM Cache System', () => {
       await sleep(2300);
 
       // When - Third call after expiry (should hit database again)
+      Orm.instance = currentApp;
       const thirdCall = await productRepo.findById(product.id, {
         cache: expireAt,
       });
