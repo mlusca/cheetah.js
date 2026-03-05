@@ -1,6 +1,6 @@
 import path from 'path';
 import { EntityStorage } from 'packages/orm/src/domain/entities';
-import { CacheService } from '@carno.js/core';
+import { CacheService, MemoryDriver } from '@carno.js/core';
 import { spyOn } from 'bun:test';
 import { Orm, OrmService, setDebugEnabled, resetLogger } from "../src";
 import { BunMysqlDriver } from '../src/driver/bun-mysql.driver';
@@ -11,7 +11,9 @@ import {
   getDriverType,
 } from "../src/driver/driver-factory";
 
-const cacheService = new CacheService();
+const cacheService = new CacheService({
+  driver: new MemoryDriver(),
+});
 
 export let app: Orm<DriverInterface>
 export let mockLogger: ReturnType<typeof spyOn>
