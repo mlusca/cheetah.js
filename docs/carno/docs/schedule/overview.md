@@ -232,7 +232,7 @@ import { SchedulerRegistry } from '@carno.js/schedule';
 @Service()
 export class AppService {
 
-  constructor(@Inject() private readonly registry: SchedulerRegistry) {}
+  constructor(private readonly registry: SchedulerRegistry) {}
 
   stopJob() {
     this.registry.deleteCronJob('nightly-cleanup');
