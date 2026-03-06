@@ -7,7 +7,7 @@ import TabItem from '@theme/TabItem';
 
 # CLI
 
-The Carno.js CLI provides essential tools for managing your application, including database migrations and route inspection.
+The Carno.js CLI provides essential tools for managing your application, including database migrations, seeders, and route inspection.
 
 ## Installation
 
@@ -70,7 +70,7 @@ For more details on routing, see the [Controllers & Routing](./core/controllers.
 
 #### Migrations
 
-To manage database migrations (generate, run, revert):
+To manage database migrations:
 
 ```bash
 # Generate a new migration based on entity changes
@@ -81,3 +81,49 @@ bunx carno migration:run
 ```
 
 For a comprehensive guide on migrations, refer to the [Migrations](./orm/migrations.md) documentation.
+
+#### Seeders
+
+Seeders let you insert or update data through executable classes.
+
+```bash
+# Generate a seeder (name is required)
+bunx carno seeder:generate UserSeeder
+
+# Run one specific seeder class
+bunx carno seeder:run UserSeeder
+
+# Run all seeders in registry order
+bunx carno seeder:run --all
+```
+
+When the first seeder is generated, Carno creates a `seeders.ts` registry file in your seeder directory.
+Each new generated seeder is appended to the end of the exported `seeders` array.
+You can manually reorder this array, and that order is exactly what `seeder:run --all` will execute.
+
+Generated seeder template:
+
+```ts
+import type { Orm } from "@carno.js/orm";
+
+export default class UserSeeder {
+  async run(orm: Orm<any>) {
+    // Example:
+    // await orm.driverInstance.executeSql("INSERT INTO users (email) VALUES ('admin@example.com')");
+  }
+}
+```
+
+You can also configure a custom seeder directory in `carno.config.ts`:
+
+```ts
+import { ConnectionSettings, BunPgDriver } from '@carno.js/orm';
+
+const config: ConnectionSettings = {
+  driver: BunPgDriver,
+  migrationPath: './src/migrations',
+  seederPath: './src/seeders',
+};
+
+export default config;
+```
