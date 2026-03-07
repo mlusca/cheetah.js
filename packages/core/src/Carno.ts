@@ -84,6 +84,10 @@ export class Carno {
     private validator: ValidatorAdapter | null = null;
     private server: any;
 
+    // WebSocket support
+    _wsHandlerBuilder: ((container: Container) => any) | null = null;
+    _wsUpgradePaths: Set<string> = new Set();
+
     // Cached lifecycle event flags - checked once at startup
     private hasInitHooks = false;
     private hasBootHooks = false;
@@ -117,7 +121,7 @@ export class Carno {
 
     /**
      * Use a Carno plugin.
-     * Imports controllers, services, middlewares, and routes from another Carno instance.
+     * Imports controllers, services, middlewares, routes, and WebSocket config from another Carno instance.
      */
     use(plugin: Carno): this {
         // Import controllers from plugin
@@ -165,7 +169,34 @@ export class Carno {
             }
         }
 
+        // Import WebSocket handler builder and upgrade paths
+        if (plugin._wsHandlerBuilder) {
+            this._wsHandlerBuilder = plugin._wsHandlerBuilder;
+            for (const path of plugin._wsUpgradePaths) {
+                this._wsUpgradePaths.add(path);
+            }
+        }
+
         return this;
+    }
+
+    /**
+     * Register a WebSocket handler builder and the upgrade paths.
+     * Used internally by @carno.js/websocket plugin.
+     */
+    wsHandler(builder: (container: Container) => any, upgradePaths: string[]): this {
+        this._wsHandlerBuilder = builder;
+        for (const path of upgradePaths) {
+            this._wsUpgradePaths.add(path);
+        }
+        return this;
+    }
+
+    /**
+     * Returns the underlying Bun server instance (available after listen()).
+     */
+    getServer(): any {
+        return this.server;
     }
 
     private findServiceInPlugin(plugin: Carno, exported: any): any | undefined {
@@ -284,6 +315,32 @@ export class Carno {
             }
         };
 
+        // Wire in WebSocket support if a handler builder was registered
+        if (this._wsHandlerBuilder && this._wsUpgradePaths.size > 0) {
+            config.websocket = this._wsHandlerBuilder(this.container);
+
+            const upgradePaths = this._wsUpgradePaths;
+            const fallback = this.handleNotFound.bind(this);
+
+            config.fetch = (req: Request, server: any) => {
+                const pathname = new URL(req.url).pathname;
+
+                if (upgradePaths.has(pathname)) {
+                    const upgraded = server.upgrade(req, {
+                        data: {
+                            id: crypto.randomUUID(),
+                            namespace: pathname,
+                        },
+                    });
+
+                    if (upgraded) return;
+                    return new Response('WebSocket upgrade failed', { status: 400 });
+                }
+
+                return fallback(req);
+            };
+        }
+
         this.server = Bun.serve(config);
 
         // Execute BOOT hooks after server is ready
@@ -311,6 +368,12 @@ export class Carno {
         this.container.register({
             token: Container,
             useValue: this.container
+        });
+
+        // Register this Carno instance so services can inject it (e.g. RoomManager)
+        this.container.register({
+            token: Carno,
+            useValue: this
         });
 
         // Always register CacheService (Memory by default)

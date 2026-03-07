@@ -51,6 +51,12 @@
       ],
       "@carno.js/logger/*": [
         "./packages/logger/src/*"
+      ],
+      "@carno.js/websocket": [
+        "./packages/websocket"
+      ],
+      "@carno.js/websocket/*": [
+        "./packages/websocket/src/*"
       ]
     },
     "types": [
@@ -70,6 +76,9 @@
     },
     {
       "path": "./packages/queue"
+    },
+    {
+      "path": "./packages/websocket"
     }
   ]
 }

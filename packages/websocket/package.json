@@ -1,0 +1,32 @@
+{
+  "name": "@carno.js/websocket",
+  "version": "1.0.0",
+  "description": "Native WebSocket support for Carno.js with rooms, namespaces, and broadcasting",
+  "type": "commonjs",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "compile": "rm -rf ./dist tsconfig.tsbuildinfo && tsc --build --force",
+    "build": "tsc --build --force",
+    "prepublishOnly": "bun run build"
+  },
+  "peerDependencies": {
+    "@carno.js/core": "^1.2.0",
+    "bun": ">=1.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "author": "",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

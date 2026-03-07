@@ -58,6 +58,11 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'WebSocket',
+      items: ['websocket/overview'],
+    },
+    {
+      type: 'category',
       label: 'Testing',
       items: ['testing/overview'],
     },

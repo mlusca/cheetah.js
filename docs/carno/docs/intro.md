@@ -25,6 +25,7 @@ The framework relies heavily on TypeScript decorators to provide a declarative a
 | **`@carno.js/orm`** | Lightweight Object-Relational Mapper for Postgres and MySQL. | `bun install @carno.js/orm` |
 | **`@carno.js/queue`** | Background job processing powered by BullMQ. | `bun install @carno.js/queue` |
 | **`@carno.js/schedule`** | Task scheduling (Cron, Interval, Timeout). | `bun install @carno.js/schedule` |
+| **`@carno.js/websocket`** | Native WebSocket support with rooms, namespaces, and broadcasting. | `bun install @carno.js/websocket` |
 | **`@carno.js/cli`** | Command Line Interface for migrations and tools. | `bun install -d @carno.js/cli` |
 | **`@carno.js/logger`**| Fast and flexible logging solution. | `bun install @carno.js/logger` |
 
@@ -60,4 +61,5 @@ app.listen(3000);
 - **ORM**: Managing database connections, entities, relationships, and transactions.
 - **Queue**: Handling asynchronous jobs and events.
 - **Schedule**: Defining recurring tasks.
+- **WebSocket**: Real-time communication with rooms, namespaces, and broadcasting.
 - **Testing**: Utilities for integration testing your application.
