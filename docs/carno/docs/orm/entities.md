@@ -8,14 +8,15 @@ Entities are classes that map to database tables.
 
 ## Defining an Entity
 
-Use the `@Entity()` decorator. By default, the table name is derived from the class name (snake_case).
+Use the `@Entity()` decorator. By default, the table name is derived from the class name (`snake_case`).
+Extending `BaseEntity` is optional and is only required if you want to use the Active Record API.
 
 ```ts
-import { Entity, Property, BaseEntity } from '@carno.js/orm';
+import { Entity, PrimaryKey, Property, BaseEntity } from '@carno.js/orm';
 
 @Entity()
 export class User extends BaseEntity {
-  @Property({ isPrimary: true, autoIncrement: true })
+  @PrimaryKey({ autoIncrement: true })
   id: number;
 
   @Property()
@@ -29,6 +30,57 @@ export class User extends BaseEntity {
 }
 ```
 
+If you want to customize the table name, pass `tableName` to `@Entity()`:
+
+```ts
+import { Entity, PrimaryKey, Property } from '@carno.js/orm';
+
+@Entity({ tableName: 'app_user' })
+export class User {
+  @PrimaryKey()
+  id: number;
+
+  @Property()
+  username: string;
+}
+```
+
+## Primary Keys
+
+Use `@PrimaryKey()` to define the entity identifier. Internally it is a shorthand for `@Property({ isPrimary: true })`, but `@PrimaryKey()` is the preferred and clearer form in entity definitions.
+
+### Auto-increment Primary Key
+
+```ts
+import { Entity, PrimaryKey, Property } from '@carno.js/orm';
+
+@Entity()
+export class User {
+  @PrimaryKey({ autoIncrement: true })
+  id: number;
+
+  @Property()
+  name: string;
+}
+```
+
+### Custom Primary Key
+
+`@PrimaryKey()` also supports string or UUID-style keys and custom database column names.
+
+```ts
+import { Entity, PrimaryKey, Property } from '@carno.js/orm';
+
+@Entity()
+export class Product {
+  @PrimaryKey({ columnName: 'product_uuid', dbType: 'uuid' })
+  productUuid: string;
+
+  @Property()
+  name: string;
+}
+```
+
 ## Property Options
 
 The `@Property()` decorator accepts options to define column behavior.
@@ -38,11 +90,24 @@ The `@Property()` decorator accepts options to define column behavior.
 | `isPrimary` | `boolean` | Mark as primary key. |
 | `autoIncrement` | `boolean` | Auto-incrementing value. |
 | `unique` | `boolean` | Add unique constraint. |
+| `index` | `boolean` | Add a single-column index. |
 | `nullable` | `boolean` | Allow NULL values. |
 | `default` | `any` | Default value. |
 | `columnName` | `string` | Custom DB column name. |
-| `type` | `string` | Explicit DB type (e.g., `'json'`, `'text'`). |
-| `length` | `number` | Column length (varchar). |
+| `dbType` | `'varchar' \| 'text' \| 'int' \| 'bigint' \| 'float' \| 'double' \| 'decimal' \| 'date' \| 'datetime' \| 'time' \| 'timestamp' \| 'boolean' \| 'json' \| 'jsonb' \| 'enum' \| 'array' \| 'uuid'` | Explicit DB type. |
+| `length` | `number` | Column length, usually for string columns. |
+| `precision` | `number` | Total digits for decimal/numeric values. |
+| `scale` | `number` | Decimal digits for decimal/numeric values. |
+| `hidden` | `boolean` | Hide the property from serialization output. |
+| `array` | `boolean` | Mark the column as an array type. |
+| `isEnum` | `boolean` | Mark the property as an enum column. Usually handled by `@Enum()`. |
+| `enumItems` | `string[] \| number[] \| '__AUTO_DETECT__'` | Explicit enum values. Usually handled by `@Enum()`. |
+| `onInsert` | `() => any` | Compute a value before insert. |
+| `onUpdate` | `() => any` | Compute a value before update. |
+
+`columnName` defaults to the property name converted to `snake_case`. For most columns, the ORM also infers the column type from the TypeScript type.
+
+For enum fields, prefer the dedicated `@Enum()` decorator. For calculated non-persisted fields, see `@Computed()`.
 
 ## Indexes and Unique Constraints
 
