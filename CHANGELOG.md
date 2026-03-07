@@ -3,6 +3,26 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [1.3.0](https://github.com/carnojs/carno.js/compare/v1.1.2...v1.3.0) (2026-03-07)
+
+
+### Bug Fixes
+
+* Increase cache expiration wait times for improved reliability ([#30](https://github.com/carnojs/carno.js/issues/30)) ([6929d60](https://github.com/carnojs/carno.js/commit/6929d60a96a3ee39fa223712e5acfed84cc6b209))
+* Simplify constructor parameter by removing the @Inject() decorator in AppService ([dad8474](https://github.com/carnojs/carno.js/commit/dad847448f1a9ee078696a19bfdbd27f87d3ff3f))
+
+
+### Features
+
+* Add seeders section to CLI documentation for data management ([d08e3b2](https://github.com/carnojs/carno.js/commit/d08e3b2e83a8fd25c20ba38f3b4b60177a04136e))
+* Enhance scheduling documentation with detailed examples and options for decorators ([bcb37d1](https://github.com/carnojs/carno.js/commit/bcb37d15b18d89cd9ea9f5e7b5540575bdf49483))
+* Implement ManyToMany and OneToOne relationship decorators ([#26](https://github.com/carnojs/carno.js/issues/26)) ([f605c1d](https://github.com/carnojs/carno.js/commit/f605c1d863367bf312f152e44c3031bbb86a6a16))
+* **websocket:** new package ([016d6c5](https://github.com/carnojs/carno.js/commit/016d6c598c789dc420e7bd98ef8e997ebfe04ee2))
+
+
+
+
+
 # [1.2.0](https://github.com/carnojs/carno.js/compare/v1.1.2...v1.2.0) (2026-02-26)
 
 

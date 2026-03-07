@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [1.3.0](https://github.com/carnojs/carno.js/compare/v1.1.2...v1.3.0) (2026-03-07)
+
+
+### Bug Fixes
+
+* Increase cache expiration wait times for improved reliability ([#30](https://github.com/carnojs/carno.js/issues/30)) ([6929d60](https://github.com/carnojs/carno.js/commit/6929d60a96a3ee39fa223712e5acfed84cc6b209))
+
+
+### Features
+
+* Implement ManyToMany and OneToOne relationship decorators ([#26](https://github.com/carnojs/carno.js/issues/26)) ([f605c1d](https://github.com/carnojs/carno.js/commit/f605c1d863367bf312f152e44c3031bbb86a6a16))
+
+
+
+
+
 # [1.2.0](https://github.com/carnojs/carno.js/compare/v1.1.2...v1.2.0) (2026-02-26)
 
 
