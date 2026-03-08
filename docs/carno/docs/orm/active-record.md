@@ -6,6 +6,18 @@ sidebar_position: 5
 
 The Active Record pattern allows you to interact with the database directly through your entity classes. Each entity instance represents a row in the database, and static methods on the class allow you to query the table.
 
+## When to Use It
+
+Choose Active Record when you want the entity itself to own persistence behavior.
+
+This pattern is appropriate when:
+
+- you want very direct CRUD code
+- you want to call `User.find()` and `user.save()`
+- you are comfortable coupling persistence logic to the entity class
+
+If you prefer repositories and service-layer orchestration, use the [Repository](./repository) pattern instead. In that model, extending `BaseEntity` is not required.
+
 ## Defining an Active Record Entity
 
 To use the Active Record pattern, your entities must extend the `BaseEntity` class.
@@ -28,6 +40,16 @@ export class User extends BaseEntity {
   isActive: boolean;
 }
 ```
+
+## What You Get From `BaseEntity`
+
+By extending `BaseEntity`, the entity gains:
+
+- static methods like `find`, `findOne`, `findAll` and `create`
+- instance methods like `save`, `remove` and `isPersisted()`
+- dirty tracking for `save()` on already-loaded instances
+
+These capabilities belong to Active Record. They are not part of the Repository-only model.
 
 ## Creating and Saving
 
@@ -112,6 +134,8 @@ await User.createQueryBuilder()
   .where({ id: 1 })
   .execute();
 ```
+
+If deletion through repository fits your code organization better, it is fine to mix Active Record entities with repositories. What matters is that `BaseEntity` is required only for the Active Record API itself.
 
 ## Checking Persistence
 

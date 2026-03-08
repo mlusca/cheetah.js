@@ -1,8 +1,7 @@
 import { SqlBuilder } from '../SqlBuilder';
 import { FilterQuery, FindOneOption, FindOptions, ValueOrInstance } from '../driver/driver.interface';
-import { EntityStorage, Property } from './entities';
-import { Metadata } from '@carno.js/core';
-import { COMPUTED_PROPERTIES, PROPERTIES_METADATA } from '../constants';
+import { EntityStorage } from './entities';
+import { serializeEntityInstance } from './entity-serialization';
 
 export abstract class BaseEntity {
   private _oldValues: any = {};
@@ -194,104 +193,6 @@ export abstract class BaseEntity {
   }
 
   public toJSON(): Record<string, any> {
-    const storage = EntityStorage.getInstance();
-    const entity = storage.get(this.constructor);
-
-    const data = entity
-      ? this.serializeWithEntity(entity)
-      : this.serializeWithMetadata();
-
-    this.addComputedProperties(data);
-
-    return data;
-  }
-
-  private serializeWithEntity(entity: any): Record<string, any> {
-    const data: Record<string, any> = {};
-    const allProperties = new Set<string>(Object.keys(entity.properties));
-    const allRelations = new Set<string>((entity.relations || []).map((relation: any) => relation.propertyKey));
-    const hidePropertiesSet = new Set<string>(entity.hideProperties);
-
-    for (const key in this) {
-      if (this.shouldSkipProperty(key, allProperties, allRelations, hidePropertiesSet)) {
-        continue;
-      }
-
-      data[key] = this[key];
-    }
-
-    return data;
-  }
-
-  private serializeWithMetadata(): Record<string, any> {
-    const data: Record<string, any> = {};
-    const hideProperties = this.getHiddenPropertiesFromMetadata();
-    const hidePropertiesSet = new Set<string>(hideProperties);
-
-    for (const key in this) {
-      if (this.shouldSkipPropertyBasic(key, hidePropertiesSet)) {
-        continue;
-      }
-
-      data[key] = this[key];
-    }
-
-    return data;
-  }
-
-  private shouldSkipProperty(
-    key: string,
-    allProperties: Set<string>,
-    allRelations: Set<string>,
-    hideProperties: Set<string>
-  ): boolean {
-    if (this.isInternalProperty(key)) {
-      return true;
-    }
-
-    if (!allProperties.has(key) && !allRelations.has(key)) {
-      return true;
-    }
-
-    return hideProperties.has(key);
-  }
-
-  private shouldSkipPropertyBasic(
-    key: string,
-    hideProperties: Set<string>
-  ): boolean {
-    if (this.isInternalProperty(key)) {
-      return true;
-    }
-
-    return hideProperties.has(key);
-  }
-
-  private isInternalProperty(key: string): boolean {
-    return key.startsWith('$') || key.startsWith('_');
-  }
-
-  private getHiddenPropertiesFromMetadata(): string[] {
-    const properties: { [key: string]: Property } =
-      Metadata.get(PROPERTIES_METADATA, this.constructor) || {};
-
-    const hideProperties: string[] = [];
-
-    for (const [key, prop] of Object.entries(properties)) {
-      if (prop.options?.hidden) {
-        hideProperties.push(key);
-      }
-    }
-
-    return hideProperties;
-  }
-
-  private addComputedProperties(data: Record<string, any>): void {
-    const computedProperties: string[] =
-      Metadata.get(COMPUTED_PROPERTIES, this.constructor) || [];
-
-    for (const key of computedProperties) {
-      data[key] = this[key as keyof this];
-    }
+    return serializeEntityInstance(this as Record<string, any>);
   }
 }

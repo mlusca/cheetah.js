@@ -78,6 +78,15 @@ describe('serialize', () => {
     customer: Customer;
   }
 
+  @Entity()
+  class PlainDecoratedUser {
+    @PrimaryKey()
+    id: number;
+
+    @Property({ hidden: true })
+    secret: string;
+  }
+
   it('should serialize', async () => {
     Entity()(User);
 
@@ -86,6 +95,24 @@ describe('serialize', () => {
     user.id = 1;
 
     expect(JSON.stringify(user)).toEqual('{"id":1}')
+  });
+
+  it('should only install rich toJSON for classes decorated with Entity', async () => {
+    const decorated = new PlainDecoratedUser();
+    decorated.id = 7;
+    decorated.secret = 'classified';
+
+    class PlainUndecoratedUser {
+      id: number;
+      secret: string;
+    }
+
+    const plain = new PlainUndecoratedUser();
+    plain.id = 7;
+    plain.secret = 'classified';
+
+    expect(JSON.stringify(decorated)).toEqual('{"id":7}');
+    expect(JSON.stringify(plain)).toEqual('{"id":7,"secret":"classified"}');
   });
 
   it('should serialize loaded many-to-one relation payloads', async () => {

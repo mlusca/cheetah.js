@@ -6,6 +6,39 @@ sidebar_position: 4
 
 Repositories provide a dedicated abstraction layer for data access, promoting separation of concerns and cleaner code architecture.
 
+## Repository Pattern vs Active Record
+
+In Carno ORM, repositories are a separate way to work with persistence.
+
+- `Repository` keeps query and write logic outside the entity class.
+- `BaseEntity` is optional in this pattern.
+- A plain class decorated with `@Entity()` is enough to use a repository.
+- `save()`, `remove()`, `isPersisted()` and dirty tracking are **not** part of the Repository model unless you explicitly choose to also extend `BaseEntity`.
+
+For most service-oriented applications, this is the recommended style.
+
+## Defining the Entity
+
+For Repository-oriented code, the most explicit shape is a plain entity:
+
+```typescript
+import { Entity, PrimaryKey, Property } from '@carno.js/orm';
+
+@Entity()
+export class User {
+  @PrimaryKey()
+  id: number;
+
+  @Property()
+  name: string;
+
+  @Property({ hidden: true })
+  internalNotes: string;
+}
+```
+
+Even without `BaseEntity`, the decorated class still has ORM-aware serialization behavior.
+
 ## Creating a Repository
 
 To create a repository, extend the generic `Repository<T>` class and decorate it with `@Service()`.
@@ -29,6 +62,26 @@ export class UserRepository extends Repository<User> {
 }
 ```
 
+## What Repositories Do and Do Not Provide
+
+Using a repository with a plain entity gives you:
+
+- `create`, `find`, `findOne`, `findAll`
+- `update`, `updateById`
+- `delete`, `deleteById`
+- `count`, `exists`
+- rich serialization based on `@Entity()` metadata
+
+It does **not** give you:
+
+- `User.find()`
+- `User.create()`
+- `user.save()`
+- `user.remove()`
+- dirty tracking
+
+If you need those behaviors, you are in Active Record territory and should extend `BaseEntity`.
+
 ## Using Repositories
 
 Inject the repository into your services or controllers.
@@ -43,6 +96,18 @@ export class UserService {
   }
 }
 ```
+
+## Serialization in Repository Mode
+
+`@Entity()`-decorated classes returned by a repository still serialize using ORM metadata.
+
+That means:
+
+- hidden fields are excluded
+- computed fields are included
+- loaded relations serialize consistently
+
+This behavior is specific to ORM entities. Plain classes without `@Entity()` do not participate in ORM-aware serialization.
 
 ## Standard Methods
 
