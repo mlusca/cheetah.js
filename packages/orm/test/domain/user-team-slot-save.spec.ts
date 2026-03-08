@@ -52,6 +52,7 @@ describe('New entity save() with explicit values and repeated save', () => {
     expect((rows.rows[0] as any).label).toBe('Starter');
   });
 
+  
   test('should update the same in-memory entity on a second save instead of inserting again', async () => {
     const slot = new UserTeamSlot();
     slot.id = 1;
