@@ -232,7 +232,7 @@ export class SqlBuilder<T> {
       this.joinManager.addJoinForRelationshipPath(relationshipPath);
     });
     if (this.statements.join) {
-      this.statements.join = this.statements.join?.reverse()
+      this.statements.join = this.normalizeJoinOrder(this.statements.join);
     }
 
     if (this.statements.selectJoin) {
@@ -305,7 +305,7 @@ export class SqlBuilder<T> {
 
   async execute(): Promise<{ query: any; startTime: number; sql: string }> {
     this.prepareColumns();
-    this.statements.join = this.statements.join?.reverse();
+    this.statements.join = this.normalizeJoinOrder(this.statements.join);
 
     if (this.shouldUseCache()) {
       const cached = await this.getCachedResult();
@@ -647,6 +647,50 @@ export class SqlBuilder<T> {
 
   private logExecution(result: { query: any, startTime: number, sql: string }): void {
     this.logger.debug(`SQL: ${result.sql} [${Date.now() - result.startTime}ms]`);
+  }
+
+  private normalizeJoinOrder(joins: Statement<T>['join']): Statement<T>['join'] {
+    if (!joins || joins.length <= 1) {
+      return joins;
+    }
+
+    const pending = [...joins];
+    const ordered: NonNullable<Statement<T>['join']> = [];
+    const availableAliases = new Set([this.statements.alias!]);
+
+    while (pending.length > 0) {
+      const nextIndex = pending.findIndex((join) => {
+        const dependencies = this.getJoinDependencies(join.on, join.joinAlias);
+        return dependencies.every((alias) => availableAliases.has(alias));
+      });
+
+      if (nextIndex === -1) {
+        ordered.push(...pending);
+        break;
+      }
+
+      const [next] = pending.splice(nextIndex, 1);
+      ordered.push(next);
+      availableAliases.add(next.joinAlias);
+    }
+
+    return ordered;
+  }
+
+  private getJoinDependencies(on: string, joinAlias: string): string[] {
+    const aliases = new Set<string>();
+    const pattern = /\b([a-zA-Z_][a-zA-Z0-9_]*)\./g;
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(on)) !== null) {
+      const alias = match[1];
+
+      if (alias !== joinAlias) {
+        aliases.add(alias);
+      }
+    }
+
+    return [...aliases];
   }
 
   async inTransaction<T>(callback: (builder: SqlBuilder<T>) => Promise<T>): Promise<T> {

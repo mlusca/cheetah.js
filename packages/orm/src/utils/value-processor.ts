@@ -1,6 +1,7 @@
 import { ValueObject } from '../common/value-object';
 import { BaseEntity } from '../domain/base-entity';
 import { EntityStorage, Options } from '../domain/entities';
+import { Relationship } from '../driver/driver.interface';
 import { ValueOrInstance } from '../driver/driver.interface';
 import { extendsFrom } from '../utils';
 
@@ -9,28 +10,17 @@ export class ValueProcessor {
     values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>,
     options: Options,
   ): Record<string, any> {
-    const newValue = {};
-
-    for (const value in values) {
-      const columnName = ValueProcessor.getColumnName(value, options);
-
-      if (ValueProcessor.isValueObject(values[value])) {
-        newValue[columnName] = (values[value] as ValueObject<any, any>).getValue();
-        continue;
-      }
-
-      if (ValueProcessor.isBaseEntity(values[value])) {
-        newValue[columnName] = ValueProcessor.extractPrimaryKeyValue(values[value] as BaseEntity);
-        continue;
-      }
-
-      newValue[columnName] = values[value];
-    }
-
-    return newValue;
+    return ValueProcessor.processValues(values, options);
   }
 
   static processForUpdate<T>(
+    values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>,
+    options: Options,
+  ): Record<string, any> {
+    return ValueProcessor.processValues(values, options);
+  }
+
+  private static processValues<T>(
     values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>,
     options: Options,
   ): Record<string, any> {
@@ -38,18 +28,20 @@ export class ValueProcessor {
 
     for (const value in values) {
       const columnName = ValueProcessor.getColumnName(value, options);
+      const rawValue = values[value];
+      const relation = ValueProcessor.getOwningRelation(value, options);
 
-      if (ValueProcessor.isValueObject(values[value])) {
-        newValue[columnName] = (values[value] as ValueObject<any, any>).getValue();
+      if (ValueProcessor.isValueObject(rawValue)) {
+        newValue[columnName] = (rawValue as ValueObject<any, any>).getValue();
         continue;
       }
 
-      if (ValueProcessor.isBaseEntity(values[value])) {
-        newValue[columnName] = ValueProcessor.extractPrimaryKeyValue(values[value] as BaseEntity);
+      if (relation && ValueProcessor.isEntityInstance(rawValue)) {
+        newValue[columnName] = ValueProcessor.extractPrimaryKeyValue(rawValue);
         continue;
       }
 
-      newValue[columnName] = values[value];
+      newValue[columnName] = rawValue;
     }
 
     return newValue;
@@ -119,17 +111,33 @@ export class ValueProcessor {
     return extendsFrom(ValueObject, value?.constructor?.prototype);
   }
 
-  private static isBaseEntity(value: any): boolean {
-    return value instanceof BaseEntity;
+  private static isEntityInstance(value: any): boolean {
+    if (!value || typeof value !== 'object') {
+      return false;
+    }
+
+    if (value instanceof BaseEntity) {
+      return true;
+    }
+
+    const entityStorage = EntityStorage.getInstance();
+    return !!entityStorage.get(value.constructor);
+  }
+
+  private static getOwningRelation(propertyKey: string, options: Options): Relationship<any> | undefined {
+    return options.relations?.find((relation) =>
+      relation.propertyKey === propertyKey &&
+      (relation.relation === 'many-to-one' || relation.relation === 'one-to-one-owner')
+    );
   }
 
   /**
    * Extracts the primary key value from an entity using cached metadata.
    * Supports custom primary keys that are not named 'id'.
    */
-  private static extractPrimaryKeyValue(entity: BaseEntity): any {
+  private static extractPrimaryKeyValue(entity: object): any {
     const entityStorage = EntityStorage.getInstance();
-    const options = entityStorage.get(entity.constructor);
+    const options = entityStorage.get((entity as any).constructor);
     const pkName = options?._primaryKeyPropertyName || 'id';
     return (entity as any)[pkName];
   }
