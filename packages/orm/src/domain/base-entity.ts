@@ -145,8 +145,9 @@ export abstract class BaseEntity {
 
   public async save() {
     const qb = this.createQueryBuilder()
+    const wasPersisted = this.$_isPersisted;
 
-    if (this.$_isPersisted) {
+    if (wasPersisted) {
       qb.update(this._changedValues);
       qb.setInstance(this)
       // Use cached primary key property name instead of hardcoded 'id'
@@ -160,6 +161,11 @@ export abstract class BaseEntity {
     }
 
     await qb.execute()
+
+    if (!wasPersisted) {
+      this.$_isPersisted = true;
+    }
+
     qb.callHook('afterCreate', this)
     qb.callHook('afterUpdate', this)
     this._oldValues = {
