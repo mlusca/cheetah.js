@@ -4,6 +4,7 @@ import { BaseEntity } from '../../src/domain/base-entity';
 import { Entity } from '../../src/decorators/entity.decorator';
 import { Property } from '../../src/decorators/property.decorator';
 import { PrimaryKey } from '../../src/decorators/primary-key.decorator';
+import { Repository } from '../../src/repository/Repository';
 
 const USER_TABLE = `
   CREATE TABLE "test_user" (
@@ -18,6 +19,14 @@ const ORDER_TABLE = `
     "id" SERIAL PRIMARY KEY,
     "user_id" INTEGER NOT NULL,
     "total" NUMERIC(10,2) NOT NULL
+  );
+`;
+
+const REPOSITORY_USER_TABLE = `
+  CREATE TABLE "repository_user" (
+    "id" SERIAL PRIMARY KEY,
+    "name" VARCHAR(255) NOT NULL,
+    "email" VARCHAR(255) NOT NULL
   );
 `;
 
@@ -45,8 +54,26 @@ class TestOrder extends BaseEntity {
   total: number;
 }
 
+@Entity({ tableName: 'repository_user' })
+class RepositoryUser {
+  @PrimaryKey()
+  id: number;
+
+  @Property()
+  name: string;
+
+  @Property()
+  email: string;
+}
+
+class RepositoryUserRepository extends Repository<RepositoryUser> {
+  constructor() {
+    super(RepositoryUser);
+  }
+}
+
 describe('Transaction System', () => {
-  test('Given - Entity.save dentro de transação / When - Executar save / Then - Deve usar contexto transacional', async () => {
+  test('Given - Active Record com Entity.save dentro de transação / When - Executar save / Then - Deve usar contexto transacional', async () => {
     await withDatabase(
       [USER_TABLE],
       async (context) => {
@@ -73,7 +100,7 @@ describe('Transaction System', () => {
     );
   });
 
-  test('Given - Múltiplas operações em transação / When - Uma falha / Then - Todas devem fazer rollback', async () => {
+  test('Given - Active Record com múltiplas operações em transação / When - Uma falha / Then - Todas devem fazer rollback', async () => {
     await withDatabase(
       [USER_TABLE],
       async (context) => {
@@ -106,7 +133,7 @@ describe('Transaction System', () => {
     );
   });
 
-  test('Given - Entity.save e static create na mesma transação / When - Executar ambos / Then - Devem usar mesmo contexto transacional', async () => {
+  test('Given - Active Record com Entity.save e static create na mesma transação / When - Executar ambos / Then - Devem usar mesmo contexto transacional', async () => {
     await withDatabase(
       [USER_TABLE],
       async (context) => {
@@ -127,6 +154,67 @@ describe('Transaction System', () => {
         expect(users.rows).toHaveLength(2);
         expect(users.rows[0].name).toBe('John');
         expect(users.rows[1].name).toBe('Jane');
+      },
+      {
+        entityFile: 'packages/orm/test/transaction/transaction.spec.ts',
+      }
+    );
+  });
+
+  test('Given - Repository com entidade plain dentro de transação / When - Criar e buscar no mesmo contexto / Then - Deve usar o contexto transacional', async () => {
+    await withDatabase(
+      [REPOSITORY_USER_TABLE],
+      async (context) => {
+        const repository = new RepositoryUserRepository();
+
+        await context.orm.transaction(async () => {
+          await repository.create({
+            id: 1,
+            name: 'Repository User',
+            email: 'repository@test.com',
+          });
+
+          const created = await repository.findById(1);
+
+          expect(created).toBeDefined();
+          expect(created).toBeInstanceOf(RepositoryUser);
+          expect(created?.name).toBe('Repository User');
+        });
+
+        const saved = await context.executeSql('SELECT * FROM "repository_user" WHERE id = 1');
+        expect(saved.rows).toHaveLength(1);
+        expect(saved.rows[0].name).toBe('Repository User');
+      },
+      {
+        entityFile: 'packages/orm/test/transaction/transaction.spec.ts',
+      }
+    );
+  });
+
+  test('Given - Repository com entidade plain em transação / When - O callback falha / Then - Deve fazer rollback', async () => {
+    await withDatabase(
+      [REPOSITORY_USER_TABLE],
+      async (context) => {
+        const repository = new RepositoryUserRepository();
+
+        try {
+          await context.orm.transaction(async () => {
+            await repository.create({
+              id: 1,
+              name: 'Repository User',
+              email: 'repository@test.com',
+            });
+
+            throw new Error('Simulated repository error');
+          });
+
+          expect(true).toBe(false);
+        } catch (error: any) {
+          expect(error.message).toBe('Simulated repository error');
+        }
+
+        const saved = await context.executeSql('SELECT * FROM "repository_user" WHERE id = 1');
+        expect(saved.rows).toHaveLength(0);
       },
       {
         entityFile: 'packages/orm/test/transaction/transaction.spec.ts',

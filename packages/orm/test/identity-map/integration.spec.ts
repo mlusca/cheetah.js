@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { app, execute, purgeDatabase, startDatabase } from '../node-database';
-import { BaseEntity, Entity, ManyToOne, OneToMany, PrimaryKey, Property } from '../../src';
+import { BaseEntity, Entity, ManyToOne, OneToMany, PrimaryKey, Property, Repository } from '../../src';
 import { identityMapContext } from '../../src/identity-map';
 
 describe('Identity Map Integration', () => {
@@ -16,6 +16,13 @@ describe('Identity Map Integration', () => {
       "id" SERIAL PRIMARY KEY,
       "title" varchar(255) NOT NULL,
       "user_id" integer REFERENCES "user" ("id")
+    );
+  `;
+
+  const DDL_REPOSITORY_USER = `
+    CREATE TABLE "repository_identity_user" (
+      "id" SERIAL PRIMARY KEY,
+      "email" varchar(255) NOT NULL
     );
   `;
 
@@ -46,10 +53,26 @@ describe('Identity Map Integration', () => {
     user: User;
   }
 
+  @Entity({ tableName: 'repository_identity_user' })
+  class RepositoryIdentityUser {
+    @PrimaryKey()
+    id: number;
+
+    @Property()
+    email: string;
+  }
+
+  class RepositoryIdentityUserRepository extends Repository<RepositoryIdentityUser> {
+    constructor() {
+      super(RepositoryIdentityUser);
+    }
+  }
+
   beforeEach(async () => {
     await startDatabase();
     await execute(DDL_USER);
     await execute(DDL_POST);
+    await execute(DDL_REPOSITORY_USER);
   });
 
   afterEach(async () => {
@@ -58,7 +81,7 @@ describe('Identity Map Integration', () => {
   });
 
   describe('Given an identity map context', () => {
-    test('When querying same entity twice, Then returns same instance', async () => {
+    test('When querying same entity twice through Active Record, Then returns same instance', async () => {
       await identityMapContext.run(async () => {
         // Given
         await User.create({ id: 1, email: 'test@test.com' });
@@ -72,6 +95,21 @@ describe('Identity Map Integration', () => {
         expect(user2).toBeDefined();
         expect(user1).toBe(user2); // Same instance
         expect(user1 === user2).toBe(true);
+      });
+    });
+
+    test('When querying same entity twice through Repository, Then returns same instance', async () => {
+      await identityMapContext.run(async () => {
+        const repository = new RepositoryIdentityUserRepository();
+        await repository.create({ id: 1, email: 'repo@test.com' });
+
+        const user1 = await repository.findById(1);
+        const user2 = await repository.findById(1);
+
+        expect(user1).toBeDefined();
+        expect(user2).toBeDefined();
+        expect(user1).toBeInstanceOf(RepositoryIdentityUser);
+        expect(user1).toBe(user2);
       });
     });
 
@@ -160,7 +198,6 @@ describe('Identity Map Integration', () => {
           { load: ['user'], loadStrategy: 'joined' }
         );
         const user = await User.findOne({ id: 1 });
-        console.log(post?.user, '====lu', user, 'lucas');
         // Then
         expect(post?.user).toBe(user);
       });
@@ -186,7 +223,7 @@ describe('Identity Map Integration', () => {
   });
 
   describe('Given no identity map context', () => {
-    test('When querying same entity twice, Then returns different instances', async () => {
+    test('When querying same entity twice through Active Record, Then returns different instances', async () => {
       // Given
       await User.create({ id: 1, email: 'test@test.com' });
 
@@ -199,6 +236,19 @@ describe('Identity Map Integration', () => {
       expect(user2).toBeDefined();
       expect(user1).not.toBe(user2); // Different instances
       expect(user1 === user2).toBe(false);
+    });
+
+    test('When querying same entity twice through Repository, Then returns different instances', async () => {
+      const repository = new RepositoryIdentityUserRepository();
+      await repository.create({ id: 1, email: 'repo@test.com' });
+
+      const user1 = await repository.findById(1);
+      const user2 = await repository.findById(1);
+
+      expect(user1).toBeDefined();
+      expect(user2).toBeDefined();
+      expect(user1).toBeInstanceOf(RepositoryIdentityUser);
+      expect(user1).not.toBe(user2);
     });
   });
 

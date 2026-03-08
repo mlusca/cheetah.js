@@ -6,10 +6,76 @@ sidebar_position: 2
 
 Entities are classes that map to database tables.
 
+## `@Entity()` Is the Common Base
+
+Use the `@Entity()` decorator in both ORM styles:
+
+- `Active Record`: entity extends `BaseEntity`
+- `Repository`: entity can be a plain class
+
+`@Entity()` is what registers the class in the ORM. Extending `BaseEntity` is only about adding the Active Record API.
+
+## Two Entity Shapes
+
+### 1. Active Record entity
+
+Use this shape when the entity itself should expose persistence methods.
+
+```ts
+import { Entity, PrimaryKey, Property, BaseEntity } from '@carno.js/orm';
+
+@Entity()
+export class User extends BaseEntity {
+  @PrimaryKey({ autoIncrement: true })
+  id: number;
+
+  @Property()
+  name: string;
+
+  @Property({ unique: true })
+  email: string;
+}
+```
+
+This gives you:
+
+- `User.find()`, `User.findOne()`, `User.create()`
+- `user.save()`, `user.remove()`, `user.isPersisted()`
+- dirty tracking for instance updates
+
+### 2. Repository-oriented entity
+
+Use this shape when persistence should stay outside the entity class.
+
+```ts
+import { Entity, PrimaryKey, Property } from '@carno.js/orm';
+
+@Entity()
+export class User {
+  @PrimaryKey({ autoIncrement: true })
+  id: number;
+
+  @Property()
+  name: string;
+
+  @Property({ unique: true })
+  email: string;
+}
+```
+
+This does **not** give you:
+
+- `User.find()`
+- `user.save()`
+- `user.remove()`
+- dirty tracking
+
+Use a `Repository<User>` for database access in this model.
+
 ## Defining an Entity
 
 Use the `@Entity()` decorator. By default, the table name is derived from the class name (`snake_case`).
-Extending `BaseEntity` is optional and is only required if you want to use the Active Record API.
+If you want Active Record methods, extend `BaseEntity`. If you want Repository-only usage, a plain class is enough.
 
 ```ts
 import { Entity, PrimaryKey, Property, BaseEntity } from '@carno.js/orm';

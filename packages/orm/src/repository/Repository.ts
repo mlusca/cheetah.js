@@ -1,4 +1,3 @@
-import { BaseEntity } from '../domain/base-entity';
 import { SqlBuilder } from '../SqlBuilder';
 import {
   FilterQuery,
@@ -28,10 +27,10 @@ import {
  * }
  * ```
  */
-export abstract class Repository<T extends BaseEntity> {
-  protected readonly entityClass: { new (): T } & typeof BaseEntity;
+export abstract class Repository<T extends object> {
+  protected readonly entityClass: new () => T;
 
-  constructor(entityClass: { new (): T } & typeof BaseEntity) {
+  constructor(entityClass: new () => T) {
     this.entityClass = entityClass;
   }
 
@@ -39,7 +38,7 @@ export abstract class Repository<T extends BaseEntity> {
    * Creates a new query builder for the entity.
    */
   protected createQueryBuilder(): SqlBuilder<T> {
-    return this.entityClass.createQueryBuilder<T>();
+    return new SqlBuilder<T>(this.entityClass);
   }
 
   /**
@@ -57,18 +56,16 @@ export abstract class Repository<T extends BaseEntity> {
   async find<Hint extends string = never>(options: RepositoryFindOptions<T, Hint>): Promise<T[]> {
     const { where, orderBy, limit, offset, fields, load, loadStrategy, cache } = options;
 
-    return this.entityClass.find<T, Hint>(
-      where || {},
-      {
-        orderBy: orderBy,
-        limit,
-        offset,
-        fields: fields,
-        load: load,
-        loadStrategy,
-        cache,
-      }
-    );
+    return this.createQueryBuilder()
+      .select(fields as any)
+      .setStrategy(loadStrategy)
+      .load(load as unknown as string[])
+      .where(where || {})
+      .limit(limit)
+      .offset(offset)
+      .orderBy(orderBy as any)
+      .cache(cache)
+      .executeAndReturnAll();
   }
 
   /**
@@ -76,18 +73,15 @@ export abstract class Repository<T extends BaseEntity> {
    * Returns undefined if not found.
    */
   async findOne<Hint extends string = never>(options: RepositoryFindOneOptions<T, Hint>): Promise<T | undefined> {
-    const { where, orderBy, fields, load, loadStrategy, cache } = options;
+    const { where, fields, load, loadStrategy, cache } = options;
 
-    return this.entityClass.findOne<T, Hint>(
-      where || {},
-      {
-        orderBy: orderBy,
-        fields: fields,
-        load: load,
-        loadStrategy,
-        cache,
-      }
-    );
+    return this.createQueryBuilder()
+      .select(fields as any)
+      .setStrategy(loadStrategy)
+      .load(load as unknown as string[])
+      .where(where || {})
+      .cache(cache)
+      .executeAndReturnFirst();
   }
 
   /**
@@ -99,16 +93,14 @@ export abstract class Repository<T extends BaseEntity> {
   ): Promise<T> {
     const { where, orderBy, fields, load, loadStrategy, cache } = options;
 
-    return this.entityClass.findOneOrFail<T, Hint>(
-      where || {},
-      {
-        orderBy: orderBy,
-        fields: fields,
-        load: load,
-        loadStrategy,
-        cache,
-      }
-    );
+    return this.createQueryBuilder()
+      .select(fields as any)
+      .setStrategy(loadStrategy)
+      .load(load as unknown as string[])
+      .where(where || {})
+      .orderBy(orderBy as any)
+      .cache(cache)
+      .executeAndReturnFirstOrFail();
   }
 
   /**
@@ -119,15 +111,15 @@ export abstract class Repository<T extends BaseEntity> {
   ): Promise<T[]> {
     const { orderBy, limit, offset, fields, load, loadStrategy, cache } = options || {};
 
-    return this.entityClass.findAll<T>({
-      orderBy: orderBy,
-      limit,
-      offset,
-      fields: fields,
-      load: load,
-      loadStrategy,
-      cache,
-    });
+    return this.createQueryBuilder()
+      .select(fields as any)
+      .setStrategy(loadStrategy)
+      .load(load as unknown as string[])
+      .offset(offset)
+      .limit(limit)
+      .orderBy(orderBy as any)
+      .cache(cache)
+      .executeAndReturnAll();
   }
 
   /**
@@ -151,7 +143,9 @@ export abstract class Repository<T extends BaseEntity> {
   async create(
     data: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>
   ): Promise<T> {
-    return this.entityClass.create<T>(data);
+    return this.createQueryBuilder()
+      .insert(data)
+      .executeAndReturnFirstOrFail();
   }
 
   /**

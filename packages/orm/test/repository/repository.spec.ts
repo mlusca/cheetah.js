@@ -41,6 +41,15 @@ describe('Repository Pattern', () => {
     );
   `;
 
+  const DDL_PLAIN_COURSE = `
+    CREATE TABLE "plain_course" (
+      "id" SERIAL PRIMARY KEY,
+      "name" varchar(255) NOT NULL,
+      "internal_notes" text,
+      "is_active" boolean DEFAULT true
+    );
+  `;
+
   @Entity()
   class Course extends BaseEntity {
     @PrimaryKey()
@@ -101,6 +110,21 @@ describe('Repository Pattern', () => {
     course: Course;
   }
 
+  @Entity({ tableName: 'plain_course' })
+  class PlainCourse {
+    @PrimaryKey()
+    id: number;
+
+    @Property()
+    name: string;
+
+    @Property({ hidden: true })
+    internalNotes: string;
+
+    @Property()
+    isActive: boolean;
+  }
+
   class CourseRepository extends Repository<Course> {
     constructor() {
       super(Course);
@@ -150,6 +174,12 @@ describe('Repository Pattern', () => {
     }
   }
 
+  class PlainCourseRepository extends Repository<PlainCourse> {
+    constructor() {
+      super(PlainCourse);
+    }
+  }
+
   const seedCoursesForDateFilter = async () => {
     await execute(`
       INSERT INTO "course" ("name", "description", "is_active", "created_at")
@@ -166,6 +196,7 @@ describe('Repository Pattern', () => {
   let courseRepo: CourseRepository;
   let lessonRepo: LessonRepository;
   let userCourseRepo: UserCourseRepository;
+  let plainCourseRepo: PlainCourseRepository;
 
   beforeEach(async () => {
     console.log('Preparing repository tests...');
@@ -173,9 +204,11 @@ describe('Repository Pattern', () => {
     await execute(DDL_COURSE);
     await execute(DDL_LESSON);
     await execute(DDL_USER_COURSE);
+    await execute(DDL_PLAIN_COURSE);
     courseRepo = new CourseRepository();
     lessonRepo = new LessonRepository();
     userCourseRepo = new UserCourseRepository();
+    plainCourseRepo = new PlainCourseRepository();
     console.log('Repository tests prepared!');
   });
 
@@ -219,6 +252,37 @@ describe('Repository Pattern', () => {
       expect(lesson.title).toBe('Introduction to TypeScript');
       expect(lesson.orderIndex).toBe(0);
       expect(lesson.isPublished).toBe(true);
+    });
+
+    test('should support repositories for entities without BaseEntity and keep rich serialization', async () => {
+      const created = await plainCourseRepo.create({
+        name: 'Repository-only entity',
+        internalNotes: 'should stay hidden',
+        isActive: true,
+      });
+
+      expect(created).toBeInstanceOf(PlainCourse);
+      expect((created as any).save).toBeUndefined();
+      expect(created.id).toBeGreaterThan(0);
+      expect(JSON.parse(JSON.stringify(created))).toEqual({
+        id: created.id,
+        name: 'Repository-only entity',
+        isActive: true,
+      });
+
+      const found = await plainCourseRepo.findById(created.id);
+      expect(found).toBeInstanceOf(PlainCourse);
+      expect(found?.name).toBe('Repository-only entity');
+
+      await plainCourseRepo.updateById(created.id, {
+        name: 'Updated plain entity',
+      });
+
+      const updated = await plainCourseRepo.findById(created.id);
+      expect(updated?.name).toBe('Updated plain entity');
+
+      await plainCourseRepo.deleteById(created.id);
+      expect(await plainCourseRepo.findById(created.id)).toBeUndefined();
     });
   });
 
