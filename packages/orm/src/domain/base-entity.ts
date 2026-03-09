@@ -157,7 +157,10 @@ export abstract class BaseEntity {
       // @ts-ignore
       qb.where({ [pkName]: this._oldValues[pkName] })
     } else {
-      qb.insert(this._oldValues)
+      qb.insert({
+        ...this._oldValues,
+        ...this._changedValues,
+      })
     }
 
     await qb.execute()

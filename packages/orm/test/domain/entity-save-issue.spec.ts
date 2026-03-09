@@ -11,6 +11,17 @@ const DLL = `
     );
 `;
 
+const BATTLE_UNIT_SNAPSHOT_DDL = `
+    CREATE TABLE "battle_unit_snapshot"
+    (
+        "id"          SERIAL PRIMARY KEY,
+        "side"        varchar(32) NOT NULL,
+        "slot_number" integer NOT NULL,
+        "name"        varchar(255) NOT NULL,
+        "hp"          integer NOT NULL
+    );
+`;
+
 @Entity()
 class UserLibrary extends BaseEntity {
     @PrimaryKey()
@@ -21,6 +32,24 @@ class UserLibrary extends BaseEntity {
 
     @Property()
     isFavorite: boolean;
+}
+
+@Entity()
+class BattleUnitSnapshot extends BaseEntity {
+    @PrimaryKey()
+    id: number;
+
+    @Property()
+    side: string = 'ALLY';
+
+    @Property()
+    slotNumber: number = 0;
+
+    @Property()
+    name: string = 'Unknown';
+
+    @Property()
+    hp: number = 100;
 }
 
 describe('Entity save() method issue', () => {
@@ -55,6 +84,30 @@ describe('Entity save() method issue', () => {
         // Then: Library should be updated in database
         const updated = await UserLibrary.findOne({ id: 1 });
         expect(updated!.isFavorite).toBe(true);
+    });
+
+    test('should insert changed values for a new entity even when fields had default initializers', async () => {
+        await execute(BATTLE_UNIT_SNAPSHOT_DDL);
+
+        const snapshot = new BattleUnitSnapshot();
+        snapshot.id = 1;
+        snapshot.side = 'ENEMY';
+        snapshot.slotNumber = 3;
+        snapshot.name = 'Goblin';
+        snapshot.hp = 80;
+
+        await snapshot.save();
+
+        const inserted = await BattleUnitSnapshot.findOne({ id: 1 });
+
+        expect(inserted).toBeInstanceOf(BattleUnitSnapshot);
+        expect(inserted).toMatchObject({
+            id: 1,
+            side: 'ENEMY',
+            slotNumber: 3,
+            name: 'Goblin',
+            hp: 80,
+        });
     });
 
 
