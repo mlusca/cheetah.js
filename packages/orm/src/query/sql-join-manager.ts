@@ -82,8 +82,10 @@ export class SqlJoinManager<T> {
   }
 
   applyJoin(relationShip: Relationship<any>, value: FilterQuery<any>, alias: string): string {
+    const normalizedValue = this.normalizeRelationFilterValue(relationShip, value);
+
     if (relationShip.relation === 'many-to-many') {
-      return this.applyManyToManyJoin(relationShip, value, alias);
+      return this.applyManyToManyJoin(relationShip, normalizedValue, alias);
     }
 
     const { tableName, schema } = this.getTableName();
@@ -98,7 +100,7 @@ export class SqlJoinManager<T> {
 
     const originPrimaryKey = this.getPrimaryKey();
     const joinAlias = this.getAliasCallback(joinTableName);
-    const joinWhere = this.conditionBuilder.build(value, joinAlias, relationShip.entity() as Function);
+    const joinWhere = this.conditionBuilder.build(normalizedValue, joinAlias, relationShip.entity() as Function);
     const on = this.buildJoinOn(relationShip, alias, joinAlias, originPrimaryKey);
 
     if (this.statements.strategy === 'joined') {
@@ -197,6 +199,55 @@ export class SqlJoinManager<T> {
 
       return joinWhere;
     }
+  }
+
+  private normalizeRelationFilterValue(
+    relationShip: Relationship<any>,
+    value: FilterQuery<any>,
+  ): FilterQuery<any> {
+    const relatedEntity = this.entityStorage.get(relationShip.entity() as Function);
+    const primaryKey = relatedEntity?._primaryKeyPropertyName || 'id';
+
+    return this.wrapImplicitPrimaryKeyOperators(value, primaryKey);
+  }
+
+  private wrapImplicitPrimaryKeyOperators(value: any, primaryKey: string): any {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return value;
+    }
+
+    const entries = Object.entries(value);
+
+    if (entries.length === 0) {
+      return value;
+    }
+
+    const keys = entries.map(([key]) => key);
+    const hasFieldKeys = keys.some((key) => !key.startsWith('$'));
+    const isImplicitPrimaryKeyOperatorObject =
+      !hasFieldKeys &&
+      keys.every((key) => key !== '$and' && key !== '$or' && key !== '$exists' && key !== '$nexists');
+
+    if (isImplicitPrimaryKeyOperatorObject) {
+      return {
+        [primaryKey]: value,
+      };
+    }
+
+    const normalized: Record<string, any> = {};
+
+    for (const [key, nestedValue] of entries) {
+      if ((key === '$and' || key === '$or') && Array.isArray(nestedValue)) {
+        normalized[key] = nestedValue.map((branch) =>
+          this.wrapImplicitPrimaryKeyOperators(branch, primaryKey),
+        );
+        continue;
+      }
+
+      normalized[key] = nestedValue;
+    }
+
+    return normalized;
   }
 
   async handleSelectJoin(entities: any, models): Promise<void> {
