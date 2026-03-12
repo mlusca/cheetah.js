@@ -4,6 +4,7 @@ import { EntityStorage, Options } from '../domain/entities';
 import { Relationship } from '../driver/driver.interface';
 import { ValueOrInstance } from '../driver/driver.interface';
 import { extendsFrom } from '../utils';
+import { isUpdateExpression, type UpdateData } from '../query/update-expression';
 
 export class ValueProcessor {
   static processForInsert<T>(
@@ -14,14 +15,14 @@ export class ValueProcessor {
   }
 
   static processForUpdate<T>(
-    values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>,
+    values: UpdateData<T>,
     options: Options,
   ): Record<string, any> {
     return ValueProcessor.processValues(values, options);
   }
 
   private static processValues<T>(
-    values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>,
+    values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }> | UpdateData<T>,
     options: Options,
   ): Record<string, any> {
     const newValue = {};
@@ -91,14 +92,14 @@ export class ValueProcessor {
       }
 
       const columnName = property.options.columnName;
-      if (columnName in values) {
+      if (columnName in values && !isUpdateExpression(values[columnName])) {
         instance[key] = values[columnName];
       }
     });
 
     if (relations) {
       for (const relation of relations) {
-        if (relation.relation === 'many-to-one') {
+        if (relation.relation === 'many-to-one' && !isUpdateExpression(values[relation.columnName])) {
           instance[relation.propertyKey] = values[relation.columnName];
         }
       }

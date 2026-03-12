@@ -8,6 +8,7 @@ import {
 } from "./driver.interface";
 import { transactionContext } from "../transaction/transaction-context";
 import { escapeString } from "../utils/sql-escape";
+import { isUpdateExpression } from "../query/update-expression";
 
 export abstract class BunDriverBase implements Partial<DriverInterface> {
   protected sql: SQL;
@@ -318,7 +319,13 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
 
   protected buildUpdateSql(table: string, values: any, alias: string): string {
     const sets = Object.entries(values)
-      .map(([key, value]) => `${key} = ${this.toDatabaseValue(value)}`)
+      .map(([key, value]) => {
+        const serializedValue = isUpdateExpression(value)
+          ? value.resolve(key, (operand) => this.toDatabaseValue(operand))
+          : this.toDatabaseValue(value);
+
+        return `${key} = ${serializedValue}`;
+      })
       .join(", ");
 
     return `UPDATE ${table} as ${alias} SET ${sets}`;

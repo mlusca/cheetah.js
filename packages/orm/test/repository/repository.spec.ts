@@ -3,6 +3,7 @@ import { app, execute, purgeDatabase, startDatabase } from '../node-database';
 import {
   BaseEntity,
   Entity,
+  expr,
   ManyToOne,
   OneToMany,
   PrimaryKey,
@@ -601,6 +602,97 @@ describe('Repository Pattern', () => {
       // Then
       const updated = await courseRepo.findById(course.id);
       expect(updated?.description).toBe('Updated via shorthand');
+    });
+
+    test('should support computed updates with repository update payloads', async () => {
+      const course = await courseRepo.create({
+        name: 'Computed Update Course',
+        description: 'Description',
+      });
+
+      const lesson = await lessonRepo.create({
+        courseId: course.id,
+        title: 'Computed Lesson',
+        content: 'Content',
+        orderIndex: 1,
+        isPublished: false,
+      });
+
+      await lessonRepo.updateById(lesson.id, {
+        orderIndex: expr((prev) => prev.plus(2)),
+        isPublished: true,
+      });
+
+      const updated = await lessonRepo.findById(lesson.id);
+
+      expect(updated?.orderIndex).toBe(3);
+      expect(updated?.isPublished).toBe(true);
+    });
+
+    test('should support bulk computed updates with different formulas', async () => {
+      const course = await courseRepo.create({
+        name: 'Bulk Computed Update Course',
+        description: 'Description',
+      });
+
+      const lessonA = await lessonRepo.create({
+        courseId: course.id,
+        title: 'Lesson A',
+        content: 'Content',
+        orderIndex: 2,
+      });
+
+      const lessonB = await lessonRepo.create({
+        courseId: course.id,
+        title: 'Lesson B',
+        content: 'Content',
+        orderIndex: 4,
+      });
+
+      await lessonRepo.update({ courseId: course.id }, {
+        orderIndex: expr((prev) => prev.times(2)),
+      });
+
+      let updated = await lessonRepo.find({
+        where: { courseId: course.id },
+        orderBy: { id: 'ASC' },
+      });
+
+      expect(updated.map((item) => item.orderIndex)).toEqual([4, 8]);
+
+      await lessonRepo.update({ courseId: course.id }, {
+        orderIndex: expr((prev) => prev.minus(1)),
+      });
+
+      updated = await lessonRepo.find({
+        where: { courseId: course.id },
+        orderBy: { id: 'ASC' },
+      });
+
+      expect(updated.map((item) => item.orderIndex)).toEqual([3, 7]);
+      expect(updated.map((item) => item.id)).toEqual([lessonA.id, lessonB.id]);
+    });
+
+    test('should support div expressions after previous computed updates', async () => {
+      const course = await courseRepo.create({
+        name: 'Division Course',
+        description: 'Description',
+      });
+
+      const lesson = await lessonRepo.create({
+        courseId: course.id,
+        title: 'Division Lesson',
+        content: 'Content',
+        orderIndex: 20,
+      });
+
+      await lessonRepo.updateById(lesson.id, {
+        orderIndex: expr((prev) => prev.div(4)),
+      });
+
+      const updated = await lessonRepo.findById(lesson.id);
+
+      expect(updated?.orderIndex).toBe(5);
     });
   });
 

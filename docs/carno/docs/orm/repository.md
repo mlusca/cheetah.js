@@ -143,6 +143,29 @@ The `Repository` class comes with a comprehensive set of built-in methods for co
   );
   ```
 
+  Computed updates are also supported with `expr(...)`.
+  ```typescript
+  import { expr } from '@carno.js/orm';
+
+  await this.userRepository.update(
+    { id: 1 },
+    { experience: expr((prev) => prev.plus(100)) }
+  );
+  ```
+
+  Use this when the new value depends on the current value already stored in the row and you want the database to do the calculation directly.
+  The repository delegates this to the ORM query builder, so the operation is still executed as a single SQL `UPDATE`.
+
+  For the example above, the SQL generated is:
+  ```sql
+  UPDATE "user" as u1
+  SET experience = experience + 100
+  WHERE (u1.id = 1)
+  ```
+
+  `prev` is not a loaded entity value. It is an expression builder for the current SQL column value.
+  Available arithmetic helpers are `plus`, `minus`, `times`, and `div`.
+
 - **`updateById(id, data)`**: Updates a specific entity by ID.
 
 ### Deleting Data

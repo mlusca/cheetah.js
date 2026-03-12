@@ -116,7 +116,7 @@ const users = await User.find(
 
 ## Updating Entities
 
-To update an entity, fetch it, modify its properties, and call `save()`.
+To update a loaded entity, fetch it, modify its properties, and call `save()`.
 
 ```typescript
 const user = await User.findOneOrFail({ id: 1 });
@@ -124,15 +124,76 @@ user.name = 'Updated Name';
 await user.save(); // Updates the record
 ```
 
-## Deleting Entities
-
-Currently, deletion is performed using the Query Builder or Repository.
+For bulk updates, Active Record also exposes a static `update(where, data)`.
+This is the Active Record equivalent of doing a repository bulk update without first loading each entity instance.
 
 ```typescript
-await User.createQueryBuilder()
-  .delete()
-  .where({ id: 1 })
-  .execute();
+await User.update(
+  { isActive: true },
+  { isActive: false }
+);
+```
+
+You can also use computed updates with `expr(...)`.
+
+```typescript
+import { expr } from '@carno.js/orm';
+
+await User.update(
+  { id: 1 },
+  { experience: expr((prev) => prev.plus(50)) }
+);
+```
+
+Why use this:
+
+- when the update affects many rows
+- when the new value depends on the current database value
+- when you want to avoid `find -> mutate -> save` for a simple arithmetic change
+
+What it turns into:
+
+```sql
+UPDATE "user" as u1
+SET experience = experience + 50
+WHERE (u1.id = 1)
+```
+
+`prev` is not the in-memory property value from an entity instance.
+It is a builder for the current SQL column value, so `prev.plus(50)` becomes `column = column + 50`.
+
+Supported arithmetic helpers:
+
+- `prev.plus(value)`
+- `prev.minus(value)`
+- `prev.times(value)`
+- `prev.div(value)`
+
+Current limitation:
+
+- Use the explicit helper methods above.
+- The ORM does not parse arbitrary JavaScript like `prev => prev + 50`.
+
+## Deleting Entities
+
+You can delete a loaded entity instance with `remove()`.
+
+```typescript
+const user = await User.findOneOrFail({ id: 1 });
+await user.remove();
+```
+
+For bulk deletion, use the static `delete(where)`.
+
+```typescript
+await User.delete({ id: 1 });
+```
+
+That becomes a direct SQL delete similar to:
+
+```sql
+DELETE FROM "user" AS u1
+WHERE (u1.id = 1)
 ```
 
 If deletion through repository fits your code organization better, it is fine to mix Active Record entities with repositories. What matters is that `BaseEntity` is required only for the Active Record API itself.

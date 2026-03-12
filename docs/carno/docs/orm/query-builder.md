@@ -93,6 +93,73 @@ await User.createQueryBuilder()
   .execute();
 ```
 
+For fields whose new value depends on the current value stored in the database, use `expr(...)`.
+
+This is useful when you want the database itself to perform the math in a single `UPDATE`, instead of:
+
+1. loading the row
+2. changing the value in JavaScript
+3. saving it back
+
+That pattern is slower and easier to race under concurrent writes. `expr(...)` keeps the calculation inside SQL.
+
+```typescript
+import { expr } from '@carno.js/orm';
+
+await User.createQueryBuilder()
+  .update({ experience: expr((prev) => prev.plus(25)) })
+  .where({ id: 1 })
+  .execute();
+```
+
+That produces SQL in this shape:
+
+```sql
+UPDATE "user" as u1
+SET experience = experience + 25
+WHERE (u1.id = 1)
+```
+
+Important details:
+
+- The callback parameter is **not** the current JavaScript value from the entity.
+- `prev` is a small expression builder that tells the ORM to reference the current column in SQL.
+- In other words, `prev.plus(25)` becomes `column = column + 25`.
+- The callback is used only to build SQL; it does not read the row into memory.
+
+Available arithmetic helpers:
+
+- `prev.plus(value)`
+- `prev.minus(value)`
+- `prev.times(value)`
+- `prev.div(value)`
+
+Example with more than one formula:
+
+```typescript
+await User.createQueryBuilder()
+  .update({
+    experience: expr((prev) => prev.plus(100)),
+    coins: expr((prev) => prev.minus(5)),
+  })
+  .where({ id: 1 })
+  .execute();
+```
+
+Which becomes:
+
+```sql
+UPDATE "user" as u1
+SET experience = experience + 100,
+    coins = coins - 5
+WHERE (u1.id = 1)
+```
+
+Current limitation:
+
+- The ORM does **not** parse arbitrary JavaScript like `prev => prev + 25`.
+- Use the explicit helpers above so the ORM can safely generate SQL and keep autocomplete intact.
+
 ## Delete Operations
 
 ```typescript

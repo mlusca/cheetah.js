@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, jest, setSystemTime, test } from 'bun:test'
 import { app, execute, mockLogger, purgeDatabase, startDatabase } from '../node-database';
-import { BaseEntity, Entity, ManyToOne, OneToMany, PrimaryKey, Property } from '../../src';
+import { BaseEntity, Entity, expr, ManyToOne, OneToMany, PrimaryKey, Property } from '../../src';
 import { Email } from '../../src/common/email.vo';
 import { v4 } from 'uuid';
 
@@ -52,6 +52,18 @@ class UserCamel extends BaseEntity {
     addressUser: Address;
 }
 
+@Entity({ tableName: 'player_stats' })
+class PlayerStats extends BaseEntity {
+    @PrimaryKey()
+    id: number;
+
+    @Property({ columnName: 'experience_points' })
+    experience: number;
+
+    @Property()
+    level: number;
+}
+
 describe('Creation, update and deletion of entities', () => {
     function expectLoggedSql(
         callIndex: number,
@@ -89,6 +101,15 @@ describe('Creation, update and deletion of entities', () => {
             "id"         SERIAL PRIMARY KEY,
             "address"    varchar(255) NOT NULL,
             "user_owner" integer REFERENCES "user" ("id")
+        );
+    `;
+
+    const DDL_PLAYER_STATS = `
+        CREATE TABLE "player_stats"
+        (
+            "id" SERIAL PRIMARY KEY,
+            "experience_points" integer NOT NULL DEFAULT 0,
+            "level" integer NOT NULL DEFAULT 1
         );
     `;
 
@@ -206,6 +227,146 @@ describe('Creation, update and deletion of entities', () => {
             postgres: "SQL: UPDATE \"public\".\"user\" as u1 SET email = 'updated@test.com' WHERE (u1.id = 1)",
             mysql: "SQL: UPDATE `user` as u1 SET email = 'updated@test.com' WHERE (u1.id = 1)",
         });
+    });
+
+    test('should support static active record update', async () => {
+        await User.create({
+            email: 'test@test.com',
+            id: 1,
+        });
+
+        await User.update({ id: 1 }, { email: 'updated-via-static@test.com' });
+
+        const result = await User.findOne({ id: 1 });
+
+        expect(result?.email).toEqual('updated-via-static@test.com');
+    });
+
+    test('should support static active record delete', async () => {
+        await User.create({
+            email: 'test@test.com',
+            id: 1,
+        });
+
+        await User.delete({ id: 1 });
+
+        const result = await User.findOne({ id: 1 });
+
+        expect(result).toBeUndefined();
+    });
+
+    test('should support computed updates through active record static update', async () => {
+        await purgeDatabase();
+        await startDatabase(import.meta.path);
+        await execute(DDL_PLAYER_STATS);
+
+        await PlayerStats.create({
+            id: 1,
+            experience: 10,
+            level: 1,
+        });
+
+        (mockLogger as jest.Mock).mockClear();
+
+        await PlayerStats.update({ id: 1 }, {
+            experience: expr((prev) => prev.plus(5)),
+            level: 2,
+        });
+
+        const result = await PlayerStats.findOne({ id: 1 });
+
+        expect(result?.experience).toEqual(15);
+        expect(result?.level).toEqual(2);
+        expect(mockLogger).toHaveBeenCalledTimes(2);
+        expectLoggedSql(0, {
+            postgres: 'SQL: UPDATE "public"."player_stats" as p1 SET experience_points = experience_points + 5, level = 2 WHERE (p1.id = 1)',
+            mysql: 'SQL: UPDATE `player_stats` as p1 SET experience_points = experience_points + 5, level = 2 WHERE (p1.id = 1)',
+        });
+    });
+
+    test('should support minus, times and div expressions through active record static update', async () => {
+        await purgeDatabase();
+        await startDatabase(import.meta.path);
+        await execute(DDL_PLAYER_STATS);
+
+        await PlayerStats.create({
+            id: 1,
+            experience: 12,
+            level: 1,
+        });
+
+        await PlayerStats.update({ id: 1 }, {
+            experience: expr((prev) => prev.minus(2)),
+        });
+        expect((await PlayerStats.findOne({ id: 1 }))?.experience).toEqual(10);
+
+        await PlayerStats.update({ id: 1 }, {
+            experience: expr((prev) => prev.times(3)),
+        });
+        expect((await PlayerStats.findOne({ id: 1 }))?.experience).toEqual(30);
+
+        await PlayerStats.update({ id: 1 }, {
+            experience: expr((prev) => prev.div(5)),
+        });
+        expect((await PlayerStats.findOne({ id: 1 }))?.experience).toEqual(6);
+    });
+
+    test('should support computed updates through query builder with columnName mapping', async () => {
+        await purgeDatabase();
+        await startDatabase(import.meta.path);
+        await execute(DDL_PLAYER_STATS);
+
+        await PlayerStats.create({
+            id: 1,
+            experience: 7,
+            level: 1,
+        });
+
+        (mockLogger as jest.Mock).mockClear();
+
+        await PlayerStats.createQueryBuilder()
+            .update({ experience: expr((prev) => prev.plus(3)) })
+            .where({ id: 1 })
+            .execute();
+
+        const result = await PlayerStats.findOne({ id: 1 });
+
+        expect(result?.experience).toEqual(10);
+        expect(mockLogger).toHaveBeenCalledTimes(2);
+        expectLoggedSql(0, {
+            postgres: 'SQL: UPDATE "public"."player_stats" as p1 SET experience_points = experience_points + 3 WHERE (p1.id = 1)',
+            mysql: 'SQL: UPDATE `player_stats` as p1 SET experience_points = experience_points + 3 WHERE (p1.id = 1)',
+        });
+    });
+
+    test('should support different formulas through query builder computed updates', async () => {
+        await purgeDatabase();
+        await startDatabase(import.meta.path);
+        await execute(DDL_PLAYER_STATS);
+
+        await PlayerStats.create({
+            id: 1,
+            experience: 9,
+            level: 1,
+        });
+
+        await PlayerStats.createQueryBuilder()
+            .update({ experience: expr((prev) => prev.times(2)) })
+            .where({ id: 1 })
+            .execute();
+        expect((await PlayerStats.findOne({ id: 1 }))?.experience).toEqual(18);
+
+        await PlayerStats.createQueryBuilder()
+            .update({ experience: expr((prev) => prev.minus(6)) })
+            .where({ id: 1 })
+            .execute();
+        expect((await PlayerStats.findOne({ id: 1 }))?.experience).toEqual(12);
+
+        await PlayerStats.createQueryBuilder()
+            .update({ experience: expr((prev) => prev.div(4)) })
+            .where({ id: 1 })
+            .execute();
+        expect((await PlayerStats.findOne({ id: 1 }))?.experience).toEqual(3);
     });
 
     test('should a find relationship', async () => {

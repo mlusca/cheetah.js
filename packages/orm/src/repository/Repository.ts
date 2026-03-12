@@ -5,6 +5,7 @@ import {
   FindOneOption,
   ValueOrInstance,
 } from '../driver/driver.interface';
+import type { UpdateData } from '../query/update-expression';
 
 /**
  * Generic Repository class for database operations.
@@ -153,7 +154,7 @@ export abstract class Repository<T extends object> {
    */
   async update(
     where: FilterQuery<T>,
-    data: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>
+    data: UpdateData<T>
   ): Promise<void> {
     await this.createQueryBuilder()
       .update(data)
@@ -166,7 +167,7 @@ export abstract class Repository<T extends object> {
    */
   async updateById(
     id: number | string,
-    data: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>
+    data: UpdateData<T>
   ): Promise<void> {
     await this.update({ id } as any, data);
   }

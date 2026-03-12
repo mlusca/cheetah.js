@@ -20,6 +20,7 @@ import { ModelTransformer } from './query/model-transformer';
 import { SqlColumnManager } from './query/sql-column-manager';
 import { SqlJoinManager } from './query/sql-join-manager';
 import { QueryCacheManager } from './cache/query-cache-manager';
+import type { UpdateData } from './query/update-expression';
 import type { Logger } from './logger';
 
 export class SqlBuilder<T> {
@@ -163,7 +164,7 @@ export class SqlBuilder<T> {
     return this;
   }
 
-  update(values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>): SqlBuilder<T> {
+  update(values: UpdateData<T>): SqlBuilder<T> {
     const { tableName, schema } = this.getTableName();
     const processedValues = ValueProcessor.processForUpdate(values, this.entity);
     this.statements.statement = 'update';
