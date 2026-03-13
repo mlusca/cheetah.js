@@ -28,6 +28,15 @@ const DDL_INVOICES = `
   );
 `;
 
+// This table has NO tenant_id column intentionally.
+const DDL_SHARED = `
+  CREATE TABLE "shared_config" (
+    "id" SERIAL PRIMARY KEY,
+    "key" varchar(255) NOT NULL,
+    "value" varchar(255) NOT NULL
+  );
+`;
+
 // ─── Entities ────────────────────────────────────────────────────────────────
 
 @Entity({ tableName: 'tenant_post' })
@@ -41,6 +50,25 @@ class TenantPost extends BaseEntity {
   @Property({ columnName: 'tenant_id' })
   @Tenant()
   tenantId: number;
+}
+
+// Entity WITHOUT @Tenant — should never have tenant conditions injected
+@Entity({ tableName: 'shared_config' })
+class SharedConfig extends BaseEntity {
+  @PrimaryKey()
+  id: number;
+
+  @Property()
+  key: string;
+
+  @Property()
+  value: string;
+}
+
+class SharedConfigRepository extends Repository<SharedConfig> {
+  constructor() {
+    super(SharedConfig);
+  }
 }
 
 @Entity({ tableName: 'tenant_invoice' })
@@ -73,13 +101,16 @@ class InvoiceRepository extends Repository<TenantInvoice> {
 describe('Tenant Isolation', () => {
   let postRepo: PostRepository;
   let invoiceRepo: InvoiceRepository;
+  let sharedRepo: SharedConfigRepository;
 
   beforeEach(async () => {
     await startDatabase();
     await execute(DDL_POSTS);
     await execute(DDL_INVOICES);
+    await execute(DDL_SHARED);
     postRepo = new PostRepository();
     invoiceRepo = new InvoiceRepository();
+    sharedRepo = new SharedConfigRepository();
   });
 
   afterEach(async () => {
@@ -304,6 +335,51 @@ describe('Tenant Isolation', () => {
 
       expect(Number(row1.rows[0].amount)).toBe(999);
       expect(Number(row2.rows[0].amount)).toBe(20); // unchanged
+    });
+  });
+
+  // ── Entities without @Tenant are unaffected by tenantContext ───────────────
+
+  describe('Entity without @Tenant inside tenantContext', () => {
+    test('SELECT on a non-tenant entity returns ALL rows even inside tenantContext.run()', async () => {
+      await execute(`INSERT INTO "shared_config" ("key","value") VALUES ('theme','dark'),('lang','en')`);
+
+      // Even with an active tenant context, entities without @Tenant must not receive
+      // any tenant condition — they are global/shared tables.
+      const rows = await tenantContext.run(99, () => sharedRepo.find({ where: {} as any }));
+
+      expect(rows).toHaveLength(2);
+    });
+
+    test('INSERT on a non-tenant entity does NOT inject a tenant column', async () => {
+      await tenantContext.run(99, async () => {
+        await sharedRepo.create({ key: 'feature_flag', value: 'on' });
+      });
+
+      const result = await execute(`SELECT * FROM "shared_config"`);
+      // Row must exist and must not have any unexpected extra columns
+      expect(result.rows).toHaveLength(1);
+      expect((result.rows[0] as any).key).toBe('feature_flag');
+    });
+
+    test('UPDATE on a non-tenant entity affects all matching rows, not just one tenant', async () => {
+      await execute(`INSERT INTO "shared_config" ("key","value") VALUES ('mode','a'),('mode','b')`);
+
+      // Tenant context is active, but SharedConfig has no @Tenant → no WHERE tenant filter
+      await tenantContext.run(42, () =>
+        sharedRepo.update({ key: 'mode' } as any, { value: 'updated' }),
+      );
+
+      const rows = await execute(`SELECT value FROM "shared_config"`);
+      expect(rows.rows.every((r: any) => r.value === 'updated')).toBe(true);
+    });
+
+    test('count on a non-tenant entity is not scoped', async () => {
+      await execute(`INSERT INTO "shared_config" ("key","value") VALUES ('a','1'),('b','2'),('c','3')`);
+
+      const total = await tenantContext.run(7, () => sharedRepo.count({} as any));
+
+      expect(total).toBe(3);
     });
   });
 
