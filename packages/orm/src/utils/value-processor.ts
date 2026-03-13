@@ -4,7 +4,7 @@ import { EntityStorage, Options } from '../domain/entities';
 import { Relationship } from '../driver/driver.interface';
 import { ValueOrInstance } from '../driver/driver.interface';
 import { extendsFrom } from '../utils';
-import { isUpdateExpression, type UpdateData } from '../query/update-expression';
+import type { UpdateData } from '../query/update-expression';
 
 export class ValueProcessor {
   static processForInsert<T>(
@@ -92,14 +92,14 @@ export class ValueProcessor {
       }
 
       const columnName = property.options.columnName;
-      if (columnName in values && !isUpdateExpression(values[columnName])) {
+      if (columnName in values) {
         instance[key] = values[columnName];
       }
     });
 
     if (relations) {
       for (const relation of relations) {
-        if (relation.relation === 'many-to-one' && !isUpdateExpression(values[relation.columnName])) {
+        if (relation.relation === 'many-to-one') {
           instance[relation.propertyKey] = values[relation.columnName];
         }
       }
