@@ -9,6 +9,8 @@ export * from './decorators/unique.decorator';
 export * from './decorators/event-hook.decorator';
 export * from './decorators/enum.decorator';
 export * from './decorators/computed.decorator';
+export * from './decorators/version.decorator';
+export * from './decorators/tenant.decorator';
 export * from './orm'
 export * from './orm.service'
 export * from './domain/base-entity'
@@ -21,12 +23,15 @@ export * from './driver/bun-driver.base'
 export * from './driver/driver-factory'
 export * from './utils'
 export * from './driver/driver.interface'
+export * from './query/update-expression'
 export * from './entry'
 export * from './common/value-object'
 export * from './common/email.vo'
 export * from './common/uuid'
 export * from './repository/Repository'
+export * from './exceptions/optimistic-lock.error'
 export { transactionContext } from './transaction/transaction-context'
+export { tenantContext } from './tenant/tenant-context'
 export { IdentityMapMiddleware } from './middleware/identity-map.middleware'
 export { identityMapContext } from './identity-map'
 export type { Logger } from './logger'

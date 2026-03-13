@@ -2,6 +2,7 @@ import { SqlBuilder } from '../SqlBuilder';
 import { FilterQuery, FindOneOption, FindOptions, ValueOrInstance } from '../driver/driver.interface';
 import { EntityStorage } from './entities';
 import { serializeEntityInstance } from './entity-serialization';
+import type { UpdateData } from '../query/update-expression';
 
 export abstract class BaseEntity {
   private _oldValues: any = {};
@@ -141,6 +142,27 @@ export abstract class BaseEntity {
     return this.createQueryBuilder<T>()
       .insert(where)
       .executeAndReturnFirstOrFail();
+  }
+
+  static async update<T>(
+    this: { new(): T } & typeof BaseEntity,
+    where: FilterQuery<T>,
+    data: UpdateData<T>,
+  ): Promise<void> {
+    await this.createQueryBuilder<T>()
+      .update(data)
+      .where(where)
+      .execute();
+  }
+
+  static async delete<T>(
+    this: { new(): T } & typeof BaseEntity,
+    where: FilterQuery<T>,
+  ): Promise<void> {
+    await this.createQueryBuilder<T>()
+      .delete()
+      .where(where)
+      .execute();
   }
 
   public async save() {

@@ -6,6 +6,8 @@ import {
   BeforeCreate,
   BeforeUpdate,
   Entity,
+  expr,
+  isUpdateExpression,
   ManyToOne,
   OneToMany,
   PrimaryKey,
@@ -50,6 +52,14 @@ describe('hooks', () => {
           "id"      SERIAL PRIMARY KEY,
           "street"  varchar(255) NOT NULL,
           "address" integer REFERENCES "address" ("id")
+      );
+  `;
+
+  const DDL_PLAYER = `
+      CREATE TABLE "player"
+      (
+          "id" SERIAL PRIMARY KEY,
+          "experience" integer NOT NULL
       );
   `;
 
@@ -121,6 +131,24 @@ describe('hooks', () => {
     address: Address;
   }
 
+  let sawComputedExpressionInHook = false;
+
+  @Entity()
+  class Player extends BaseEntity {
+    @PrimaryKey()
+    id: number;
+
+    @Property()
+    experience: number;
+
+    @BeforeUpdate()
+    normalizeComputedExperience() {
+      if (isUpdateExpression(this.experience)) {
+        sawComputedExpressionInHook = true;
+      }
+    }
+  }
+
   it('beforeCreate', async () => {
     Entity()(User);
 
@@ -157,5 +185,24 @@ describe('hooks', () => {
     user.email = 'updateEmail@test.com';
     await user.save()
     expect(user.email).toBe('AfterUpdate@test.com');
+  });
+
+  it('should keep expr fields visible to beforeUpdate hooks in bulk updates', async () => {
+    sawComputedExpressionInHook = false;
+    await execute(DDL_PLAYER);
+
+    await Player.create({
+      id: 1,
+      experience: 10,
+    });
+
+    await Player.update({ id: 1 }, {
+      experience: expr((prev) => prev.plus(5)),
+    });
+
+    const updated = await Player.findOne({ id: 1 });
+
+    expect(sawComputedExpressionInHook).toBe(true);
+    expect(updated?.experience).toBe(15);
   });
 });

@@ -4,6 +4,7 @@ import { EntityStorage, Options } from '../domain/entities';
 import { Relationship } from '../driver/driver.interface';
 import { ValueOrInstance } from '../driver/driver.interface';
 import { extendsFrom } from '../utils';
+import type { UpdateData } from '../query/update-expression';
 
 export class ValueProcessor {
   static processForInsert<T>(
@@ -14,14 +15,14 @@ export class ValueProcessor {
   }
 
   static processForUpdate<T>(
-    values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>,
+    values: UpdateData<T>,
     options: Options,
   ): Record<string, any> {
     return ValueProcessor.processValues(values, options);
   }
 
   private static processValues<T>(
-    values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>,
+    values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }> | UpdateData<T>,
     options: Options,
   ): Record<string, any> {
     const newValue = {};

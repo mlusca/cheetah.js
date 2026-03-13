@@ -11,7 +11,7 @@ export interface DriverInterface {
 
   executeStatement(
     statement: Statement<any>
-  ): Promise<{ query: any; startTime: number; sql: string }>;
+  ): Promise<{ query: any; startTime: number; sql: string; affectedRows?: number }>;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   executeSql(s: string): Promise<any>;
@@ -156,6 +156,7 @@ export interface ConnectionSettings<
   maxLifetime?: number;
   connectionTimeout?: number;
   ssl?: boolean;
+  replicas?: Array<Partial<ConnectionSettings<T>>>;
   driver: new (options: ConnectionSettings<T>) => T;
   entities?: Function[] | string;
   migrationPath?: string;

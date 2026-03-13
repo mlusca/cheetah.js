@@ -18,6 +18,14 @@ export let mockLogger: ReturnType<typeof spyOn>
 export { cacheService }
 
 export async function startDatabase(entityFile: string | undefined = undefined) {
+  if (app?.driverInstance) {
+    try {
+      await app.disconnect();
+    } catch {
+      // Ignore stale connections from a previous test app instance.
+    }
+  }
+
   resetLogger();
   //setDebugEnabled(true);
 
