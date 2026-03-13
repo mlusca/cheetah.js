@@ -1,6 +1,6 @@
 {
   "name": "@carno.js/queue",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "Queue module for Carno framework with BullMQ support",
   "type": "commonjs",
   "main": "dist/index.js",
