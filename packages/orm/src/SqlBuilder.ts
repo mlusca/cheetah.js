@@ -22,6 +22,10 @@ import { SqlJoinManager } from './query/sql-join-manager';
 import { QueryCacheManager } from './cache/query-cache-manager';
 import type { UpdateData } from './query/update-expression';
 import type { Logger } from './logger';
+import { tenantContext } from './tenant/tenant-context';
+import { Metadata } from '@carno.js/core';
+import { VERSION_PROPERTY, TENANT_PROPERTY, PROPERTIES_METADATA } from './constants';
+import { OptimisticLockError } from './exceptions/optimistic-lock.error';
 
 export class SqlBuilder<T> {
   private readonly driver: DriverInterface;
@@ -304,7 +308,7 @@ export class SqlBuilder<T> {
     await this.cacheManager.set(this.statements, result, ttl);
   }
 
-  async execute(): Promise<{ query: any; startTime: number; sql: string }> {
+  async execute(): Promise<{ query: any; startTime: number; sql: string; affectedRows?: number }> {
     this.prepareColumns();
     this.statements.join = this.normalizeJoinOrder(this.statements.join);
 
@@ -317,8 +321,15 @@ export class SqlBuilder<T> {
     }
 
     this.beforeHooks();
+    this.applyTenantIsolation();
+    const versionLockApplied = this.applyVersionLocking();
+
     const result = await this.driver.executeStatement(this.statements);
     this.logExecution(result);
+
+    if (versionLockApplied && result.affectedRows === 0) {
+      throw new OptimisticLockError(this.model.name, this.statements.where);
+    }
 
     if (this.shouldUseCache()) {
       await this.setCachedResult(result);
@@ -329,6 +340,60 @@ export class SqlBuilder<T> {
     }
 
     return result;
+  }
+
+  private applyTenantIsolation(): void {
+    const tenantId = tenantContext.getTenantId();
+    if (tenantId !== undefined) {
+      const tenantField = Metadata.get(TENANT_PROPERTY, this.model) as string | undefined;
+      if (tenantField) {
+        const metadata = Metadata.get(PROPERTIES_METADATA, this.model) || {};
+        const column = metadata[tenantField]?.options?.columnName || tenantField;
+
+        const tenantCondition = `${this.statements.alias}.${column} = ${typeof tenantId === 'string' ? `'${tenantId}'` : tenantId}`;
+        
+        if (this.statements.statement === 'insert' && this.statements.values) {
+          if (this.statements.values[column] === undefined) {
+             this.statements.values[column] = tenantId;
+          }
+        } else {
+          if (this.statements.where) {
+            this.statements.where = `(${this.statements.where}) AND ${tenantCondition}`;
+          } else {
+            this.statements.where = tenantCondition;
+          }
+        }
+      }
+    }
+  }
+
+  private applyVersionLocking(): boolean {
+    if (this.statements.statement === 'update') {
+      const versionField = Metadata.get(VERSION_PROPERTY, this.model) as string | undefined;
+      if (versionField) {
+        const metadata = Metadata.get(PROPERTIES_METADATA, this.model) || {};
+        const column = metadata[versionField]?.options?.columnName || versionField;
+
+        // Values have been through processForUpdate which converts property names to column names,
+        // so we must check using the DB column name, not the JS property name.
+        if (this.statements.values && this.statements.values[column] !== undefined) {
+          const currentVersion = this.statements.values[column];
+
+          // Auto-increment the version in the SET clause
+          this.statements.values[column] = Number(currentVersion) + 1;
+
+          const versionCondition = `${this.statements.alias}.${column} = ${currentVersion}`;
+          if (this.statements.where) {
+            this.statements.where = `(${this.statements.where}) AND ${versionCondition}`;
+          } else {
+            this.statements.where = versionCondition;
+          }
+
+          return true; // version locking was applied
+        }
+      }
+    }
+    return false;
   }
 
   private isWriteOperation(): boolean {

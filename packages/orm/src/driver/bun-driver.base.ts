@@ -12,6 +12,7 @@ import { isUpdateExpression } from "../query/update-expression";
 
 export abstract class BunDriverBase implements Partial<DriverInterface> {
   protected sql: SQL;
+  protected _replicas: SQL[] = [];
   public connectionString: string;
   protected readonly poolOptions: {
     max: number;
@@ -19,14 +20,16 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
     maxLifetime: number;
     connectionTimeout: number;
   };
+  protected replicaSettings?: Array<Partial<ConnectionSettings>>;
   public abstract readonly dbType: "postgres" | "mysql";
 
   constructor(options: ConnectionSettings) {
     this.connectionString = this.buildConnectionString(options);
     this.poolOptions = this.buildPoolOptions(options);
+    this.replicaSettings = options.replicas;
   }
 
-  protected buildConnectionString(options: ConnectionSettings): string {
+  protected buildConnectionString(options: Partial<ConnectionSettings> & ConnectionSettings): string {
     if (options.connectionString) {
       return options.connectionString;
     }
@@ -46,8 +49,18 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
       return;
     }
 
-    this.sql = this.createSqlInstance();
-    await this.validateConnection();
+    this.sql = this.createSqlInstance(this.connectionString);
+    await this.validateConnection(this.sql);
+
+    if (this.replicaSettings && this.replicaSettings.length > 0) {
+      for (const rep of this.replicaSettings) {
+        const _options = { ...this.buildPoolOptions(rep as ConnectionSettings), ...rep } as ConnectionSettings;
+        const _connString = this.buildConnectionString(_options);
+        const replicaSql = this.createSqlInstance(_connString, _options);
+        await this.validateConnection(replicaSql);
+        this._replicas.push(replicaSql);
+      }
+    }
   }
 
   protected buildPoolOptions(options: ConnectionSettings): {
@@ -64,18 +77,19 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
     };
   }
 
-  private createSqlInstance(): SQL {
+  private createSqlInstance(connString: string, options?: Partial<ConnectionSettings>): SQL {
+    const opts = { ...this.poolOptions, ...this.buildPoolOptions(options as any || {}) };
     return new SQL({
-      url: this.connectionString,
-      max: this.poolOptions.max,
-      idleTimeout: this.poolOptions.idleTimeout,
-      maxLifetime: this.poolOptions.maxLifetime,
-      connectionTimeout: this.poolOptions.connectionTimeout,
+      url: connString,
+      max: opts.max,
+      idleTimeout: opts.idleTimeout,
+      maxLifetime: opts.maxLifetime,
+      connectionTimeout: opts.connectionTimeout,
     });
   }
 
-  protected async validateConnection(): Promise<void> {
-    await this.sql.unsafe("SELECT 1");
+  protected async validateConnection(sqlInstance: SQL = this.sql): Promise<void> {
+    await sqlInstance.unsafe("SELECT 1");
   }
 
   async disconnect(): Promise<void> {
@@ -85,6 +99,13 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
 
     await this.sql.close();
     this.sql = null as any;
+
+    if (this._replicas) {
+      for (const replica of this._replicas) {
+        await replica.close();
+      }
+      this._replicas = [];
+    }
   }
 
   async executeSql(sqlString: string): Promise<any> {
@@ -93,7 +114,9 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
     return await context.unsafe(sqlString);
   }
 
-  private getExecutionContext(): SQL {
+  private _replicaIndex = 0;
+
+  private getExecutionContext(statementType: string = 'unknown'): SQL {
     const txContext = transactionContext.getContext();
 
     if (txContext) {
@@ -102,6 +125,13 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
 
     if (!this.sql) {
       throw new Error("Database not connected");
+    }
+
+    // Read Replica Routing for SELECT Operations
+    if ((statementType === 'select' || statementType === 'count') && this._replicas.length > 0) {
+      const replica = this._replicas[this._replicaIndex];
+      this._replicaIndex = (this._replicaIndex + 1) % this._replicas.length;
+      return replica;
     }
 
     return this.sql;
@@ -238,23 +268,31 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
 
   async executeStatement(
     statement: Statement<any>
-  ): Promise<{ query: any; startTime: number; sql: string }> {
+  ): Promise<{ query: any; startTime: number; sql: string; affectedRows?: number }> {
     const startTime = Date.now();
-    const context = this.getExecutionContext();
+    const context = this.getExecutionContext(statement.statement);
 
     if (statement.statement === "insert") {
       const sql = this.buildInsertSqlWithReturn(statement);
       const result = await context.unsafe(sql);
-      return this.handleInsertReturn(statement, result, sql, startTime, context);
-    }
+      return this.handleInsertReturn(statement, result, sql, startTime, context)
+;                                                                                   }
 
     const sql = this.buildStatementSql(statement);
     const result = await context.unsafe(sql);
+    let affectedRows: number | undefined = undefined;
+
+    if (statement.statement === "update" || statement.statement === "delete") {
+      // Bun's PostgreSQL driver exposes affected rows via `.count`.
+      // Bun's MySQL driver exposes them via `.affectedRows` (`.count` is always 0 on MySQL).
+      affectedRows = (result as any)?.affectedRows ?? (result as any)?.count ?? 0;
+    }
 
     return {
       query: { rows: Array.isArray(result) ? result : [] },
       startTime,
       sql,
+      affectedRows
     };
   }
 

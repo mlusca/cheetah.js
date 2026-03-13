@@ -175,6 +175,56 @@ The `@Property()` decorator accepts options to define column behavior.
 
 For enum fields, prefer the dedicated `@Enum()` decorator. For calculated non-persisted fields, see `@Computed()`.
 
+## Concurrency and Multi-Tenancy Decorators
+
+Beyond the structural property options, two additional decorators extend how the ORM behaves at runtime.
+
+### `@Version()` — Optimistic Locking
+
+Place `@Version()` alongside `@Property()` on an integer field to enable optimistic concurrency control. The ORM will automatically verify the version on every UPDATE and refuse to apply a stale change — throwing `OptimisticLockError` instead of silently overwriting newer data.
+
+```ts
+import { Version } from '@carno.js/orm';
+
+@Entity()
+export class Order extends BaseEntity {
+  @PrimaryKey()
+  id: number;
+
+  @Property()
+  status: string;
+
+  @Property({ default: 0 })
+  @Version()
+  version: number;
+}
+```
+
+See [Optimistic Locking](./optimistic-locking) for a full explanation of the conflict detection strategy, how to handle `OptimisticLockError`, and retry patterns.
+
+### `@Tenant()` — Row-Level Multi-Tenancy
+
+Place `@Tenant()` alongside `@Property()` on the column that identifies which tenant a row belongs to. Once an active tenant is set via `tenantContext.run()`, the ORM injects the appropriate `WHERE tenant_id = ?` condition into every query automatically — SELECTs, UPDATEs, DELETEs, and COUNTs alike.
+
+```ts
+import { Tenant } from '@carno.js/orm';
+
+@Entity()
+export class Invoice extends BaseEntity {
+  @PrimaryKey()
+  id: number;
+
+  @Property()
+  amount: number;
+
+  @Property({ columnName: 'tenant_id' })
+  @Tenant()
+  tenantId: number;
+}
+```
+
+See [Tenant Isolation](./tenant-isolation) for full documentation on setting up per-request tenant scoping via middleware, how each query type is affected, and how to handle cross-tenant administrative queries.
+
 ## Indexes and Unique Constraints
 
 You can define indexes and unique constraints in three ways: via the `@Property` shorthand, property decorators, or class decorators (for composite keys).
