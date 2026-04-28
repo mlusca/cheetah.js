@@ -168,6 +168,18 @@ The `Repository` class comes with a comprehensive set of built-in methods for co
 
 - **`updateById(id, data)`**: Updates a specific entity by ID.
 
+### Bulk Operations
+
+For high-throughput batch workloads, the repository exposes `bulkCreate`, `bulkUpdate` and `bulkDelete`. Each one collapses N round-trips into a single SQL statement per chunk and (when multi-chunk) wraps the whole call in a transaction.
+
+```typescript
+await repo.bulkCreate(rows, { chunkSize: 500 });   // multi-row INSERT
+await repo.bulkUpdate(rows, { chunkSize: 500 });   // CASE-based UPDATE
+await repo.bulkDelete(ids,  { chunkSize: 500 });   // DELETE WHERE pk IN (...)
+```
+
+Measured speedups range from **~50× to ~180×** vs. naïve sequential calls. See [Bulk Operations](./bulk-operations) for full details and the [Session](./session) page for a Unit-of-Work API that batches across multiple entity types in a single transaction.
+
 ### Deleting Data
 
 You can delete records using a specific criteria or by ID.

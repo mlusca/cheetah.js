@@ -6,6 +6,10 @@ import {
   ValueOrInstance,
 } from '../driver/driver.interface';
 import type { UpdateData } from '../query/update-expression';
+import { Orm } from '../orm';
+import { transactionContext } from '../transaction/transaction-context';
+import { EntityStorage } from '../domain/entities';
+import { ValueProcessor } from '../utils/value-processor';
 
 /**
  * Generic Repository class for database operations.
@@ -150,6 +154,58 @@ export abstract class Repository<T extends object> {
   }
 
   /**
+   * Bulk insert. Splits `rows` into chunks of `chunkSize` (default 500), runs
+   * each chunk as a single multi-row INSERT and wraps the whole operation in
+   * a transaction so partial failures roll back. Returns hydrated entity
+   * instances in input order.
+   *
+   * Trade-offs vs. `Session.flush()`:
+   * - `bulkCreate` is imperative and runs immediately. Use it when you want
+   *   the data persisted as soon as the call returns.
+   * - For multi-entity unit-of-work scenarios, prefer `ormSessionContext` /
+   *   `Session.flush()` so related rows are batched together and constraints
+   *   are checked at the end of the transaction.
+   *
+   * @param rows entity payloads (same shape accepted by `create`).
+   * @param opts.chunkSize maximum rows per INSERT statement (default 500).
+   */
+  async bulkCreate(
+    rows: Array<Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>>,
+    opts?: { chunkSize?: number },
+  ): Promise<T[]> {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return [];
+    }
+
+    const chunkSize = opts?.chunkSize && opts.chunkSize > 0 ? opts.chunkSize : 500;
+
+    const runBulk = async (): Promise<T[]> => {
+      const out: T[] = [];
+      for (let i = 0; i < rows.length; i += chunkSize) {
+        const slice = rows.slice(i, i + chunkSize);
+        const inserted = await this.createQueryBuilder()
+          .insertMany(slice)
+          .executeAndReturnMany();
+        for (let k = 0; k < inserted.length; k += 1) out.push(inserted[k]);
+      }
+      return out;
+    };
+
+    // Single-chunk inserts are atomic at the SQL layer; only wrap multi-chunk
+    // operations in a transaction (skips redundant BEGIN/COMMIT round-trips).
+    if (rows.length <= chunkSize) {
+      return runBulk();
+    }
+
+    if (transactionContext.hasContext()) {
+      // Already inside a user-managed transaction — reuse it.
+      return runBulk();
+    }
+
+    return Orm.getInstance().transaction(async () => runBulk());
+  }
+
+  /**
    * Updates entities matching the criteria.
    */
   async update(
@@ -173,6 +229,142 @@ export abstract class Repository<T extends object> {
   }
 
   /**
+   * Bulk update by primary key. Each row in `rows` MUST contain the entity's
+   * primary key (configured via `@PrimaryKey()` — defaults to `id`); the
+   * remaining keys are the columns to update for that row.
+   *
+   * Strategy `case` (default and only strategy currently): emits a single
+   * `UPDATE` per chunk using `CASE pk WHEN ... THEN ... ELSE col END` so that
+   * rows omitting a given column keep their existing value. This collapses N
+   * round-trips into ⌈N/chunkSize⌉.
+   *
+   * `onUpdate` properties (e.g. an `updatedAt` timestamp) are applied to
+   * every row in the chunk automatically.
+   *
+   * Returns the total number of rows affected (sum across chunks).
+   *
+   * @example
+   * ```ts
+   * await repo.bulkUpdate([
+   *   { id: 1, name: 'Alice', email: 'a@x.com' },
+   *   { id: 2, name: 'Bob' }, // email left unchanged
+   * ]);
+   * ```
+   */
+  async bulkUpdate(
+    rows: Array<Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>>,
+    opts?: { chunkSize?: number },
+  ): Promise<number> {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return 0;
+    }
+
+    const chunkSize = opts?.chunkSize && opts.chunkSize > 0 ? opts.chunkSize : 500;
+
+    const orm = Orm.getInstance();
+    const driver = orm.driverInstance;
+    const entityOptions = EntityStorage.getInstance().get(this.entityClass as Function);
+    if (!entityOptions) {
+      throw new Error(`Entity metadata not found for ${this.entityClass.name}`);
+    }
+
+    const pkProperty = entityOptions._primaryKeyPropertyName || 'id';
+    const pkColumn = entityOptions._primaryKeyColumnName || 'id';
+    const tableName = entityOptions.tableName || this.entityClass.name.toLowerCase();
+    const schema = entityOptions.schema || 'public';
+    const q = driver.getIdentifierQuote();
+    const qTable = driver.dbType === 'mysql'
+      ? `${q}${tableName}${q}`
+      : `${q}${schema}${q}.${q}${tableName}${q}`;
+    const qPk = `${q}${pkColumn}${q}`;
+
+    const onUpdateList = entityOptions._metadataIndex?.onUpdateProperties || [];
+
+    const runChunk = async (chunk: typeof rows): Promise<number> => {
+      // Project rows: { columnName -> value }, with PK extracted separately.
+      const processed: Array<{ pkValue: any; cols: Record<string, any> }> = [];
+      for (let i = 0; i < chunk.length; i += 1) {
+        const row = chunk[i] as any;
+        if (row[pkProperty] === undefined || row[pkProperty] === null) {
+          throw new Error(
+            `bulkUpdate: row ${i} is missing primary key "${pkProperty}"`,
+          );
+        }
+        const cols = ValueProcessor.processForUpdate<T>(row, entityOptions);
+        // Remove the PK from the SET map (it's the WHEN selector, not a target).
+        delete cols[pkColumn];
+        // Apply onUpdate hooks per row (e.g. updatedAt).
+        for (let k = 0; k < onUpdateList.length; k += 1) {
+          const p = onUpdateList[k];
+          cols[p.columnName] = (p.options.onUpdate as () => any)();
+        }
+        processed.push({ pkValue: row[pkProperty], cols });
+      }
+
+      // Union of all columns being updated across the chunk.
+      const allCols = new Set<string>();
+      for (let i = 0; i < processed.length; i += 1) {
+        const keys = Object.keys(processed[i].cols);
+        for (let k = 0; k < keys.length; k += 1) allCols.add(keys[k]);
+      }
+
+      if (allCols.size === 0) {
+        // Nothing to update — but the caller asked us to "touch" rows.
+        return 0;
+      }
+
+      const orderedCols = Array.from(allCols);
+      const setParts = new Array(orderedCols.length);
+
+      for (let c = 0; c < orderedCols.length; c += 1) {
+        const col = orderedCols[c];
+        const qCol = `${q}${col}${q}`;
+        const whens: string[] = [];
+        for (let i = 0; i < processed.length; i += 1) {
+          const p = processed[i];
+          if (col in p.cols) {
+            whens.push(
+              `WHEN ${driver.formatLiteral(p.pkValue)} THEN ${driver.formatLiteral(p.cols[col])}`,
+            );
+          }
+        }
+        // ELSE col preserves existing value when a row didn't request a change.
+        setParts[c] = `${qCol} = CASE ${qPk} ${whens.join(' ')} ELSE ${qCol} END`;
+      }
+
+      const inList = processed
+        .map((p) => driver.formatLiteral(p.pkValue))
+        .join(', ');
+
+      const sql = `UPDATE ${qTable} SET ${setParts.join(', ')} WHERE ${qPk} IN (${inList})`;
+
+      const result = await driver.executeSql(sql);
+      const affected =
+        (result as any)?.affectedRows ?? (result as any)?.count ?? 0;
+      return Number(affected);
+    };
+
+    const runAll = async (): Promise<number> => {
+      let total = 0;
+      for (let i = 0; i < rows.length; i += chunkSize) {
+        const slice = rows.slice(i, i + chunkSize);
+        total += await runChunk(slice);
+      }
+      return total;
+    };
+
+    if (rows.length <= chunkSize) {
+      return runAll();
+    }
+
+    if (transactionContext.hasContext()) {
+      return runAll();
+    }
+
+    return Orm.getInstance().transaction(async () => runAll());
+  }
+
+  /**
    * Deletes entities matching the criteria.
    *
    * @example
@@ -192,6 +384,57 @@ export abstract class Repository<T extends object> {
    */
   async deleteById(id: number | string): Promise<void> {
     await this.delete({ id } as any);
+  }
+
+  /**
+   * Bulk delete by primary key list. Splits `ids` into chunks of `chunkSize`
+   * (default 500) and emits one `DELETE WHERE pk IN (...)` per chunk. Wraps
+   * multi-chunk runs in a transaction so partial failures roll back.
+   *
+   * Returns the total number of rows deleted.
+   */
+  async bulkDelete(
+    ids: Array<number | string>,
+    opts?: { chunkSize?: number },
+  ): Promise<number> {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return 0;
+    }
+
+    const chunkSize = opts?.chunkSize && opts.chunkSize > 0 ? opts.chunkSize : 500;
+
+    const entityOptions = EntityStorage.getInstance().get(this.entityClass as Function);
+    if (!entityOptions) {
+      throw new Error(`Entity metadata not found for ${this.entityClass.name}`);
+    }
+    const pkProperty = entityOptions._primaryKeyPropertyName || 'id';
+
+    const runChunk = async (chunk: Array<number | string>): Promise<number> => {
+      const result = await this.createQueryBuilder()
+        .delete()
+        .where({ [pkProperty]: { $in: chunk } } as any)
+        .execute();
+      return Number((result as any)?.affectedRows ?? 0);
+    };
+
+    const runAll = async (): Promise<number> => {
+      let total = 0;
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const slice = ids.slice(i, i + chunkSize);
+        total += await runChunk(slice);
+      }
+      return total;
+    };
+
+    if (ids.length <= chunkSize) {
+      return runAll();
+    }
+
+    if (transactionContext.hasContext()) {
+      return runAll();
+    }
+
+    return Orm.getInstance().transaction(async () => runAll());
   }
 
   /**

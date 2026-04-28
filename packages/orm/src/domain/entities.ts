@@ -12,6 +12,7 @@ import { IndexDefinition, IndexWhere } from "../decorators/index.decorator";
 import { UniqueDefinition } from "../decorators/unique.decorator";
 import { getDefaultLength, toSnakeCase } from "../utils";
 import { IndexConditionBuilder } from "../query/index-condition-builder";
+import { buildEntityMetadataIndex, EntityMetadataIndex } from "./entity-metadata-index";
 
 export type Property = {
   options: PropertyOptions;
@@ -31,6 +32,10 @@ export type Options = {
   // Cache de metadata da primary key (computado uma vez no registro)
   _primaryKeyPropertyName?: string;  // Nome da propriedade TypeScript (ex: "uuid", "productId")
   _primaryKeyColumnName?: string;    // Nome da coluna no DB (ex: "user_uuid", "product_id")
+
+  // Cache de metadata indexada (computado uma vez no registro) — usado em hot paths
+  // de insert/update/select para evitar Object.entries(...).filter(...) por linha.
+  _metadataIndex?: EntityMetadataIndex;
 };
 
 type IndexColumnMap = Record<string, string>;
@@ -229,6 +234,9 @@ export class EntityStorage {
     // Compute primary key cache once during registration
     const pkInfo = this.computePrimaryKeyInfo(properties);
 
+    // Pre-compute metadata indices for hot paths (insert/update/select).
+    const metadataIndex = buildEntityMetadataIndex(properties, relations);
+
     this.entities.set(entity.target, {
       properties: properties,
       hideProperties: Object.entries(properties)
@@ -242,6 +250,7 @@ export class EntityStorage {
       ...entity.options,
       _primaryKeyPropertyName: pkInfo.propertyName,
       _primaryKeyColumnName: pkInfo.columnName,
+      _metadataIndex: metadataIndex,
     });
   }
 

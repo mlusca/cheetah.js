@@ -2,6 +2,11 @@ import { EntityStorage } from '../domain/entities';
 
 export class EntityKeyGenerator {
   private entityStorage: EntityStorage;
+  // Per-class cache of "ClassName" + ":" + primary key property name. The
+  // string never changes for a class once entities are registered, so caching
+  // it lets us skip the EntityStorage map lookup on every set/get call.
+  private pkPropertyByClass: WeakMap<Function, string> = new WeakMap();
+  private classNameCache: WeakMap<Function, string> = new WeakMap();
 
   constructor() {
     this.entityStorage = EntityStorage.getInstance();
@@ -15,9 +20,13 @@ export class EntityKeyGenerator {
   }
 
   generateForEntity(entity: any): string {
-    const pk = this.extractPrimaryKey(entity);
+    const ctor = entity.constructor;
+    const pkName = this.getPrimaryKeyName(ctor);
+    const pk = entity[pkName];
+    const className = this.getClassName(ctor);
+    const keyValue = this.serializePrimaryKey(pk);
 
-    return this.generate(entity.constructor, pk);
+    return `${className}:${keyValue}`;
   }
 
   extractPrimaryKey(entity: any): any {
@@ -27,8 +36,13 @@ export class EntityKeyGenerator {
   }
 
   private getPrimaryKeyName(entityClass: Function): string {
+    const cached = this.pkPropertyByClass.get(entityClass);
+    if (cached !== undefined) return cached;
+
     const options = this.entityStorage.get(entityClass);
-    return options?._primaryKeyPropertyName || 'id';
+    const pkName = options?._primaryKeyPropertyName || 'id';
+    this.pkPropertyByClass.set(entityClass, pkName);
+    return pkName;
   }
 
   private serializePrimaryKey(pk: any): string {
@@ -40,6 +54,10 @@ export class EntityKeyGenerator {
   }
 
   private getClassName(entityClass: Function): string {
-    return entityClass.name;
+    const cached = this.classNameCache.get(entityClass);
+    if (cached !== undefined) return cached;
+    const name = entityClass.name;
+    this.classNameCache.set(entityClass, name);
+    return name;
   }
 }

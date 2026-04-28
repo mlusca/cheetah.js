@@ -145,6 +145,10 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
     return await this.sql.begin(callback);
   }
 
+  formatLiteral(value: unknown): string | number | boolean {
+    return this.toDatabaseValue(value);
+  }
+
   protected toDatabaseValue(value: unknown): string | number | boolean {
     if (value === null || value === undefined) {
       return "NULL";
@@ -345,6 +349,11 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
     alias: string
   ): string {
     const q = this.getIdentifierQuote();
+
+    if (Array.isArray(values)) {
+      return this.buildBulkInsertSql(table, values, q);
+    }
+
     const fields = Object.keys(values)
       .map((v) => `${q}${v}${q}`)
       .join(", ");
@@ -353,6 +362,48 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
       .join(", ");
 
     return `INSERT INTO ${table} (${fields}) VALUES (${vals})`;
+  }
+
+  /**
+   * Builds a multi-row INSERT statement: `INSERT INTO t (cols) VALUES (...), (...)`.
+   *
+   * All rows must have the same set of columns as the first row. Mixed shapes
+   * are rejected with a descriptive error so callers can normalize upstream
+   * (e.g. when `Repository.bulkCreate` is invoked with heterogeneous rows).
+   */
+  protected buildBulkInsertSql(table: string, rows: any[], q: string): string {
+    if (rows.length === 0) {
+      throw new Error('bulk insert called with empty rows array');
+    }
+
+    const firstKeys = Object.keys(rows[0]);
+    if (firstKeys.length === 0) {
+      throw new Error('bulk insert: first row has no columns');
+    }
+
+    const fields = firstKeys.map((v) => `${q}${v}${q}`).join(", ");
+    const tuples = new Array(rows.length);
+
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i];
+      const rowKeys = Object.keys(row);
+      if (rowKeys.length !== firstKeys.length) {
+        throw new Error(
+          `bulk insert: row ${i} has ${rowKeys.length} columns, expected ${firstKeys.length} (matching row 0)`,
+        );
+      }
+      const parts = new Array(firstKeys.length);
+      for (let k = 0; k < firstKeys.length; k += 1) {
+        const key = firstKeys[k];
+        if (!(key in row)) {
+          throw new Error(`bulk insert: row ${i} missing column "${key}"`);
+        }
+        parts[k] = this.toDatabaseValue(row[key]);
+      }
+      tuples[i] = `(${parts.join(', ')})`;
+    }
+
+    return `INSERT INTO ${table} (${fields}) VALUES ${tuples.join(', ')}`;
   }
 
   protected buildUpdateSql(table: string, values: any, alias: string): string {

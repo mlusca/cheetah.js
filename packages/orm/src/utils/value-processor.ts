@@ -1,10 +1,20 @@
 import { ValueObject } from '../common/value-object';
 import { BaseEntity } from '../domain/base-entity';
 import { EntityStorage, Options } from '../domain/entities';
+import { buildEntityMetadataIndex, EntityMetadataIndex } from '../domain/entity-metadata-index';
 import { Relationship } from '../driver/driver.interface';
 import { ValueOrInstance } from '../driver/driver.interface';
 import { extendsFrom } from '../utils';
 import type { UpdateData } from '../query/update-expression';
+
+function getMetadataIndex(options: Options): EntityMetadataIndex {
+  // Should always be present after registration via EntityStorage.add(),
+  // but rebuild lazily if a caller constructs Options manually (defensive).
+  if (!options._metadataIndex) {
+    options._metadataIndex = buildEntityMetadataIndex(options.properties, options.relations);
+  }
+  return options._metadataIndex;
+}
 
 export class ValueProcessor {
   static processForInsert<T>(
@@ -25,18 +35,29 @@ export class ValueProcessor {
     values: Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }> | UpdateData<T>,
     options: Options,
   ): Record<string, any> {
-    const newValue = {};
+    const index = getMetadataIndex(options);
+    const { columnByProperty, owningRelationByProperty } = index;
+    const newValue: Record<string, any> = {};
 
     for (const value in values) {
-      const columnName = ValueProcessor.getColumnName(value, options);
-      const rawValue = values[value];
-      const relation = ValueProcessor.getOwningRelation(value, options);
+      let columnName: string;
+      if (value.charCodeAt(0) === 36 /* '$' */) {
+        columnName = value;
+      } else {
+        const mapped = columnByProperty.get(value);
+        if (mapped === undefined) {
+          throw new Error('Property not found');
+        }
+        columnName = mapped;
+      }
+      const rawValue = (values as any)[value];
 
       if (ValueProcessor.isValueObject(rawValue)) {
         newValue[columnName] = (rawValue as ValueObject<any, any>).getValue();
         continue;
       }
 
+      const relation = owningRelationByProperty.get(value);
       if (relation && ValueProcessor.isEntityInstance(rawValue)) {
         newValue[columnName] = ValueProcessor.extractPrimaryKeyValue(rawValue);
         continue;
@@ -49,21 +70,16 @@ export class ValueProcessor {
   }
 
   static getColumnName(propertyKey: string, entity: Options): string {
-    if (propertyKey.startsWith('$')) {
+    if (propertyKey.charCodeAt(0) === 36 /* '$' */) {
       return propertyKey;
     }
 
-    const property = entity.properties[propertyKey];
-    const relation = entity.relations?.find(rel => rel.propertyKey === propertyKey);
-
-    if (!property) {
-      if (!relation) {
-        throw new Error('Property not found');
-      }
-      return relation.columnName || propertyKey;
+    const index = getMetadataIndex(entity);
+    const mapped = index.columnByProperty.get(propertyKey);
+    if (mapped !== undefined) {
+      return mapped;
     }
-
-    return property.options.columnName || propertyKey;
+    throw new Error('Property not found');
   }
 
   static createInstance(
@@ -79,30 +95,32 @@ export class ValueProcessor {
       throw new Error('Entity not found');
     }
 
-    const property = Object.entries(entityOptions.properties);
-    const relations = entityOptions.relations;
+    const index = getMetadataIndex(entityOptions);
+    const allProps = index.allProperties;
 
-    property.forEach(([key, property]) => {
-      if (property.options.onInsert && moment === 'insert') {
-        instance[key] = property.options.onInsert!();
+    if (moment === 'insert') {
+      for (let i = 0; i < index.onInsertProperties.length; i += 1) {
+        const p = index.onInsertProperties[i];
+        instance[p.key] = p.options.onInsert!();
       }
+    } else if (moment === 'update') {
+      for (let i = 0; i < index.onUpdateProperties.length; i += 1) {
+        const p = index.onUpdateProperties[i];
+        instance[p.key] = p.options.onUpdate!();
+      }
+    }
 
-      if (property.options.onUpdate && moment === 'update') {
-        instance[key] = property.options.onUpdate!();
+    for (let i = 0; i < allProps.length; i += 1) {
+      const p = allProps[i];
+      if (p.columnName in values) {
+        instance[p.key] = values[p.columnName];
       }
+    }
 
-      const columnName = property.options.columnName;
-      if (columnName in values) {
-        instance[key] = values[columnName];
-      }
-    });
-
-    if (relations) {
-      for (const relation of relations) {
-        if (relation.relation === 'many-to-one') {
-          instance[relation.propertyKey] = values[relation.columnName];
-        }
-      }
+    const m2o = index.manyToOneRelations;
+    for (let i = 0; i < m2o.length; i += 1) {
+      const rel = m2o[i];
+      instance[rel.propertyKey as any] = values[rel.columnName as string];
     }
 
     return instance;
@@ -123,13 +141,6 @@ export class ValueProcessor {
 
     const entityStorage = EntityStorage.getInstance();
     return !!entityStorage.get(value.constructor);
-  }
-
-  private static getOwningRelation(propertyKey: string, options: Options): Relationship<any> | undefined {
-    return options.relations?.find((relation) =>
-      relation.propertyKey === propertyKey &&
-      (relation.relation === 'many-to-one' || relation.relation === 'one-to-one-owner')
-    );
   }
 
   /**

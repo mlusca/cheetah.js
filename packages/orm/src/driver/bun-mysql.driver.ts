@@ -67,8 +67,41 @@ export class BunMysqlDriver extends BunDriverBase implements DriverInterface {
       };
     }
 
-    let insertId: number | undefined;
     const primaryKeyColumnName = statement.primaryKeyColumnName || 'id';
+    const cols = statement.columns.join(', ').replaceAll(`${statement.alias}.`, '');
+
+    // Multi-row INSERT path. MySQL guarantees consecutive AUTO_INCREMENT IDs for a
+    // single multi-row INSERT under the default `innodb_autoinc_lock_mode=1`
+    // (and stricter modes). LAST_INSERT_ID() returns the *first* generated ID;
+    // ROW_COUNT() (exposed via `result.affectedRows`) returns the total inserted.
+    if (statement.bulk && Array.isArray(statement.values)) {
+      const rows = statement.values as Array<Record<string, any>>;
+      const ids: any[] = [];
+      const allHaveExplicitIds = rows.every((r) => r[primaryKeyColumnName] !== undefined && r[primaryKeyColumnName] !== null);
+
+      if (allHaveExplicitIds) {
+        for (const r of rows) ids.push(r[primaryKeyColumnName]);
+      } else {
+        const lastIdResult = await context.unsafe('SELECT LAST_INSERT_ID() as id');
+        const firstId = lastIdResult[0]?.id;
+        if (!firstId) {
+          return { query: { rows: [] }, startTime, sql };
+        }
+        for (let i = 0; i < rows.length; i += 1) ids.push(firstId + i);
+      }
+
+      const inList = ids.map((v) => this.toDatabaseValue(v)).join(', ');
+      const selectSql = `SELECT ${cols} FROM ${statement.table} WHERE \`${primaryKeyColumnName}\` IN (${inList}) ORDER BY \`${primaryKeyColumnName}\` ASC`;
+      const selectResult = await context.unsafe(selectSql);
+
+      return {
+        query: { rows: Array.isArray(selectResult) ? selectResult : [] },
+        startTime,
+        sql,
+      };
+    }
+
+    let insertId: number | undefined;
 
     // Check if ID was manually provided in the values
     if (statement.values && statement.values[primaryKeyColumnName]) {
@@ -88,7 +121,6 @@ export class BunMysqlDriver extends BunDriverBase implements DriverInterface {
       };
     }
 
-    const cols = statement.columns.join(', ').replaceAll(`${statement.alias}.`, '');
     const idValue = this.toDatabaseValue(insertId);
     const selectSql = `SELECT ${cols} FROM ${statement.table} WHERE \`${primaryKeyColumnName}\` = ${idValue}`;
     const selectResult = await context.unsafe(selectSql);
