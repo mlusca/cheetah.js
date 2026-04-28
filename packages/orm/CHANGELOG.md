@@ -3,6 +3,24 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [1.4.0](https://github.com/carnojs/carno.js/compare/v1.3.3...v1.4.0) (2026-04-28)
+
+
+### Bug Fixes
+
+* improve error message for missing property in ValueProcessor ([7f93002](https://github.com/carnojs/carno.js/commit/7f93002d4336cb3cc325eeba871e5ce2932702be))
+
+
+### Features
+
+* add performance tests for bulk delete, bulk update, and CPU micro-benchmarks ([3b3003b](https://github.com/carnojs/carno.js/commit/3b3003b2c92ee5ae5d524fc4fd0fd104e73bd837))
+* **orm:** add SharedConfig entity and repository with tenant context tests ([df02211](https://github.com/carnojs/carno.js/commit/df022118c647781af8012b930e522a105e360728))
+* **orm:** add support for computed updates using expr() ([#34](https://github.com/carnojs/carno.js/issues/34)) ([0a6320f](https://github.com/carnojs/carno.js/commit/0a6320fe47343ed2b3333a2739f841fe40b2b2d1))
+
+
+
+
+
 # Unreleased
 
 ### Performance
