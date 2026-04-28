@@ -46,7 +46,7 @@ export class ValueProcessor {
       } else {
         const mapped = columnByProperty.get(value);
         if (mapped === undefined) {
-          throw new Error('Property not found');
+          throw new Error(`Property '${value}' not found in entity '${options.tableName || 'unknown'}'`);
         }
         columnName = mapped;
       }

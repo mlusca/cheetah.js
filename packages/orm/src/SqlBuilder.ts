@@ -200,7 +200,7 @@ export class SqlBuilder<T> {
       const row = rows[i];
       const pv = ValueProcessor.processForInsert(row, this.entity);
       this.applyDefaultProperties(pv, this.entity);
-      this.applyOnInsertProperties(pv, this.entity);
+      this.applyOnInsertProperties(pv, this.entity, i === 0);
       processed[i] = pv;
       instances[i] = ValueProcessor.createInstance(pv, this.model, 'insert');
     }
@@ -1026,16 +1026,18 @@ export class SqlBuilder<T> {
     }
   }
 
-  private applyOnInsertProperties(values: any, entityOptions: Options): void {
+  private applyOnInsertProperties(values: any, entityOptions: Options, trackColumns = true): void {
     const list = entityOptions._metadataIndex?.onInsertProperties;
     if (!list || list.length === 0) return;
 
     for (let i = 0; i < list.length; i += 1) {
       const p = list[i];
       values[p.columnName] = p.options.onInsert!();
-      const col = this.quoteId(p.columnName);
-      const aliasedCol = this.quoteId(`${this.statements.alias}_${p.columnName}`);
-      this.updatedColumns.push(`${this.statements.alias}.${col} as ${aliasedCol}`);
+      if (trackColumns) {
+        const col = this.quoteId(p.columnName);
+        const aliasedCol = this.quoteId(`${this.statements.alias}_${p.columnName}`);
+        this.updatedColumns.push(`${this.statements.alias}.${col} as ${aliasedCol}`);
+      }
     }
   }
 

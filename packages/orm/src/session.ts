@@ -36,8 +36,8 @@ type PendingBucket = {
  * - `Repository.bulk*` are the right tool for a single homogenous batch you
  *   want to persist immediately.
  *
- * Sessions are not reusable after `flush()` — call `clear()` first if you
- * want to enqueue a new batch on the same instance.
+ * Sessions are reusable after a successful `flush()`: pending queues are
+ * cleared automatically, so you can enqueue a new batch on the same instance.
  *
  * @example
  * ```ts
@@ -126,33 +126,36 @@ export class Session {
     const deleteOrder = insertOrder.slice().reverse();
 
     const work = async (): Promise<FlushResult> => {
-      // 1) Inserts (parents first).
-      for (const cls of insertOrder) {
-        const bucket = this.buckets.get(cls);
-        if (!bucket || bucket.inserts.length === 0) continue;
-        const repo = makeAdHocRepository(cls);
-        const rows = await repo.bulkCreate(bucket.inserts as any, { chunkSize });
-        totals.inserted += rows.length;
-      }
+      try {
+        // 1) Inserts (parents first).
+        for (const cls of insertOrder) {
+          const bucket = this.buckets.get(cls);
+          if (!bucket || bucket.inserts.length === 0) continue;
+          const repo = makeAdHocRepository(cls);
+          const rows = await repo.bulkCreate(bucket.inserts as any, { chunkSize });
+          totals.inserted += rows.length;
+        }
 
-      // 2) Updates (any order — they don't have inter-entity dependencies).
-      for (const cls of this.seen) {
-        const bucket = this.buckets.get(cls);
-        if (!bucket || bucket.updates.length === 0) continue;
-        const repo = makeAdHocRepository(cls);
-        totals.updated += await repo.bulkUpdate(bucket.updates as any, { chunkSize });
-      }
+        // 2) Updates (any order — they don't have inter-entity dependencies).
+        for (const cls of this.seen) {
+          const bucket = this.buckets.get(cls);
+          if (!bucket || bucket.updates.length === 0) continue;
+          const repo = makeAdHocRepository(cls);
+          totals.updated += await repo.bulkUpdate(bucket.updates as any, { chunkSize });
+        }
 
-      // 3) Deletes (children first to satisfy FK constraints).
-      for (const cls of deleteOrder) {
-        const bucket = this.buckets.get(cls);
-        if (!bucket || bucket.deletes.length === 0) continue;
-        const repo = makeAdHocRepository(cls);
-        totals.deleted += await repo.bulkDelete(bucket.deletes, { chunkSize });
-      }
+        // 3) Deletes (children first to satisfy FK constraints).
+        for (const cls of deleteOrder) {
+          const bucket = this.buckets.get(cls);
+          if (!bucket || bucket.deletes.length === 0) continue;
+          const repo = makeAdHocRepository(cls);
+          totals.deleted += await repo.bulkDelete(bucket.deletes, { chunkSize });
+        }
 
-      this.clear();
-      return totals;
+        return totals;
+      } finally {
+        this.clear();
+      }
     };
 
     if (transactionContext.hasContext()) {
@@ -249,10 +252,18 @@ function makeAdHocRepository(cls: EntityClass): AdHocRepository<any> {
  * });
  * ```
  */
-export async function withSession<T = FlushResult>(
+export async function withSession(
+  cb: (session: Session) => Promise<void> | void,
+  opts?: { chunkSize?: number; autoFlush?: boolean },
+): Promise<FlushResult>;
+export async function withSession<T>(
   cb: (session: Session) => Promise<T> | T,
   opts?: { chunkSize?: number; autoFlush?: boolean },
-): Promise<T extends FlushResult ? FlushResult : { result: T; flush: FlushResult }> {
+): Promise<{ result: T; flush: FlushResult }>;
+export async function withSession<T>(
+  cb: (session: Session) => Promise<T> | T,
+  opts?: { chunkSize?: number; autoFlush?: boolean },
+): Promise<FlushResult | { result: T; flush: FlushResult }> {
   const session = new Session();
   let result: T;
   try {

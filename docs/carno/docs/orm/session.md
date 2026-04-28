@@ -55,13 +55,13 @@ If a cycle is detected (rare; only happens with self-referencing graphs), the se
 
 ## Atomicity
 
-`flush()` opens a transaction (or reuses the current one) and runs every queued statement inside it. Any error rolls back **everything** — inserts, updates, and deletes. The session is left clear so you can re-queue and retry.
+`flush()` opens a transaction (or reuses the current one) and runs every queued statement inside it. Any error rolls back **everything** — inserts, updates, and deletes. The session is always cleared after `flush()` (both on success and failure), so you can re-queue and retry.
 
 ```typescript
 try {
   await session.flush();
 } catch (err) {
-  // Nothing was committed; session is empty.
+  // Nothing was committed; session is cleared.
 }
 ```
 

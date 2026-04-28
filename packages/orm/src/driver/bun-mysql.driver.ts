@@ -77,7 +77,15 @@ export class BunMysqlDriver extends BunDriverBase implements DriverInterface {
     if (statement.bulk && Array.isArray(statement.values)) {
       const rows = statement.values as Array<Record<string, any>>;
       const ids: any[] = [];
-      const allHaveExplicitIds = rows.every((r) => r[primaryKeyColumnName] !== undefined && r[primaryKeyColumnName] !== null);
+      const explicitCount = rows.filter((r) => r[primaryKeyColumnName] !== undefined && r[primaryKeyColumnName] !== null).length;
+      const allHaveExplicitIds = explicitCount === rows.length;
+
+      if (explicitCount > 0 && explicitCount < rows.length) {
+        throw new Error(
+          `bulkCreate: mixed explicit/auto-generated primary keys are not supported. ` +
+          `${explicitCount} of ${rows.length} rows have explicit '${primaryKeyColumnName}' values.`
+        );
+      }
 
       if (allHaveExplicitIds) {
         for (const r of rows) ids.push(r[primaryKeyColumnName]);
@@ -91,7 +99,7 @@ export class BunMysqlDriver extends BunDriverBase implements DriverInterface {
       }
 
       const inList = ids.map((v) => this.toDatabaseValue(v)).join(', ');
-      const selectSql = `SELECT ${cols} FROM ${statement.table} WHERE \`${primaryKeyColumnName}\` IN (${inList}) ORDER BY \`${primaryKeyColumnName}\` ASC`;
+      const selectSql = `SELECT ${cols} FROM ${statement.table} WHERE \`${primaryKeyColumnName}\` IN (${inList}) ORDER BY FIELD(\`${primaryKeyColumnName}\`, ${inList})`;
       const selectResult = await context.unsafe(selectSql);
 
       return {
