@@ -14,9 +14,9 @@ const EMPTY_PARAMS: Record<string, string> = Object.freeze({}) as Record<string,
 export class Context {
     readonly req: Request;
     params: Record<string, string>;
-    locals: Record<string, any> = {};
 
     // Lazy fields - only allocated when accessed
+    private _locals: Record<string, any> | null = null;
     private _query: Record<string, string> | null = null;
     private _body: any;
     private _bodyParsed = false;
@@ -26,6 +26,22 @@ export class Context {
     constructor(req: Request, params: Record<string, string> = EMPTY_PARAMS) {
         this.req = req;
         this.params = params;
+    }
+
+    /**
+     * Per-request scratchpad. Lazily allocated on first access so requests
+     * that never touch `locals` (the majority of read-only handlers) skip
+     * the object allocation entirely.
+     */
+    get locals(): Record<string, any> {
+        if (!this._locals) {
+            this._locals = {};
+        }
+        return this._locals;
+    }
+
+    set locals(value: Record<string, any>) {
+        this._locals = value;
     }
 
     get status(): number {

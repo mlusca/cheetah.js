@@ -144,6 +144,28 @@ export abstract class BaseEntity {
       .executeAndReturnFirstOrFail();
   }
 
+  /**
+   * Bulk insert. Generates a single multi-row INSERT statement and returns
+   * the resulting entity instances. For very large input arrays, prefer the
+   * Repository's `bulkCreate(rows, { chunkSize })` which chunks automatically
+   * and wraps each chunk in a transaction.
+   *
+   * Hooks (`@BeforeCreate`, `@AfterCreate`), `default` and `onInsert` apply
+   * to every row, mirroring N sequential `create()` calls.
+   */
+  static async createMany<T extends BaseEntity>(
+    this: { new(): T } & typeof BaseEntity,
+    rows: Array<Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>>,
+  ): Promise<T[]> {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return [];
+    }
+
+    return this.createQueryBuilder<T>()
+      .insertMany(rows)
+      .executeAndReturnMany();
+  }
+
   static async update<T>(
     this: { new(): T } & typeof BaseEntity,
     where: FilterQuery<T>,

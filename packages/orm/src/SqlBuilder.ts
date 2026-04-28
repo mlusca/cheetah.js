@@ -168,6 +168,69 @@ export class SqlBuilder<T> {
     return this;
   }
 
+  /**
+   * Multi-row INSERT. Builds a single `INSERT ... VALUES (...), (...), ...`
+   * statement and executes it as one round-trip. Driver implementations are
+   * responsible for resolving generated IDs (PG via `RETURNING`, MySQL via
+   * `LAST_INSERT_ID()`).
+   *
+   * Per-row hooks (`@BeforeCreate`, `@AfterCreate`) and `default`/`onInsert`
+   * are applied to every row, so the produced rows are equivalent to N
+   * sequential `insert()` calls.
+   *
+   * Note: column shape is normalized using row 0. If subsequent rows omit a
+   * column present in row 0, `null` is used so the SQL stays well-formed.
+   */
+  insertMany(rows: Array<Partial<{ [K in keyof T]: ValueOrInstance<T[K]> }>>): SqlBuilder<T> {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new Error('insertMany requires a non-empty array of rows');
+    }
+
+    const { tableName, schema } = this.getTableName();
+    this.statements.statement = 'insert';
+    this.statements.bulk = true;
+    this.statements.alias = this.getAlias(tableName);
+    this.statements.table = this.qualifyTable(schema, tableName);
+    this.statements.primaryKeyColumnName = this.entity._primaryKeyColumnName || 'id';
+
+    const processed: Array<Record<string, any>> = new Array(rows.length);
+    const instances: any[] = new Array(rows.length);
+
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i];
+      const pv = ValueProcessor.processForInsert(row, this.entity);
+      this.applyDefaultProperties(pv, this.entity);
+      this.applyOnInsertProperties(pv, this.entity, i === 0);
+      processed[i] = pv;
+      instances[i] = ValueProcessor.createInstance(pv, this.model, 'insert');
+    }
+
+    // Normalize column shape to a single super-set, padding missing keys with null.
+    const allKeys = new Set<string>();
+    for (let i = 0; i < processed.length; i += 1) {
+      const keys = Object.keys(processed[i]);
+      for (let k = 0; k < keys.length; k += 1) allKeys.add(keys[k]);
+    }
+    if (allKeys.size > 0) {
+      const ordered = Array.from(allKeys);
+      for (let i = 0; i < processed.length; i += 1) {
+        const r = processed[i];
+        for (let k = 0; k < ordered.length; k += 1) {
+          const key = ordered[k];
+          if (!(key in r)) r[key] = null;
+        }
+      }
+    }
+
+    this.statements.values = processed;
+    this.statements.instances = instances;
+    // Set first row as `instance` so existing single-instance hook plumbing
+    // (e.g. updatedColumns reflection) keeps working for the SQL build.
+    this.statements.instance = instances[0];
+
+    return this;
+  }
+
   update(values: UpdateData<T>): SqlBuilder<T> {
     const { tableName, schema } = this.getTableName();
     const processedValues = ValueProcessor.processForUpdate(values, this.entity);
@@ -438,6 +501,12 @@ export class SqlBuilder<T> {
     }
 
     if (this.statements.statement === 'insert') {
+      if (this.statements.bulk && this.statements.instances) {
+        for (let i = 0; i < this.statements.instances.length; i += 1) {
+          this.callHook('beforeCreate', this.statements.instances[i]);
+        }
+        return;
+      }
       this.callHook('beforeCreate');
       return;
     }
@@ -506,6 +575,30 @@ export class SqlBuilder<T> {
     this.afterHooks(model);
     await this.joinManager.handleSelectJoin(entities, model);
     return model as any;
+  }
+
+  /**
+   * Execute a bulk INSERT and return the resulting entity instances. The
+   * driver layer (PG via `RETURNING`, MySQL via `LAST_INSERT_ID()` + SELECT)
+   * is responsible for shaping the rows; this method only hydrates them.
+   */
+  async executeAndReturnMany(): Promise<T[]> {
+    const result = await this.execute();
+
+    if (result.query.rows.length === 0) {
+      return [];
+    }
+
+    const rows = result.query.rows;
+    const results: T[] = [];
+
+    for (let i = 0; i < rows.length; i += 1) {
+      const model = this.modelTransformer.transform(this.model, this.statements, rows[i]);
+      this.afterHooks(model);
+      results.push(model as T);
+    }
+
+    return results;
   }
 
   async executeAndReturnAll(): Promise<T[]> {
@@ -720,24 +813,42 @@ export class SqlBuilder<T> {
       return joins;
     }
 
-    const pending = [...joins];
+    // Pre-compute dependencies (regex scan) once per join — the previous
+    // implementation re-ran the regex on every iteration of the outer loop.
+    const n = joins.length;
+    const deps: string[][] = new Array(n);
+    for (let i = 0; i < n; i += 1) {
+      deps[i] = this.getJoinDependencies(joins[i].on, joins[i].joinAlias);
+    }
+
+    const placed: boolean[] = new Array(n).fill(false);
+    const available = new Set<string>([this.statements.alias!]);
     const ordered: NonNullable<Statement<T>['join']> = [];
-    const availableAliases = new Set([this.statements.alias!]);
 
-    while (pending.length > 0) {
-      const nextIndex = pending.findIndex((join) => {
-        const dependencies = this.getJoinDependencies(join.on, join.joinAlias);
-        return dependencies.every((alias) => availableAliases.has(alias));
-      });
-
-      if (nextIndex === -1) {
-        ordered.push(...pending);
-        break;
+    let progress = true;
+    while (progress && ordered.length < n) {
+      progress = false;
+      for (let i = 0; i < n; i += 1) {
+        if (placed[i]) continue;
+        const d = deps[i];
+        let ready = true;
+        for (let k = 0; k < d.length; k += 1) {
+          if (!available.has(d[k])) { ready = false; break; }
+        }
+        if (ready) {
+          ordered.push(joins[i]);
+          available.add(joins[i].joinAlias);
+          placed[i] = true;
+          progress = true;
+        }
       }
+    }
 
-      const [next] = pending.splice(nextIndex, 1);
-      ordered.push(next);
-      availableAliases.add(next.joinAlias);
+    // Cycle / unresolvable dependency fallback — preserve original order.
+    if (ordered.length < n) {
+      for (let i = 0; i < n; i += 1) {
+        if (!placed[i]) ordered.push(joins[i]);
+      }
     }
 
     return ordered;
@@ -903,47 +1014,45 @@ export class SqlBuilder<T> {
   }
 
   private applyDefaultProperties(values: any, entityOptions: Options): void {
-    const defaultProperties = Object.entries(entityOptions.properties).filter(([_, value]) => value.options.default);
+    const list = entityOptions._metadataIndex?.defaultProperties;
+    if (!list || list.length === 0) return;
 
-    for (const [key, property] of defaultProperties) {
-      this.setDefaultValue(values, key, property);
+    for (let i = 0; i < list.length; i += 1) {
+      const p = list[i];
+      if (typeof values[p.columnName] !== 'undefined') continue;
+      values[p.columnName] = typeof p.options.default === 'function'
+        ? (p.options.default as () => any)()
+        : p.options.default;
     }
   }
 
-  private setDefaultValue(values: any, key: string, property: any): void {
-    const columnName = property.options.columnName;
-    if (typeof values[columnName] !== 'undefined') return;
+  private applyOnInsertProperties(values: any, entityOptions: Options, trackColumns = true): void {
+    const list = entityOptions._metadataIndex?.onInsertProperties;
+    if (!list || list.length === 0) return;
 
-    values[columnName] = typeof property.options.default === 'function'
-      ? property.options.default()
-      : property.options.default;
-  }
-
-  private applyOnInsertProperties(values: any, entityOptions: Options): void {
-    const properties = Object.entries(entityOptions.properties).filter(([_, value]) => value.options.onInsert);
-    properties.forEach(([key, property]) => this.applyOnInsert(values, key, property));
-  }
-
-  private applyOnInsert(values: any, key: string, property: any): void {
-    const columnName = property.options.columnName;
-    values[columnName] = property.options.onInsert!();
-    const col = this.quoteId(columnName);
-    const aliasedCol = this.quoteId(`${this.statements.alias}_${columnName}`);
-    this.updatedColumns.push(`${this.statements.alias}.${col} as ${aliasedCol}`);
+    for (let i = 0; i < list.length; i += 1) {
+      const p = list[i];
+      values[p.columnName] = p.options.onInsert!();
+      if (trackColumns) {
+        const col = this.quoteId(p.columnName);
+        const aliasedCol = this.quoteId(`${this.statements.alias}_${p.columnName}`);
+        this.updatedColumns.push(`${this.statements.alias}.${col} as ${aliasedCol}`);
+      }
+    }
   }
 
   private withUpdatedValues(values: any, entityOptions: Options) {
-    const properties = Object.entries(entityOptions.properties).filter(([_, value]) => value.options.onUpdate);
-    properties.forEach(([key, property]) => this.applyOnUpdate(values, property));
-    return values;
-  }
+    const list = entityOptions._metadataIndex?.onUpdateProperties;
+    if (!list || list.length === 0) return values;
 
-  private applyOnUpdate(values: any, property: any): void {
-    const columnName = property.options.columnName;
-    values[columnName] = property.options.onUpdate!();
-    const col = this.quoteId(columnName);
-    const aliasedCol = this.quoteId(`${this.statements.alias}_${columnName}`);
-    this.updatedColumns.push(`${this.statements.alias}.${col} as ${aliasedCol}`);
+    for (let i = 0; i < list.length; i += 1) {
+      const p = list[i];
+      values[p.columnName] = p.options.onUpdate!();
+      const col = this.quoteId(p.columnName);
+      const aliasedCol = this.quoteId(`${this.statements.alias}_${p.columnName}`);
+      this.updatedColumns.push(`${this.statements.alias}.${col} as ${aliasedCol}`);
+    }
+    return values;
   }
 
   public callHook(type: string, model?: any) {

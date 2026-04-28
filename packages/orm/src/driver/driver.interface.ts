@@ -9,6 +9,14 @@ export interface DriverInterface {
 
   getIdentifierQuote(): string;
 
+  /**
+   * Format a single JS value as a SQL literal (numbers/booleans pass through,
+   * strings are escape-quoted, dates are ISO/MySQL-formatted, null becomes
+   * `NULL`). Used by bulk-update raw SQL builders that bypass the prepared
+   * statement path.
+   */
+  formatLiteral(value: unknown): string | number | boolean;
+
   executeStatement(
     statement: Statement<any>
   ): Promise<{ query: any; startTime: number; sql: string; affectedRows?: number }>;
@@ -230,6 +238,13 @@ export type Statement<T> = {
   hooks?: { type: string; propertyName: string }[];
   instance?: InstanceOf<T>;
   cache?: boolean | number | Date;
+
+  /**
+   * Multi-row INSERT support. When `bulk` is true, `values` is `Record<string, any>[]`
+   * (one row per object) and `instances` holds the corresponding entity instances.
+   */
+  bulk?: boolean;
+  instances?: InstanceOf<T>[];
 
   joinProperty?: string;
   fkKey?: string;

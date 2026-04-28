@@ -123,3 +123,18 @@ oha -z 6s http://localhost:3000/
 :::tip Share Your Results!
 Got interesting benchmark results? We'd love to see them! Open an issue or discussion on our [GitHub repository](https://github.com/carnojs/carno.js).
 :::
+
+---
+
+## 🚀 ORM Bulk Operations
+
+Carno ORM ships first-class batch APIs that collapse N round-trips into ⌈N/chunkSize⌉ statements. Measured on Bun 1.3, 500 rows, single connection:
+
+| Operation                          | Postgres | MySQL  |
+|------------------------------------|----------|--------|
+| `bulkCreate` vs `create()` loop    | **~48×** | **~114×** |
+| `bulkUpdate` vs `updateById()`     | **~71×** | **~182×** |
+| `bulkDelete` vs `deleteById()`     | **~53×** | **~94×**  |
+| `Session.flush()` (mixed graph)    | **~57×** | **~106×** |
+
+See the [Bulk Operations](./orm/bulk-operations) and [Session](./orm/session) docs for usage and trade-offs.

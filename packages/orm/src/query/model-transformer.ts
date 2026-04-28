@@ -14,11 +14,46 @@ export class ModelTransformer {
     this.startHydration(instanceMap, cachedAliases);
     this.populateProperties(data, instanceMap, optionsMap, cachedAliases);
     this.linkJoinedEntities(statement, instanceMap, optionsMap);
-    this.resetChangedValues(instanceMap, cachedAliases);
-    this.endHydration(instanceMap, cachedAliases);
-    this.registerInstancesInIdentityMap(instanceMap, cachedAliases);
+    this.finalizeHydration(instanceMap, cachedAliases);
 
     return instanceMap[statement.alias!] as T;
+  }
+
+  /**
+   * Fused trailing pass: resetChangedValues + endHydration + identity-map
+   * registration in a single iteration over the instance map.
+   */
+  private finalizeHydration(instanceMap: Record<string, any>, cachedAliases: Set<string>): void {
+    const aliases = Object.keys(instanceMap);
+    for (let i = 0; i < aliases.length; i += 1) {
+      const alias = aliases[i];
+      if (cachedAliases.has(alias)) continue;
+      const instance = instanceMap[alias];
+
+      // resetChangedValues: snapshot only user-visible keys (skipping the
+      // underscore/dollar-prefixed bookkeeping fields BaseEntity uses for its
+      // change-tracking proxy). Keeps semantics identical to the original
+      // helper while avoiding a second pass over the instance map.
+      if (instance) {
+        const currentValues: Record<string, any> = {};
+        for (const k in instance) {
+          const c = k.charCodeAt(0);
+          if (c !== 95 /* _ */ && c !== 36 /* $ */) {
+            currentValues[k] = instance[k];
+          }
+        }
+        instance._oldValues = currentValues;
+        instance._changedValues = {};
+      }
+
+      // endHydration
+      if (instance && typeof instance.$_endHydration === 'function') {
+        instance.$_endHydration();
+      }
+
+      // registerInstancesInIdentityMap
+      IdentityMapIntegration.registerEntity(instance);
+    }
   }
 
   private startHydration(instanceMap: Record<string, any>, cachedAliases: Set<string>): void {
@@ -221,7 +256,17 @@ export class ModelTransformer {
     columnName: string,
     options: Options,
   ): { key: string; property: any } | null {
-    // First, try to find in regular properties
+    const idx = options._metadataIndex;
+    if (idx) {
+      const cached = idx.propertyByColumn.get(columnName);
+      if (cached) {
+        return { key: cached.key, property: cached.property };
+      }
+      return null;
+    }
+
+    // Defensive fallback (Options built outside the standard registration
+    // path won't have the index yet).
     const entry = Object.entries(options.properties).find(
       ([_, prop]) => prop.options.columnName === columnName,
     );
@@ -230,7 +275,6 @@ export class ModelTransformer {
       return { key: entry[0], property: entry[1] };
     }
 
-    // If not found, try to find in relations (many-to-one or one-to-one-owner)
     const relation = options.relations?.find(
       (rel) => rel.columnName === columnName && (rel.relation === 'many-to-one' || rel.relation === 'one-to-one-owner'),
     );

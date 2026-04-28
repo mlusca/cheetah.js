@@ -42,6 +42,8 @@ const sidebars: SidebarsConfig = {
         'orm/ref',
         'orm/value-objects',
         'orm/migrations',
+        'orm/bulk-operations',
+        'orm/session',
       ],
     },
     {

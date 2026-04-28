@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# Unreleased
+
+### Performance
+
+* **`Context.locals` lazy allocation**: `ctx.locals` is now allocated on first access via a getter, so handlers that never touch the per-request scratchpad skip an object allocation per request. Existing `ctx.locals.foo = ...` and `ctx.locals.foo` patterns are unchanged.
+
 # [1.3.0](https://github.com/carnojs/carno.js/compare/v1.1.2...v1.3.0) (2026-03-07)
 
 

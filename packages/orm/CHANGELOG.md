@@ -3,6 +3,28 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# Unreleased
+
+### Performance
+
+* **Hot-path metadata cache** (`EntityMetadataIndex`): pre-computed Maps and arrays per entity replace `Object.entries(...).filter(...)` and `relations.find(...)` on every insert/update/select. CPU micro-benchmarks: `processForInsert` 2.31×, `processForUpdate` 1.77×, `createInstance` 2.09×, `getColumnName` 1.56×.
+* **Loop fusion in hydration** (`ModelTransformer.transform`): three sequential trailing loops merged into a single `finalizeHydration` pass. Combined with the metadata cache, `findAll-with-join` is **~19% faster** on Postgres.
+* **Join-order normalization O(n)**: `SqlBuilder.normalizeJoinOrder` rewritten as a Kahn-style topological sort with pre-computed dependency sets, replacing the previous O(n²) splice/regex-per-iteration loop.
+* **Identity-map fast path**: `entity-key-generator` now caches `pkPropertyName` and `class.name` in `WeakMap`s.
+
+### Features
+
+* **Bulk insert** — `Repository.bulkCreate(rows, { chunkSize? })` and `BaseEntity.createMany(rows)` emit a single multi-row `INSERT ... VALUES (...), (...)` per chunk (default chunk size 500). Multi-chunk runs auto-wrap in a transaction. Per-row hooks (`@BeforeCreate`/`@AfterCreate`), `default`, and `onInsert` fire for every row. Driver layer handles ID resolution (PG `RETURNING`, MySQL `LAST_INSERT_ID()` + consecutive-ID inference). Measured speedups vs. sequential `create()`: **PG ~48×**, **MySQL ~114×** for 500 rows.
+* **Bulk update** — `Repository.bulkUpdate(rows, { chunkSize? })` builds a single `UPDATE ... SET col = CASE pk WHEN ... THEN ... ELSE col END WHERE pk IN (...)` per chunk. Rows omitting a column keep their existing value (ELSE col). `onUpdate` properties (e.g. `updatedAt`) apply to every row. Returns total `affectedRows`. Speedups: **PG 71×**, **MySQL 182×**.
+* **Bulk delete** — `Repository.bulkDelete(ids[], { chunkSize? })` emits chunked `DELETE WHERE pk IN (...)`. Speedups: **PG 53×**, **MySQL 94×**.
+* **Session / Unit of Work** — new `Session` class and `withSession(cb)` helper (`@carno.js/orm`). Queue heterogeneous inserts/updates/deletes across multiple entity types, then `flush()` commits everything in one transaction with FK-safe topological order (parents-first inserts, reverse for deletes). Speedups for mixed parent/child graphs: **PG 57×**, **MySQL 106×**.
+* **Driver API** — `DriverInterface.formatLiteral(value)` is now public and used by the bulk-update SQL builder. The bulk-insert codepath also exposes `Statement.bulk` and `Statement.instances` for drivers that need per-row hydration.
+
+### Tests
+
+* New correctness specs: `test/repository/bulk-operations.spec.ts` (7), `test/repository/bulk-update-delete.spec.ts` (10), `test/session/session-uow.spec.ts` (9). All green on Postgres and MySQL.
+* New perf specs (with JSON baselines): `bulk-create.perf.spec.ts`, `bulk-update.perf.spec.ts`, `bulk-delete.perf.spec.ts`, `session-flush.perf.spec.ts`, `cpu-microbench.perf.spec.ts`, `baseline.perf.spec.ts`. Each suite asserts a minimum 5× speedup gate.
+
 # [1.3.0](https://github.com/carnojs/carno.js/compare/v1.1.2...v1.3.0) (2026-03-07)
 
 
