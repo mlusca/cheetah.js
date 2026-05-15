@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [1.4.0](https://github.com/carnojs/carno.js/compare/v1.3.3...v1.4.0) (2026-05-15)
+
+
+### Features
+
+* add bulk delete, bulk update and bulk insert ([#39](https://github.com/carnojs/carno.js/issues/39)) ([85e211b](https://github.com/carnojs/carno.js/commit/85e211bff2e7ceb152723db7fbf2873539903127))
+
+
+
+
+
 # Unreleased
 
 ### Performance

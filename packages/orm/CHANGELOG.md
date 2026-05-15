@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [1.4.0](https://github.com/carnojs/carno.js/compare/v1.3.3...v1.4.0) (2026-05-15)
+
+
+### Features
+
+* add bulk delete, bulk update and bulk insert ([#39](https://github.com/carnojs/carno.js/issues/39)) ([85e211b](https://github.com/carnojs/carno.js/commit/85e211bff2e7ceb152723db7fbf2873539903127))
+* **orm:** add SharedConfig entity and repository with tenant context tests ([df02211](https://github.com/carnojs/carno.js/commit/df022118c647781af8012b930e522a105e360728))
+* **orm:** add support for computed updates using expr() ([#34](https://github.com/carnojs/carno.js/issues/34)) ([0a6320f](https://github.com/carnojs/carno.js/commit/0a6320fe47343ed2b3333a2739f841fe40b2b2d1))
+
+
+
+
+
 # Unreleased
 
 ### Performance
