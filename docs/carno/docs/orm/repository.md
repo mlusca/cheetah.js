@@ -67,6 +67,7 @@ export class UserRepository extends Repository<User> {
 Using a repository with a plain entity gives you:
 
 - `create`, `find`, `findOne`, `findAll`
+- `findPage`
 - `update`, `updateById`
 - `delete`, `deleteById`
 - `count`, `exists`
@@ -97,6 +98,21 @@ export class UserService {
 }
 ```
 
+## Derived Query Methods
+
+Repositories also support Spring Data-style derived methods. If a method is not explicitly defined on the repository class, Carno can derive a query from its name at runtime.
+
+```typescript
+const user = await userRepository.findByEmail('alice@example.com');
+const activeUsers = await userRepository.findAllByStatusAndActive('active', true);
+const adults = await userRepository.findAllByAgeGreaterThanEqual(18);
+const exists = await userRepository.existsByEmail('alice@example.com');
+```
+
+`findBy...` and `findOneBy...` return a single entity or `undefined`. Use `findAllBy...` for lists.
+
+See [Derived Query Methods](./derived-query-methods) for the full reference, including prefixes, operators, ordering, limits, TypeScript ergonomics, validation, and performance notes.
+
 ## Serialization in Repository Mode
 
 `@Entity()`-decorated classes returned by a repository still serialize using ORM metadata.
@@ -119,10 +135,13 @@ The `Repository` class comes with a comprehensive set of built-in methods for co
 - **`findOne(options)`**: Finds a single entity. Returns `undefined` if not found.
 - **`findOneOrFail(options)`**: Finds a single entity. Throws an error if not found.
 - **`findAll(options)`**: Finds all entities (wrapper around `find` without required where).
+- **`findPage(options)`**: Finds a page of entities and returns `{ data, total, page, pageSize, totalPages }`.
 - **`findById(id)`**: Finds an entity by its primary key.
 - **`findByIdOrFail(id)`**: Finds an entity by primary key or throws.
 - **`exists(where)`**: Checks if at least one entity matches the criteria.
 - **`count(where)`**: Returns the count of entities matching the criteria.
+
+See [Pagination](./pagination) for the full `findPage()` reference, validation rules, and performance notes.
 
 ### Writing
 

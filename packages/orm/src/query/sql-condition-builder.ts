@@ -8,7 +8,7 @@ import { SqlSubqueryBuilder } from './sql-subquery-builder';
 type ApplyJoinCallback = (relationship: Relationship<any>, value: FilterQuery<any>, alias: string) => string;
 
 const OPERATORS_SET = new Set([
-  '$eq', '$ne', '$in', '$nin', '$like',
+  '$eq', '$ne', '$in', '$nin', '$like', '$notLike',
   '$gt', '$gte', '$lt', '$lte',
   '$and', '$or', '$exists', '$nexists',
 ]);
@@ -142,6 +142,8 @@ export class SqlConditionBuilder<T> {
         return this.buildNotInCondition(key, value, alias, model);
       case '$like':
         return this.buildLikeCondition(key, value, alias, model);
+      case '$notLike':
+        return this.buildNotLikeCondition(key, value, alias, model);
       case '$gt':
         return this.buildComparisonCondition(key, value, alias, '>', model);
       case '$gte':
@@ -185,6 +187,12 @@ export class SqlConditionBuilder<T> {
     const column = this.resolveColumnName(key, model);
     const escaped = escapeString(value);
     return `${alias}.${column} LIKE '${escaped}'`;
+  }
+
+  private buildNotLikeCondition(key: string, value: string, alias: string, model: Function): string {
+    const column = this.resolveColumnName(key, model);
+    const escaped = escapeString(value);
+    return `${alias}.${column} NOT LIKE '${escaped}'`;
   }
 
   private buildComparisonCondition(key: string, value: any, alias: string, operator: string, model: Function): string {

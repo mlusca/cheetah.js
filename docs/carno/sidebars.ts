@@ -30,6 +30,8 @@ const sidebars: SidebarsConfig = {
         'orm/entities',
         'orm/relations',
         'orm/repository',
+        'orm/pagination',
+        'orm/derived-query-methods',
         'orm/active-record',
         'orm/query-builder',
         'orm/querying',
