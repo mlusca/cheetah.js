@@ -10,6 +10,14 @@ import { Orm } from '../orm';
 import { transactionContext } from '../transaction/transaction-context';
 import { EntityStorage } from '../domain/entities';
 import { ValueProcessor } from '../utils/value-processor';
+import {
+  buildDerivedWhere,
+  DerivedQueryPlan,
+  getDerivedQueryPlan,
+  isDerivedQueryMethodName,
+} from './derived-query';
+
+const derivedMethodCache = new WeakMap<object, Map<string, Function>>();
 
 /**
  * Generic Repository class for database operations.
@@ -37,6 +45,44 @@ export abstract class Repository<T extends object> {
 
   constructor(entityClass: new () => T) {
     this.entityClass = entityClass;
+
+    return new Proxy(this, {
+      get: (target, property, receiver) => {
+        if (typeof property !== 'string') {
+          return Reflect.get(target, property, receiver);
+        }
+
+        const existing = Reflect.get(target, property, receiver);
+
+        if (existing !== undefined || !isDerivedQueryMethodName(property)) {
+          return existing;
+        }
+
+        let instanceCache = derivedMethodCache.get(target);
+
+        if (!instanceCache) {
+          instanceCache = new Map<string, Function>();
+          derivedMethodCache.set(target, instanceCache);
+        }
+
+        const cached = instanceCache.get(property);
+
+        if (cached) {
+          return cached;
+        }
+
+        const plan = getDerivedQueryPlan(entityClass, property);
+
+        if (!plan) {
+          return undefined;
+        }
+
+        const derived = async (...args: unknown[]) => executeDerivedQuery(receiver as Repository<T>, plan, args);
+        instanceCache.set(property, derived);
+
+        return derived;
+      },
+    });
   }
 
   /**
@@ -78,13 +124,14 @@ export abstract class Repository<T extends object> {
    * Returns undefined if not found.
    */
   async findOne<Hint extends string = never>(options: RepositoryFindOneOptions<T, Hint>): Promise<T | undefined> {
-    const { where, fields, load, loadStrategy, cache } = options;
+    const { where, orderBy, fields, load, loadStrategy, cache } = options;
 
     return this.createQueryBuilder()
       .select(fields as any)
       .setStrategy(loadStrategy)
       .load(load as unknown as string[])
       .where(where || {})
+      .orderBy(orderBy as any)
       .cache(cache)
       .executeAndReturnFirst();
   }
@@ -125,6 +172,41 @@ export abstract class Repository<T extends object> {
       .orderBy(orderBy as any)
       .cache(cache)
       .executeAndReturnAll();
+  }
+
+  /**
+   * Finds a paginated result set and the total matching row count.
+   *
+   * `page` is 1-based and defaults to 1. `pageSize` defaults to 20.
+   */
+  async findPage<Hint extends string = never>(
+    options?: RepositoryFindPageOptions<T, Hint>
+  ): Promise<Page<T>> {
+    const { page, pageSize, ...findOptions } = options || {};
+    const normalizedPage = normalizePaginationInteger(page, 'page', 1);
+    const normalizedPageSize = normalizePaginationInteger(pageSize, 'pageSize', 20);
+    const offset = (normalizedPage - 1) * normalizedPageSize;
+
+    if (!Number.isSafeInteger(offset)) {
+      throw new Error('findPage option "page" and "pageSize" produce an unsafe offset.');
+    }
+
+    const [data, total] = await Promise.all([
+      this.find({
+        ...findOptions,
+        limit: normalizedPageSize,
+        offset,
+      } as RepositoryFindOptions<T, Hint>),
+      this.count(findOptions.where),
+    ]);
+
+    return {
+      data,
+      total,
+      page: normalizedPage,
+      pageSize: normalizedPageSize,
+      totalPages: total === 0 ? 0 : Math.ceil(total / normalizedPageSize),
+    };
   }
 
   /**
@@ -464,6 +546,28 @@ export type RepositoryFindOptions<T, Hint extends string = never> = FindOptions<
   where?: FilterQuery<T>;
 }
 
+export interface Page<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export type RepositoryFindPageOptions<T, Hint extends string = never> = Omit<
+  RepositoryFindOptions<T, Hint>,
+  'limit' | 'offset'
+> & {
+  /**
+   * 1-based page number. Defaults to 1.
+   */
+  page?: number;
+  /**
+   * Maximum number of rows returned in `data`. Defaults to 20.
+   */
+  pageSize?: number;
+};
+
 /**
  * Find one options for repository queries.
  */
@@ -471,3 +575,132 @@ export type RepositoryFindOneOptions<T, Hint extends string = never> = Omit<
   RepositoryFindOptions<T, Hint>,
   'limit' | 'offset'
 >;
+
+type NonFunctionStringKeys<T> = {
+  [K in keyof T]: T[K] extends Function ? never : K extends string ? K : never
+}[keyof T];
+
+type DerivedValue<T, K extends keyof T> = T[K] | NonNullable<T[K]>;
+
+type DerivedReadOptions<T> = Omit<RepositoryFindOptions<T>, 'where'>;
+type DerivedReadOneOptions<T> = Omit<RepositoryFindOneOptions<T>, 'where'>;
+
+export type DerivedQueryOptions<T extends object> = DerivedReadOptions<T>;
+
+export type DerivedRepository<T extends object> = Repository<T> & {
+  [K in NonFunctionStringKeys<T> as `findBy${Capitalize<K>}`]:
+    (value: DerivedValue<T, K>, options?: DerivedReadOneOptions<T>) => Promise<T | undefined>;
+} & {
+  [K in NonFunctionStringKeys<T> as `findOneBy${Capitalize<K>}`]:
+    (value: DerivedValue<T, K>, options?: DerivedReadOneOptions<T>) => Promise<T | undefined>;
+} & {
+  [K in NonFunctionStringKeys<T> as `findAllBy${Capitalize<K>}`]:
+    (value: DerivedValue<T, K>, options?: DerivedReadOptions<T>) => Promise<T[]>;
+} & {
+  [K in NonFunctionStringKeys<T> as `countBy${Capitalize<K>}`]:
+    (value: DerivedValue<T, K>) => Promise<number>;
+} & {
+  [K in NonFunctionStringKeys<T> as `existsBy${Capitalize<K>}`]:
+    (value: DerivedValue<T, K>) => Promise<boolean>;
+} & {
+  [K in NonFunctionStringKeys<T> as `deleteBy${Capitalize<K>}`]:
+    (value: DerivedValue<T, K>) => Promise<void>;
+};
+
+function executeDerivedQuery<T extends object>(
+  repository: Repository<T>,
+  plan: DerivedQueryPlan<T>,
+  args: unknown[],
+): Promise<T | T[] | number | boolean | void> {
+  const { values, options } = splitDerivedArgs(plan, args);
+  const where = buildDerivedWhere(plan, values);
+
+  switch (plan.operation) {
+    case 'findOne':
+      return repository.findOne({
+        where,
+        ...withDerivedOrderAndLimit(plan, options, false),
+      } as RepositoryFindOneOptions<T>);
+    case 'findMany':
+      return repository.find({
+        where,
+        ...withDerivedOrderAndLimit(plan, options, true),
+      } as RepositoryFindOptions<T>);
+    case 'count':
+      return repository.count(where);
+    case 'exists':
+      return repository.exists(where);
+    case 'delete':
+      return repository.delete(where);
+  }
+}
+
+function splitDerivedArgs<T extends object>(
+  plan: DerivedQueryPlan<T>,
+  args: unknown[],
+): { values: unknown[]; options?: DerivedReadOptions<T> } {
+  const expected = plan.parameterCount;
+
+  if (args.length < expected) {
+    throw new Error(
+      `Derived query method "${plan.methodName}" expects ${expected} parameter(s), received ${args.length}.`,
+    );
+  }
+
+  if (plan.operation === 'findOne' || plan.operation === 'findMany') {
+    if (args.length === expected) {
+      return { values: args };
+    }
+
+    if (args.length === expected + 1 && isPlainOptionsObject(args[expected])) {
+      return {
+        values: args.slice(0, expected),
+        options: args[expected] as DerivedReadOptions<T>,
+      };
+    }
+  }
+
+  if (args.length > expected) {
+    throw new Error(
+      `Derived query method "${plan.methodName}" expects ${expected} parameter(s), received ${args.length}.`,
+    );
+  }
+
+  return { values: args };
+}
+
+function withDerivedOrderAndLimit<T extends object>(
+  plan: DerivedQueryPlan<T>,
+  options: DerivedReadOptions<T> | undefined,
+  allowLimit: boolean,
+): DerivedReadOptions<T> {
+  const merged: DerivedReadOptions<T> = { ...(options || {}) };
+
+  if (plan.orderBy && !merged.orderBy) {
+    merged.orderBy = plan.orderBy;
+  }
+
+  if (allowLimit && plan.limit !== undefined && merged.limit === undefined) {
+    merged.limit = plan.limit;
+  }
+
+  return merged;
+}
+
+function isPlainOptionsObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizePaginationInteger(
+  value: number | undefined,
+  name: 'page' | 'pageSize',
+  defaultValue: number,
+): number {
+  const candidate = value === undefined ? defaultValue : value;
+
+  if (!Number.isSafeInteger(candidate) || candidate <= 0) {
+    throw new Error(`findPage option "${name}" must be a positive safe integer.`);
+  }
+
+  return candidate;
+}

@@ -176,6 +176,7 @@ export type ConditionOperators<T, C> = {
   $in?: T[];
   $nin?: T[];
   $like?: string;
+  $notLike?: string;
   $gt?: T;
   $gte?: T;
   $lt?: T;
@@ -422,6 +423,7 @@ export type OperatorMap<T> = {
   $lt?: ExpandScalar<T>;
   $lte?: ExpandScalar<T>;
   $like?: string;
+  $notLike?: string;
   $exists?: FilterQuery<ExpandProperty<T>>;
   $nexists?: FilterQuery<ExpandProperty<T>>;
 };
