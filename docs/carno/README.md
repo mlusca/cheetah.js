@@ -1,41 +1,49 @@
-# Website
+# Carno.js Documentation Site
 
-This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
+This directory contains the Docusaurus site published at:
 
-## Installation
+[https://carnojs.github.io/carno.js](https://carnojs.github.io/carno.js)
 
-```bash
-yarn
-```
+Use this site for user-facing documentation: guides, examples, API explanations, package-specific documentation, and benchmark details. The repository root README should stay concise and point readers here for implementation guidance.
 
 ## Local Development
 
-```bash
-yarn start
-```
-
-This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
-
-## Build
+Install dependencies:
 
 ```bash
-yarn build
+npm install
 ```
 
-This command generates static content into the `build` directory and can be served using any static contents hosting service.
-
-## Deployment
-
-Using SSH:
+Start the development server:
 
 ```bash
-USE_SSH=true yarn deploy
+npm run start
 ```
 
-Not using SSH:
+Build the production site:
 
 ```bash
-GIT_USER=<Your GitHub username> yarn deploy
+npm run build
 ```
 
-If you are using GitHub pages for hosting, this command is a convenient way to build the website and push to the `gh-pages` branch.
+Serve a local production build:
+
+```bash
+npm run serve
+```
+
+## Structure
+
+- `docs/`: documentation pages grouped by product area.
+- `sidebars.ts`: sidebar organization for the documentation.
+- `src/pages/`: custom site pages.
+- `src/css/custom.css`: global theme overrides.
+- `static/`: static assets served by Docusaurus.
+
+## Writing Guidelines
+
+- Keep package usage examples in the relevant documentation page, not in the root README.
+- Prefer concise explanations followed by complete examples that users can run.
+- Link related pages instead of duplicating large sections.
+- Keep benchmark claims tied to the methodology page.
+- Run `npm run build` before publishing documentation changes.

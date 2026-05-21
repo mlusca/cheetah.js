@@ -1,459 +1,127 @@
 <p align="center">
-  <img src="carno.png" width="200" alt="Carno.js Logo" />
+  <img src="carno.png" width="160" alt="Carno.js logo" />
 </p>
 
 <h1 align="center">Carno.js</h1>
 
 <p align="center">
-  <strong>Ultra-Fast, Performance-First Framework for Bun</strong>
+  <strong>A modular framework and ORM ecosystem for Bun and TypeScript.</strong>
 </p>
 
 <p align="center">
-  <a href="https://carnojs.github.io/carno.js">Documentation</a> •
-  <a href="#quick-start">Quick Start</a> •
-  <a href="#features">Features</a> •
-  <a href="#examples">Examples</a>
+  <a href="https://carnojs.github.io/carno.js/docs/intro">Documentation</a>
+  ·
+  <a href="https://carnojs.github.io/carno.js/docs/installation">Getting started</a>
+  ·
+  <a href="https://github.com/carnojs/carno.js">GitHub</a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/234k%20req%2Fs-⚡%20Fastest%20Bun%20Framework-f59e0b?style=for-the-badge&labelColor=1a1a1a" alt="234k requests per second" />
+  <img src="https://img.shields.io/badge/Bun-native-black?style=flat-square&logo=bun" alt="Bun native" />
+  <img src="https://img.shields.io/badge/TypeScript-first-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript first" />
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT license" />
 </p>
 
----
+## Overview
 
-## ⚡ Performance
+Carno.js is a modular application framework for Bun. It combines a fast HTTP core, dependency injection, decorators, validation, middleware, lifecycle hooks, and optional packages for data access, queues, scheduling, static files, WebSockets, and logging.
 
-Carno.js is the **fastest framework for Bun** — benchmarked and proven.
+This repository is the monorepo for the Carno.js ecosystem. The README is intentionally concise; feature guides, examples, and API details live in the documentation site.
 
-| Framework | Requests/sec | Avg Latency | Result |
-|:----------|:------------:|:-----------:|:------:|
-| **Carno.js** | **234,562** | **0.21 ms** | 🥇 |
-| Elysia | 167,206 | 0.29 ms | 🥈 |
+## Why Carno.js
 
-> 📊 **40% faster** than the competition. [See full benchmark →](https://carnojs.github.io/carno.js/docs/benchmark)
+- **Bun native:** built around Bun's runtime and HTTP server instead of adapting a Node-first design.
+- **TypeScript first:** decorators, typed controllers, dependency injection, and DTO validation are first-class concepts.
+- **Modular by default:** install only the packages your application needs.
+- **Application-ready:** includes packages for ORM, queues, scheduling, static assets, WebSockets, testing, and logging.
 
----
+## Packages
 
-## Why Carno.js?
-
-Carno.js is built from the ground up for the **Bun** runtime. It focuses on raw performance, modularity, and a developer experience that feels natural for TypeScript engineers.
-
-- 🚀 **Bun Native** - Leverages Bun's high-performance HTTP server and native APIs
-- 🧱 **Plugin Architecture** - Highly modular. Build your app as a collection of independent, reusable modules
-- 💉 **Powerful DI** - Robust Dependency Injection with multiple scopes (Singleton, Request, Instance)
-- ✨ **Decorator-Based** - Clean, expressive API using TypeScript decorators
-- 🔒 **Type-Safe Validation** - Zod-first validation with Valibot adapter available
-- 🌐 **Built-in CORS** - Zero-config CORS support with fine-grained control
-- ⚡ **JIT Compiled Handlers** - Routes compiled at startup for zero runtime overhead
-
-## Ecosystem
-
-| Package | Description |
+| Package | Purpose |
 | :--- | :--- |
-| **@carno.js/core** | Core framework: Routing, DI, Middleware, Validation, CORS, Lifecycle |
-| **@carno.js/orm** | Lightweight ORM for PostgreSQL and MySQL |
-| **@carno.js/queue** | Background job processing via BullMQ |
-| **@carno.js/schedule** | Cron, Interval, and Timeout task scheduling |
-| **@carno.js/static** | High-performance static file serving |
-| **@carno.js/cli** | Command Line Interface for migrations and tools |
+| `@carno.js/core` | HTTP framework, routing, dependency injection, middleware, validation, lifecycle hooks, and testing utilities. |
+| `@carno.js/orm` | Lightweight SQL ORM for PostgreSQL and MySQL, including repositories, query builder, relationships, migrations, identity map, and sessions. |
+| `@carno.js/queue` | Background job processing built around BullMQ. |
+| `@carno.js/schedule` | Cron, interval, and timeout scheduling. |
+| `@carno.js/static` | Static file serving for Bun applications. |
+| `@carno.js/websocket` | WebSocket gateways, rooms, namespaces, and broadcasting. |
+| `@carno.js/logger` | Logging utilities for Carno.js applications. |
+| `@carno.js/cli` | Command-line tools, including ORM migration workflows. |
 
-## Quick Start
+## Getting Started
 
-### Installation
+Install the core package:
 
-<table>
-  <tr>
-    <th>macOS / Linux</th>
-    <th>Windows (Bun)</th>
-  </tr>
-  <tr>
-    <td><pre><code>bun add @carno.js/core</code></pre></td>
-    <td><pre><code>bun add "@carno.js/core"</code></pre></td>
-  </tr>
-</table>
-
-### Configuration
-
-Ensure your `tsconfig.json` has decorators enabled:
-
-```json
-{
-  "compilerOptions": {
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
-  }
-}
+```bash
+bun install @carno.js/core
 ```
 
-### Hello World
+On Windows, wrap scoped package names in quotes:
 
-```typescript
-import { Carno, Controller, Get } from '@carno.js/core';
-
-@Controller()
-class AppController {
-  @Get('/')
-  hello() {
-    return { message: 'Hello from Carno.js!' };
-  }
-}
-
-const app = new Carno();
-app.controllers([AppController]);
-app.listen(3000);
+```bash
+bun install "@carno.js/core"
 ```
 
-## Features
+Then follow the full setup guide in the documentation:
 
-### HTTP Methods & Routing
+[Installation and setup](https://carnojs.github.io/carno.js/docs/installation)
 
-```typescript
-import { Controller, Get, Post, Put, Delete, Param, Query, Body } from '@carno.js/core';
+## Documentation
 
-@Controller('/users')
-class UserController {
-  @Get()
-  list() {
-    return { users: [] };
-  }
+The documentation site is the source of truth for usage examples and API guidance:
 
-  @Get('/:id')
-  findOne(@Param('id') id: string) {
-    return { id };
-  }
+- [Introduction](https://carnojs.github.io/carno.js/docs/intro)
+- [Core framework](https://carnojs.github.io/carno.js/docs/core/overview)
+- [ORM](https://carnojs.github.io/carno.js/docs/orm/overview)
+- [Queue](https://carnojs.github.io/carno.js/docs/queue/overview)
+- [Schedule](https://carnojs.github.io/carno.js/docs/schedule/overview)
+- [Static files](https://carnojs.github.io/carno.js/docs/static/overview)
+- [WebSocket](https://carnojs.github.io/carno.js/docs/websocket/overview)
+- [Testing](https://carnojs.github.io/carno.js/docs/testing/overview)
 
-  @Post()
-  create(@Body() body: CreateUserDto) {
-    return { created: true, data: body };
-  }
+## Repository Workflow
 
-  @Put('/:id')
-  update(@Param('id') id: string, @Body() body: UpdateUserDto) {
-    return { updated: true, id };
-  }
+Install dependencies:
 
-  @Delete('/:id')
-  remove(@Param('id') id: string) {
-    return { deleted: true, id };
-  }
-}
+```bash
+bun install
 ```
 
-### Parameter Decorators
+Run the TypeScript build:
 
-| Decorator | Description |
-| :--- | :--- |
-| `@Param(key?)` | Route parameters (e.g., `/users/:id`) |
-| `@Query(key?)` | Query string parameters |
-| `@Body(key?)` | Request body (parsed JSON) |
-| `@Header(key?)` | Request headers |
-| `@Req()` | Raw Request object |
-| `@Ctx()` | Full Context object |
-
-### Dependency Injection
-
-```typescript
-import { Service, Controller, Get } from '@carno.js/core';
-
-@Service()
-class UserService {
-  findAll() {
-    return ['Alice', 'Bob'];
-  }
-}
-
-@Controller('/users')
-class UserController {
-  constructor(private userService: UserService) {}
-
-  @Get()
-  list() {
-    return this.userService.findAll();
-  }
-}
-
-const app = new Carno();
-app.services([UserService]);
-app.controllers([UserController]);
-app.listen(3000);
+```bash
+npm run build
 ```
 
-#### DI Scopes
+Run tests:
 
-```typescript
-import { Service, Scope } from '@carno.js/core';
-
-// Singleton (default) - same instance always
-@Service()
-class SingletonService {}
-
-// Instance - new instance per injection
-@Service({ scope: Scope.INSTANCE })
-class InstanceService {}
-
-// Request - new instance per HTTP request
-@Service({ scope: Scope.REQUEST })
-class RequestService {}
+```bash
+bun test
 ```
 
-### Validation with Zod
+Run ORM tests against PostgreSQL or MySQL:
 
-```typescript
-import { z } from 'zod';
-import { Controller, Post, Body, Schema, ZodAdapter } from '@carno.js/core';
-
-@Schema(z.object({
-  name: z.string().min(2),
-  email: z.string().email(),
-}))
-class CreateUserDto {
-  name!: string;
-  email!: string;
-}
-
-@Controller('/users')
-class UserController {
-  @Post()
-  create(@Body() body: CreateUserDto) {
-    return { created: true, user: body };
-  }
-}
-
-const app = new Carno({ validation: new ZodAdapter() });
-app.controllers([UserController]);
-app.listen(3000);
+```bash
+npm run test:postgres
+npm run test:mysql
 ```
 
-Invalid payloads automatically return a `400 Bad Request` with detailed error messages.
+## Documentation Site
 
-### CORS
+The site is built with Docusaurus and lives in `docs/carno`.
 
-```typescript
-const app = new Carno({
-  cors: {
-    origins: '*',                    // or 'http://example.com' or ['http://a.com', 'http://b.com']
-    methods: ['GET', 'POST'],        // Allowed methods
-    headers: ['Content-Type'],       // Allowed headers
-    credentials: true,               // Allow credentials
-    maxAge: 86400,                   // Preflight cache in seconds
-  }
-});
+```bash
+cd docs/carno
+npm install
+npm run start
 ```
 
-### Middleware
-
-```typescript
-import { Controller, Get, Middleware, Context } from '@carno.js/core';
-import type { MiddlewareHandler } from '@carno.js/core';
-
-const authMiddleware: MiddlewareHandler = (ctx: Context) => {
-  const token = ctx.req.headers.get('authorization');
-  if (!token) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-  ctx.locals.user = { id: '123' };
-};
-
-@Controller('/admin')
-@Middleware(authMiddleware)
-class AdminController {
-  @Get()
-  dashboard(ctx: Context) {
-    return { user: ctx.locals.user };
-  }
-}
-```
-
-### Global Middleware
-
-```typescript
-const app = new Carno({
-  globalMiddlewares: [
-    loggerMiddleware,
-    authMiddleware,
-  ]
-});
-```
-
-### Lifecycle Hooks
-
-```typescript
-import { Service, OnApplicationInit, OnApplicationBoot, OnApplicationShutdown } from '@carno.js/core';
-
-@Service()
-class DatabaseService {
-  @OnApplicationInit()
-  async onInit() {
-    console.log('Connecting to database...');
-  }
-
-  @OnApplicationBoot()
-  onBoot() {
-    console.log('Application started!');
-  }
-
-  @OnApplicationShutdown()
-  async onShutdown() {
-    console.log('Closing connections...');
-  }
-}
-```
-
-### HTTP Exceptions
-
-```typescript
-import { 
-  HttpException,
-  BadRequestException,
-  UnauthorizedException,
-  ForbiddenException,
-  NotFoundException,
-  ConflictException,
-  InternalServerErrorException
-} from '@carno.js/core';
-
-@Get('/:id')
-findOne(@Param('id') id: string) {
-  if (!id) {
-    throw new BadRequestException('ID is required');
-  }
-  
-  const user = this.userService.find(id);
-  if (!user) {
-    throw new NotFoundException('User not found');
-  }
-  
-  return user;
-}
-```
-
-### Plugins & Modules
-
-```typescript
-// user.module.ts
-import { Carno } from '@carno.js/core';
-
-export const UserModule = new Carno({
-  exports: [UserService],
-});
-UserModule.controllers([UserController]);
-UserModule.services([UserService, UserRepository]);
-
-// app.ts
-import { UserModule } from './user.module';
-
-const app = new Carno();
-app.use(UserModule);
-app.listen(3000);
-```
-
-### Testing
-
-```typescript
-import { describe, expect, test } from 'bun:test';
-import { Controller, Get, Service } from '@carno.js/core';
-import { withTestApp } from '@carno.js/core';
-
-@Service()
-class GreetService {
-  greet(name: string) {
-    return `Hello, ${name}!`;
-  }
-}
-
-@Controller('/greet')
-class GreetController {
-  constructor(private greetService: GreetService) {}
-
-  @Get('/:name')
-  greet(@Param('name') name: string) {
-    return { message: this.greetService.greet(name) };
-  }
-}
-
-describe('GreetController', () => {
-  test('greets by name', async () => {
-    await withTestApp(
-      async (harness) => {
-        const response = await harness.get('/greet/World');
-        expect(response.status).toBe(200);
-        expect(await response.json()).toEqual({ message: 'Hello, World!' });
-      },
-      {
-        controllers: [GreetController],
-        services: [GreetService],
-        listen: true,
-      }
-    );
-  });
-});
-```
-
-## API Reference
-
-### Carno Class
-
-```typescript
-const app = new Carno(config?: CarnoConfig);
-
-// Register controllers (accepts array)
-app.controllers([UserController, ProductController]);
-
-// Register services (accepts array)
-app.services([UserService, { token: Logger, useClass: ConsoleLogger }]);
-
-// Register global middlewares (accepts array)
-app.middlewares([authMiddleware, loggerMiddleware]);
-
-// Use a plugin/module
-app.use(PluginModule);
-
-// Start the server
-await app.listen(3000);  // Returns Promise<void>
-
-// Stop the server
-await app.stop();
-```
-
-### CarnoConfig
-
-```typescript
-interface CarnoConfig {
-  exports?: (Token | ProviderConfig)[];           // Services to export from plugin
-  globalMiddlewares?: MiddlewareHandler[];        // Global middleware chain
-  disableStartupLog?: boolean;                    // Disable startup banner
-  cors?: CorsConfig;                              // CORS configuration
-  validation?: ValidatorAdapter | boolean;        // Validation adapter (ZodAdapter, ValibotAdapter)
-  cache?: CacheConfig | boolean;                  // Cache configuration
-}
-```
-
-### Context
-
-```typescript
-class Context {
-  req: Request;                    // Original Bun Request
-  params: Record<string, string>;  // Route parameters
-  query: Record<string, string>;   // Query parameters
-  body: any;                       // Parsed request body
-  locals: Record<string, any>;     // Request-scoped data (for middleware)
-
-  async parseBody(): Promise<any>; // Parse JSON body
-  json(data: any, status?: number): Response;
-  text(data: string, status?: number): Response;
-}
-```
+Use the site for new guides, examples, and API explanations. Keep this README focused on project positioning, package discovery, and contributor orientation.
 
 ## Contributing
 
-Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Issues, pull requests, bug reports, and documentation improvements are welcome. Before opening a large change, prefer starting with an issue or discussion so the scope and expected behavior are clear.
 
 ## License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+Carno.js is released under the MIT License. See [LICENSE](LICENSE) for details.
