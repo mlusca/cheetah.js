@@ -80,4 +80,34 @@ describe("Lifecycle hooks", () => {
     // High priority (10) should execute before low priority (1)
     expect(executionOrder).toEqual(["high", "low"]);
   });
+
+  it("does not await async OnApplicationInit hooks before running later hooks", async () => {
+    const executionOrder: string[] = [];
+
+    @Service()
+    class AsyncPriorityService {
+      @OnApplicationInit(10)
+      async highPriority(): Promise<void> {
+        executionOrder.push("high-start");
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        executionOrder.push("high-end");
+      }
+
+      @OnApplicationInit(1)
+      lowPriority(): void {
+        executionOrder.push("low");
+      }
+    }
+
+    app = new Carno({ disableStartupLog: true });
+    app.services(AsyncPriorityService);
+    app.listen(3013);
+
+    executionOrder.push("after-listen");
+
+    expect(executionOrder).toEqual(["high-start", "low", "after-listen"]);
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(executionOrder).toEqual(["high-start", "low", "after-listen", "high-end"]);
+  });
 });

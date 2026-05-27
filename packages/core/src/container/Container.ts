@@ -1,3 +1,5 @@
+import { POST_CONSTRUCT_META, PRE_DESTROY_META } from '../metadata';
+
 /**
  * Lightweight DI Container for Turbo.
  * 
@@ -60,6 +62,27 @@ export class Container {
         return this.configs.has(token);
     }
 
+    hasPreDestroyHooks(): boolean {
+        for (const [token, config] of this.configs) {
+            const target = config.useClass ?? token;
+
+            if (Reflect.getMetadata(PRE_DESTROY_META, target)) {
+                return true;
+            }
+        }
+
+        for (const [token, instance] of this.instances) {
+            const config = this.configs.get(token);
+            const target = config?.useClass ?? instance?.constructor ?? token;
+
+            if (Reflect.getMetadata(PRE_DESTROY_META, target)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Resolves a token to return instance and its effective scope.
      */
@@ -106,31 +129,44 @@ export class Container {
 
         try {
             const depsToken = this.getDependencies(target);
+            let instance: any;
+            let effectiveScope = config.scope || Scope.SINGLETON;
 
             if (depsToken.length === 0) {
                 // No deps: Scope is as configured
-                return { instance: new target(), scope: config.scope || Scope.SINGLETON };
-            }
+                instance = new target();
+            } else {
+                const args: any[] = [];
+                for (const depToken of depsToken) {
+                    const depResult = this.resolveInternal(depToken, requestLocals);
+                    args.push(depResult.instance);
 
-            const args: any[] = [];
-            let effectiveScope = config.scope || Scope.SINGLETON;
-
-            for (const depToken of depsToken) {
-                const depResult = this.resolveInternal(depToken, requestLocals);
-                args.push(depResult.instance);
-
-                // Scope Bubbling Logic:
-                // If a dependency is REQUEST scoped, the parent MUST become REQUEST scoped (if it was Singleton)
-                // to avoid holding a stale reference to a request-bound instance.
-                if (depResult.scope === Scope.REQUEST && effectiveScope === Scope.SINGLETON) {
-                    effectiveScope = Scope.REQUEST;
+                    // Scope Bubbling Logic:
+                    // If a dependency is REQUEST scoped, the parent MUST become REQUEST scoped (if it was Singleton)
+                    // to avoid holding a stale reference to a request-bound instance.
+                    if (depResult.scope === Scope.REQUEST && effectiveScope === Scope.SINGLETON) {
+                        effectiveScope = Scope.REQUEST;
+                    }
                 }
-
-                // Note: INSTANCE scope dependencies do not force bubbling because they are transient and safe to hold (usually),
-                // unless semantic logic dictates otherwise. For now, strictly bubbling REQUEST scope.
+                instance = new target(...args);
             }
 
-            return { instance: new target(...args), scope: effectiveScope };
+            // PostConstruct Hook: Retrieve metadata and execute immediately
+            const postConstructMethod = Reflect.getMetadata(POST_CONSTRUCT_META, target);
+            if (postConstructMethod && typeof instance[postConstructMethod] === 'function') {
+                try {
+                    const result = instance[postConstructMethod]();
+                    if (result instanceof Promise) {
+                        result.catch((err) => {
+                            console.error(`Error in PostConstruct hook of ${target.name}:`, err);
+                        });
+                    }
+                } catch (err) {
+                    console.error(`Error in PostConstruct hook of ${target.name}:`, err);
+                }
+            }
+
+            return { instance, scope: effectiveScope };
         } finally {
             this.resolving.delete(target);
         }
@@ -159,6 +195,26 @@ export class Container {
             useClass: config.useClass ?? config.token,
             scope: config.scope ?? Scope.SINGLETON
         };
+    }
+
+    async destroy(): Promise<void> {
+        const entries = Array.from(this.instances.entries()).reverse();
+        for (const [token, instance] of entries) {
+            if (!instance) continue;
+            const config = this.configs.get(token);
+            const target = config?.useClass ?? instance.constructor ?? token;
+            const preDestroyMethod = Reflect.getMetadata(PRE_DESTROY_META, target);
+            if (preDestroyMethod && typeof instance[preDestroyMethod] === 'function') {
+                try {
+                    const result = instance[preDestroyMethod]();
+                    if (result instanceof Promise) {
+                        await result;
+                    }
+                } catch (err) {
+                    console.error(`Error in PreDestroy hook of ${target.name ?? token.name}:`, err);
+                }
+            }
+        }
     }
 
     clear(): void {

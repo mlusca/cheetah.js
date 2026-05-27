@@ -38,6 +38,7 @@ export type { CarnoMiddleware, CarnoClosure } from './middleware/CarnoMiddleware
 // Decorators - DI
 export { Service } from './decorators/Service';
 export { Inject } from './decorators/Inject';
+export { PostConstruct, PreDestroy } from './decorators/LifecycleHooks';
 
 // Container
 export { Container, Scope } from './container/Container';

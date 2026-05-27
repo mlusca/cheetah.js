@@ -44,3 +44,6 @@ export const PARAMS_META = Symbol('turbo:params');
 export const MIDDLEWARE_META = Symbol('turbo:middleware');
 export const SERVICE_META = Symbol('turbo:service');
 export const INJECT_META = Symbol('turbo:inject');
+export const POST_CONSTRUCT_META = Symbol('carno:post_construct');
+export const PRE_DESTROY_META = Symbol('carno:pre_destroy');
+
