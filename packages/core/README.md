@@ -1,6 +1,8 @@
 # @carno.js/core
 
-Ultra-fast, performance-first HTTP framework for Bun.
+Opinionated application framework core for Bun and TypeScript.
+
+Carno core is designed for teams that like the structured programming model of NestJS and the enterprise architecture patterns common in Spring applications: controllers, services, dependency injection, lifecycle hooks, middleware, and validation as first-class concepts. It keeps performance close to the metal by building on Bun's native HTTP runtime instead of layering an enterprise API over a Node-first design.
 
 ## Installation
 

@@ -5,7 +5,7 @@
 <h1 align="center">Carno.js</h1>
 
 <p align="center">
-  <strong>A modular framework and ORM ecosystem for Bun and TypeScript.</strong>
+  <strong>An opinionated application framework and ORM ecosystem for Bun and TypeScript.</strong>
 </p>
 
 <p align="center">
@@ -24,14 +24,18 @@
 
 ## Overview
 
-Carno.js is a modular application framework for Bun. It combines a fast HTTP core, dependency injection, decorators, validation, middleware, lifecycle hooks, and optional packages for data access, queues, scheduling, static files, WebSockets, and logging.
+Carno.js is an opinionated application framework for Bun, shaped for teams that want the familiar structure of NestJS and the enterprise patterns popularized by Spring in the Java ecosystem.
+
+It combines a fast Bun-native HTTP core, dependency injection, decorators, validation, middleware, lifecycle hooks, and optional packages for data access, queues, scheduling, static files, WebSockets, and logging. The goal is to keep applications organized as they grow, with clear boundaries between controllers, services, modules, and infrastructure.
 
 This repository is the monorepo for the Carno.js ecosystem. The README is intentionally concise; feature guides, examples, and API details live in the documentation site.
 
 ## Why Carno.js
 
-- **Bun native:** built around Bun's runtime and HTTP server instead of adapting a Node-first design.
-- **TypeScript first:** decorators, typed controllers, dependency injection, and DTO validation are first-class concepts.
+- **Enterprise-oriented structure:** controllers, services, lifecycle hooks, modules, and dependency injection are first-class patterns for maintainable applications.
+- **Inspired by proven ecosystems:** brings a NestJS-like developer experience and Spring-style application architecture to Bun and TypeScript.
+- **Fast by design:** built around Bun's runtime and HTTP server, keeping performance intrinsic without making your architecture disposable.
+- **TypeScript first:** decorators, typed controllers, dependency injection, and DTO validation are core concepts.
 - **Modular by default:** install only the packages your application needs.
 - **Application-ready:** includes packages for ORM, queues, scheduling, static assets, WebSockets, testing, and logging.
 

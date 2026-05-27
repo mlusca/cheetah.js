@@ -36,9 +36,9 @@ const app = new Carno({
 
 ## Lifecycle & Controllers
 
-Controllers in Carno.js are **Singletons by default**. They are instantiated once during application startup. This design choice enables aggressive optimizations, such as ahead-of-time (AOT) handler compilation and route flattening.
+Controllers in Carno.js are **Singletons by default**. They are instantiated once during application startup, giving the application a predictable dependency graph and a stable route model before traffic starts.
 
-When a controller is instantiated, all its dependencies are resolved from the DI container.
+When a controller is instantiated, all its dependencies are resolved from the DI container. This keeps request handlers thin and pushes business logic into services that are easier to test, replace, and maintain.
 
 ### Lifecycle Hooks
 Components can hook into the application lifecycle:

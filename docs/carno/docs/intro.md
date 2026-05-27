@@ -4,18 +4,20 @@ sidebar_position: 1
 
 # Introduction
 
-Carno.js is the **fastest framework for Bun**.
+Carno.js is an **enterprise-ready application framework for Bun and TypeScript**.
 
-It combines a small, expressive core with opt-in modules for data access, background jobs, and scheduling.
-The framework relies heavily on TypeScript decorators to provide a declarative and clean API.
+It is inspired by the structured developer experience of NestJS and the enterprise application patterns popularized by Spring in the Java ecosystem. Carno.js brings that style to Bun: decorators, dependency injection, controllers, services, lifecycle hooks, validation, and modular packages that keep large codebases easier to reason about.
+
+Performance remains part of the contract. Carno.js is built on Bun's runtime and keeps the HTTP layer lightweight, while the primary product focus is maintainability: clear boundaries, explicit dependencies, testable services, and an application model that remains predictable as teams and features grow.
 
 ## Design Goals
 
-- **Blazing Fast**: 40% faster than Elysia. [See benchmarks](/docs/benchmark).
-- **Bun Native**: Built specifically to leverage Bun's HTTP server and runtime capabilities.
-- **TypeScript First**: Decorators and strong typing are first-class citizens.
-- **Modular**: The core is lightweight. You only install what you need (`@carno.js/orm`, `@carno.js/queue`, etc.).
-- **Dependency Injection**: A robust DI container manages your application's components and scopes (Singleton, Request, Instance).
+- **Enterprise Application Architecture**: Controllers, services, providers, lifecycle hooks, and modules are first-class concepts.
+- **Familiar for NestJS and Spring developers**: Carno.js uses a proven, decorator-driven, dependency-injected programming model without forcing a Node-first runtime.
+- **Bun Native Performance**: Built specifically to use Bun's HTTP server and runtime capabilities, with benchmarks available for comparison and regression tracking.
+- **TypeScript First**: Decorators, strong typing, and DTO validation are core to the framework.
+- **Modular**: The core stays focused. You only install what you need (`@carno.js/orm`, `@carno.js/queue`, etc.).
+- **Dependency Injection**: A DI container manages application components and scopes (Singleton, Request, Instance).
 
 ## Ecosystem
 
@@ -33,7 +35,7 @@ The framework relies heavily on TypeScript decorators to provide a declarative a
 
 ## Modularity & Clean Code
 
-Carno.js is built with modularity in mind. Instead of a large monolithic configuration, you are encouraged to split your logic into independent **Plugins**. This keeps your codebase organized and your features decoupled.
+Carno.js is built with modularity in mind. Instead of a large monolithic configuration, you are encouraged to split your logic into independent **Plugins**. This keeps your codebase organized, your features decoupled, and your business logic easier to test and maintain.
 
 ```ts
 // feature.module.ts

@@ -20,7 +20,7 @@ if (posthogApiKey) {
 
 const config: Config = {
   title: 'Carno.js',
-  tagline: 'Performance-first framework and ORM for Bun + TypeScript.',
+  tagline: 'A TypeScript application framework for Bun — built around explicit architecture.',
   favicon: 'img/carno.png',
 
   future: {
