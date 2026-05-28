@@ -44,7 +44,8 @@ Even without `BaseEntity`, the decorated class still has ORM-aware serialization
 To create a repository, extend the generic `Repository<T>` class and decorate it with `@Service()`.
 
 ```typescript
-import { Service, Repository } from '@carno.js/orm';
+import { Service } from '@carno.js/core';
+import { Repository } from '@carno.js/orm';
 import { User } from '../entities/user.entity';
 
 @Service()

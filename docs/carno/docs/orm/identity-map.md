@@ -4,54 +4,142 @@ sidebar_position: 6
 
 # Identity Map
 
-The **Identity Map** is a fundamental pattern used by Carno.js ORM to ensure data consistency and optimize performance within a single request.
+An Identity Map keeps one in-memory object instance per entity identity inside a scope. If the same row is materialized more than once in that scope, the ORM can reuse the same object instead of creating competing copies of the same database record.
 
-## What is an Identity Map?
+The pattern matters because application code often passes entities through services, hooks and relation loading. Without an Identity Map, two queries for `User#1` can produce two separate `User` objects. Mutating one object would not affect the other, even though both represent the same database row.
 
-An Identity Map keeps track of all entities loaded from the database in a specialized registry. If you try to load the same record multiple times, the ORM returns the **exact same object instance** from memory instead of creating a new one or querying the database again.
-
-## Benefits
-
-1.  **Object Consistency**: If you modify a `User` object in one part of your code, any other part of the code referencing that same `User` (by ID) will see the changes immediately, because they share the same memory reference.
-2.  **Performance**: Reduces redundant database queries. If an entity is already in the map, `findById` returns it instantly.
-3.  **Circular Dependency Safety**: Helps in managing complex object graphs where entities might point back to each other.
-
-## How it works in Carno.js
-
-The Identity Map is managed via **AsyncLocalStorage**. This ensures that each concurrent HTTP request has its own isolated map, preventing data leakage between users.
-
-### Automatic Registration
-
-The `IdentityMapMiddleware` is automatically included when you use the `CarnoOrm` plugin.
+With an Identity Map, both reads can point to the same object:
 
 ```ts
-// This happens automatically under the hood:
-app.use(CarnoOrm); 
-// ^ Registers IdentityMapMiddleware globally
+const first = await users.findByIdOrFail(1);
+const second = await users.findByIdOrFail(1);
+
+console.log(first === second); // true, when both run in the same identity map context
 ```
 
-### Example Scenario
+## What It Solves
+
+Identity Map is about object consistency, not only performance.
+
+- It prevents duplicate in-memory instances for the same row in one request or workflow.
+- It keeps relation graphs coherent when the same entity is reached through different paths.
+- It preserves local changes when a cached instance is encountered again during hydration.
+- It can avoid redundant materialization work for repeated reads of the same primary key.
+
+It does not replace database transactions, cache invalidation or optimistic locking. It only controls object identity inside an application scope.
+
+## Request Scope
+
+Carno ORM uses `AsyncLocalStorage` to hold the current Identity Map.
+
+Each call to `identityMapContext.run()` creates a new map for that async execution path. Concurrent requests get isolated maps, so one request cannot see another request's entity instances.
 
 ```ts
-@Service()
-export class MyService {
-  async run() {
-    // 1. First query: Hits the database
-    const user1 = await userRepository.findById(1);
+import { identityMapContext } from '@carno.js/orm';
 
-    // 2. Second query: Returns user1 from memory (no DB hit)
-    const user2 = await userRepository.findById(1);
+await identityMapContext.run(async () => {
+  const a = await users.findByIdOrFail(1);
+  const b = await users.findByIdOrFail(1);
 
-    console.log(user1 === user2); // true (Same instance!)
-    
-    user1.name = 'Updated Name';
-    console.log(user2.name); // 'Updated Name'
-  }
-}
+  console.log(a === b); // true
+});
+
+const c = await users.findByIdOrFail(1);
+// Outside the context, identity map lookup is disabled.
 ```
 
-## Internal Details
+## Registering the Middleware
 
-- **Scope**: The map is created at the start of the request and destroyed at the end.
-- **Key**: Entities are indexed by their class name and primary key.
-- **Manual Access**: While rarely needed, you can access the map via `identityMapContext.getIdentityMap()`.
+`CarnoOrm` exports `IdentityMapMiddleware`, but request-scoped Identity Map behavior depends on the middleware being part of the request pipeline.
+
+Register it as a global middleware when you want each HTTP request to get its own Identity Map context:
+
+```ts
+import { Carno } from '@carno.js/core';
+import { CarnoOrm, IdentityMapMiddleware } from '@carno.js/orm';
+
+const app = new Carno()
+  .use(CarnoOrm)
+  .middlewares(IdentityMapMiddleware);
+
+await app.listen(3000);
+```
+
+The middleware wraps `next()` in `identityMapContext.run()`, creating a fresh map for the request and disposing of it when the request finishes.
+
+## How Hydration Uses It
+
+When the ORM transforms query rows into entities, it checks the current Identity Map by entity class and primary key.
+
+If an instance is already present:
+
+1. The existing object is reused.
+2. The ORM skips repopulating it from the row.
+3. Local in-memory changes are preserved.
+
+If no instance is present:
+
+1. The ORM creates the entity.
+2. It populates scalar properties and loaded relations.
+3. It registers the instance in the current Identity Map.
+
+This behavior applies during normal model transformation. If there is no active identity map context, the ORM simply creates objects normally.
+
+## Example With Relations
+
+```ts
+await identityMapContext.run(async () => {
+  const post = await posts.findOneOrFail(
+    { id: 10 },
+    { load: ['author'] },
+  );
+
+  const author = await users.findByIdOrFail(post.author.id);
+
+  console.log(post.author === author); // true
+});
+```
+
+Both paths refer to the same `User` row, so they resolve to the same `User` instance inside the context.
+
+## Manual Access
+
+Most application code should not need direct access, but it is available for advanced cases and tests.
+
+```ts
+import { identityMapContext } from '@carno.js/orm';
+
+await identityMapContext.run(async () => {
+  const map = identityMapContext.getIdentityMap();
+
+  map?.set(user);
+  const sameUser = map?.get(User, user.id);
+});
+```
+
+The map supports `get`, `set`, `setByKey`, `has`, `remove` and `clear`.
+
+## When To Use It
+
+Enable Identity Map for normal HTTP request handling when:
+
+- Services load and pass the same entities through multiple layers.
+- You load relation graphs and want object references to stay consistent.
+- You mutate loaded objects before saving and want later reads in the same request to see those changes.
+
+Use `identityMapContext.run()` manually for background jobs, queue workers, tests or scripts that do not go through Carno middleware but still need one coherent unit of work.
+
+## Boundaries and Limitations
+
+- The scope is in-memory and per async context.
+- It is not shared across requests, processes or servers.
+- It is not a second-level cache.
+- It does not make stale database rows fresh.
+- It only works when the entity has a primary key value.
+- It does not replace transactions for atomic writes.
+
+## See Also
+
+- [Transactions](./transactions) for atomic write boundaries.
+- [Session](./session) for batching multiple writes in one transaction.
+- [Relations](./relations) for relation loading behavior.

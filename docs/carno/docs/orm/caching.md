@@ -1,97 +1,145 @@
 # Caching
 
-Carno ORM provides a built-in mechanism to cache query results, which can significantly improve performance for read-heavy applications. The caching system is built on top of the `@carno.js/core` CacheService and supports various caching strategies.
+Carno ORM can cache query results for read-heavy paths. The ORM cache is built on top of `CacheService` from `@carno.js/core`; when the ORM has access to that service, it can store and retrieve query results by a generated cache key.
+
+Use query caching for data that is read often and can tolerate a short delay before reflecting writes, such as settings, catalogs, dashboards and expensive filtered lists.
+
+Avoid query caching for data that must always be freshly read after every write unless you keep the TTL very short or rely on automatic invalidation.
 
 ## Configuration
 
-To use caching in the ORM, enable it in your connection settings. The ORM automatically utilizes the registered `CacheService`.
+Caching is controlled from your ORM connection settings in `carno.config.ts`.
 
-```typescript
+```ts
+import { BunPgDriver, type ConnectionSettings } from '@carno.js/orm';
+
+const config: ConnectionSettings = {
+  driver: BunPgDriver,
+  host: 'localhost',
+  port: 5432,
+  username: 'postgres',
+  password: 'password',
+  database: 'my_app',
+  cache: {
+    maxKeysPerTable: 10000,
+    invalidateCacheOnWrite: true,
+  },
+};
+
+export default config;
+```
+
+`maxKeysPerTable` limits how many query cache keys the ORM tracks per table. `invalidateCacheOnWrite` controls whether writes clear cached reads for the affected table. It defaults to `true`.
+
+Register the ORM plugin normally:
+
+```ts
 import { Carno } from '@carno.js/core';
-import { CarnoOrm, Orm, BunPgDriver } from '@carno.js/orm';
+import { CarnoOrm } from '@carno.js/orm';
 
 const app = new Carno()
   .use(CarnoOrm);
 ```
 
-## Usage
+## Enabling Cache Per Query
 
-You can enable caching for specific queries using Repositories, Active Record methods, or the Query Builder.
+Caching is opt-in per query. Repository methods, Active Record methods and the Query Builder all support it.
 
-### Using Repository / Active Record
+### Repository and Active Record
 
-The `find`, `findOne`, `findAll`, and `findOneOrFail` methods accept a `cache` option.
+`find`, `findOne`, `findAll` and `findOneOrFail` accept a `cache` option.
 
-```typescript
-// Cache for 1 minute (60000 ms)
-const users = await UserRepository.find({
+```ts
+// Cache for 1 minute.
+const users = await userRepository.find({
   where: { isActive: true },
-  cache: 60000
+  cache: 60000,
 });
 
-// Cache forever (or until evicted)
+// Cache until evicted or invalidated.
 const settings = await Settings.findOne({
   where: { key: 'site_title' },
-  cache: true
+  cache: true,
 });
 
-// Cache until a specific date
+// Cache until a specific time.
 const promo = await Promotion.findOne({
-  where: { code: 'SUMMER2024' },
-  cache: new Date('2024-09-01')
+  where: { code: 'SUMMER2026' },
+  cache: new Date('2026-09-01'),
 });
 ```
 
-### Using Query Builder
+### Query Builder
 
-You can also use the `.cache()` method on the Query Builder.
+Use `.cache()` on the query builder.
 
-```typescript
+```ts
 const topProducts = await Product.createQueryBuilder()
   .where({ rating: { $gt: 4.5 } })
   .orderBy({ sales: 'DESC' })
   .limit(10)
-  .cache(30000) // Cache for 30 seconds
+  .cache(30000)
   .executeAndReturnAll();
 ```
 
-## Cache Options
+## Cache Option Values
 
-The `cache` option accepts the following values:
+| Value | Behavior |
+| :--- | :--- |
+| `number` | TTL in milliseconds |
+| `true` | Cache without a TTL, until eviction or invalidation |
+| `Date` | Cache until that date/time |
+| `false` | Explicitly bypass cache |
+| `undefined` | Do not cache |
 
-- **`number`**: The Time To Live (TTL) in milliseconds. The result will be cached for this duration.
-- **`true`**: The result will be cached indefinitely (or until the cache driver evicts it).
-- **`Date`**: The result will be cached until the specified date.
-- **`false`**: Explicitly disable caching for this query (bypass cache).
-- **`undefined`**: Same as false (default), unless default caching is configured globally in the future.
+## How Query Caching Works
 
-## How it Works
+When caching is enabled:
 
-When caching is enabled for a query:
-1. The ORM generates a unique cache key based on the query SQL and parameters.
-2. It checks if the result exists in the cache.
-3. If found, the cached result is returned immediately, bypassing the database.
-4. If not found, the query is executed against the database.
-5. The result is stored in the cache with the specified TTL.
+1. The ORM builds the SQL statement and parameters.
+2. A cache key is generated from the query shape and values.
+3. The cache is checked before the database is queried.
+4. A cache hit returns the stored result.
+5. A cache miss executes the query and stores the result with the configured TTL.
 
-## Cache Invalidation
+The cache key includes query details, so different filters, ordering, limits and selected fields produce different cached entries.
 
-By default, the ORM **automatically invalidates** the cache for a table whenever a write operation (INSERT, UPDATE, DELETE) is performed on that table. This ensures that subsequent queries fetch fresh data.
+## Invalidation
 
-### Disabling Automatic Invalidation
+By default, write statements invalidate cached reads for the table they affect.
 
-If you prefer to manage cache invalidation manually or want to persist stale data for performance reasons, you can disable this behavior globally in your `carno.config.ts` or connection settings.
+This applies to:
 
-```typescript
-const app = new Carno()
-  .use(CarnoOrm, {
-    connection: {
-      // ... other settings
-      cache: {
-        invalidateCacheOnWrite: false // Disable auto-invalidation
-      }
-    }
-  });
+- `INSERT`
+- `UPDATE`
+- `DELETE`
+- Repository writes
+- Active Record writes
+- Query Builder writes
+
+Disable automatic invalidation only when you are intentionally accepting stale results until TTL expiry or you have another invalidation strategy.
+
+```ts
+const config: ConnectionSettings = {
+  driver: BunPgDriver,
+  // ...connection settings
+  cache: {
+    invalidateCacheOnWrite: false,
+  },
+};
 ```
 
-When `invalidateCacheOnWrite` is set to `false`, write operations will NOT clear the cache. You will need to wait for the TTL to expire or manually invalidate the cache using the CacheService.
+## Practical Guidelines
+
+- Prefer short TTLs for user-facing data that changes often.
+- Use longer TTLs for reference data, public catalogs and expensive reports.
+- Keep cache enabled per query instead of caching every read by default.
+- Do not cache queries whose result depends on external state not represented in the SQL.
+- Be careful when caching tenant-scoped queries; make sure the tenant condition is part of the query.
+- Use write invalidation unless you have measured that it is too aggressive.
+
+## See Also
+
+- [Querying & Operators](./querying) for filter syntax.
+- [Repository](./repository) for repository query options.
+- [Tenant Isolation](./tenant-isolation) for tenant-scoped reads.

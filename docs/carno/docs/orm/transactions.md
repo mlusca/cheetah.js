@@ -4,96 +4,214 @@ sidebar_position: 5
 
 # Transactions
 
-Execute multiple operations within a single database transaction.
+Transactions let you execute a group of database operations as one atomic unit. If every operation succeeds, the transaction is committed. If any operation throws, the transaction is rolled back and none of the changes are persisted.
 
-## Usage
+Use transactions when the correctness of one write depends on another write:
 
-Inject the `Orm` service and use the `.transaction()` method.
+- Creating an order and reserving stock.
+- Moving balance between two accounts.
+- Creating a user and its audit log.
+- Updating a parent row and several child rows together.
+- Running a multi-step workflow where partial persistence would corrupt state.
+
+## Manual Transactions
+
+Inject the `Orm` service and use `transaction()`.
 
 ```ts
-import { Service, Orm } from '@carno.js/orm';
+import { Service } from '@carno.js/core';
+import { Orm } from '@carno.js/orm';
+import { UserRepository } from './user.repository';
+import { AuditRepository } from './audit.repository';
 
 @Service()
-export class PaymentService {
-  constructor(private orm: Orm) {}
+export class UserService {
+  constructor(
+    private orm: Orm,
+    private users: UserRepository,
+    private audits: AuditRepository,
+  ) {}
 
-  async processPayment() {
-    await this.orm.transaction(async (tx) => {
-      // Operations inside here share the same transaction context
-      // If any error is thrown, the transaction is rolled back automatically.
-      
-      const user = await this.userRepository.findById(1);
-      // ... modify user
-      await user.save();
+  async activateUser(userId: number) {
+    return this.orm.transaction(async () => {
+      const user = await this.users.findByIdOrFail(userId);
+
+      await this.users.updateById(user.id, { status: 'ACTIVE' });
+      await this.audits.create({
+        action: 'USER_ACTIVATED',
+        userId: user.id,
+      });
+
+      return user;
     });
   }
 }
 ```
 
-Note: The `Repository` methods automatically detect the running transaction context.
+Repository and Active Record methods automatically detect the running transaction context. You do not need to pass the transaction object into every repository call.
 
-## Declarative Transactions (`@Transactional`)
+## Rollback Behavior
 
-Carno.js also provides a declarative way to manage transactions using the `@Transactional()` decorator. Applying this decorator to a method ensures that the entire method executes inside a transaction.
+Throwing from the callback rolls back the transaction.
 
-If the method completes successfully, the transaction is committed automatically. If the method throws an error, the transaction is rolled back.
+```ts
+await orm.transaction(async () => {
+  await orders.create({ id: 1, status: 'PAID' });
 
-### Usage
+  throw new Error('Payment provider confirmation failed');
+});
 
-Decorate any class method (typically in services or repositories).
+// The order insert is rolled back.
+```
+
+Catch errors outside the transaction when you want to translate them into HTTP responses or domain-specific errors.
+
+```ts
+try {
+  await this.orm.transaction(async () => {
+    await this.reserveStock(order);
+    await this.chargeCard(order);
+  });
+} catch (error) {
+  // Nothing inside the transaction was committed.
+  throw error;
+}
+```
+
+Avoid swallowing errors inside the transaction callback unless you intentionally want the transaction to continue and commit.
+
+## Nested Transactions
+
+Carno ORM reuses the current transaction context when `transaction()` is called while another transaction is already active.
+
+```ts
+await orm.transaction(async () => {
+  await users.updateById(1, { status: 'ACTIVE' });
+
+  await orm.transaction(async () => {
+    await audits.create({ action: 'NESTED_CALL', userId: 1 });
+  });
+});
+```
+
+The inner call does not open an independent database transaction. If the inner operation throws, the error bubbles out and the outer transaction rolls back.
+
+## Declarative Transactions
+
+Use `@Transactional()` when a whole service method should run inside a transaction.
 
 ```ts
 import { Service } from '@carno.js/core';
 import { Transactional } from '@carno.js/orm';
-import { UserRepository } from './UserRepository';
-import { LogRepository } from './LogRepository';
+import { UserRepository } from './user.repository';
+import { AuditRepository } from './audit.repository';
 
 @Service()
 export class UserRegistrationService {
   constructor(
-    private userRepo: UserRepository,
-    private logRepo: LogRepository
+    private users: UserRepository,
+    private audits: AuditRepository,
   ) {}
 
   @Transactional()
   async registerUser(name: string, email: string) {
-    const user = await this.userRepo.create({ name, email });
-    
-    // If this throws an error, the user created above will not be saved (rolled back)
-    await this.logRepo.logAction('register', `User ${name} registered successfully`);
-    
+    const user = await this.users.create({ name, email });
+
+    await this.audits.create({
+      action: 'USER_REGISTERED',
+      userId: user.id,
+    });
+
     return user;
   }
 }
 ```
 
-### Transaction Propagation
+If the method resolves, the transaction commits. If the method throws, it rolls back.
 
-Nested `@Transactional()` calls automatically detect and reuse the existing transaction context. If an outer transaction has already started, nested methods will run within that same transaction rather than opening a new one.
+`@Transactional()` supports both legacy TypeScript decorators and TS5 Stage 3 method decorators.
 
-If any nested operation throws an error, the entire outer transaction is rolled back.
+## Propagation With Decorators
+
+Nested `@Transactional()` methods reuse the same active transaction.
 
 ```ts
+import { Service } from '@carno.js/core';
+import { Transactional } from '@carno.js/orm';
+
 @Service()
 export class UserService {
-  constructor(private userRepo: UserRepository) {}
+  constructor(private users: UserRepository) {}
 
   @Transactional()
   async updateStatus(userId: number, status: string) {
-    await this.userRepo.update(userId, { status });
+    await this.users.updateById(userId, { status });
   }
 }
 
 @Service()
 export class SystemService {
-  constructor(private userService: UserService, private auditRepo: AuditRepository) {}
+  constructor(
+    private users: UserService,
+    private audits: AuditRepository,
+  ) {}
 
   @Transactional()
   async processSystemAction(userId: number) {
-    // Reuses the outer transaction started here
-    await this.userService.updateStatus(userId, 'ACTIVE'); 
-    
-    await this.auditRepo.create({ action: 'ACTIVATE_USER', userId });
+    await this.users.updateStatus(userId, 'ACTIVE');
+
+    await this.audits.create({
+      action: 'ACTIVATE_USER',
+      userId,
+    });
   }
 }
 ```
+
+`processSystemAction()` opens the transaction. `updateStatus()` joins it. If the audit insert fails, the status update is rolled back too.
+
+## Choosing Manual vs Declarative
+
+Use manual transactions when:
+
+- The transaction boundary is conditional.
+- You want to return a value from a small inline workflow.
+- You need the transaction boundary to be obvious at the call site.
+- You are composing several lower-level operations in one method.
+
+Use `@Transactional()` when:
+
+- The whole method is naturally one unit of work.
+- Multiple callers should always get the same transactional behavior.
+- You want service code to stay focused on business operations.
+
+Both styles use the same underlying transaction context.
+
+## Transactions and Session
+
+`Session.flush()` opens a transaction automatically. If it is called inside an existing transaction, it joins that transaction instead.
+
+```ts
+await orm.transaction(async () => {
+  await withSession(async (session) => {
+    session.queueInsert(User, { id: 1, name: 'Alice' });
+    session.queueInsert(Profile, { id: 1, userId: 1 });
+  });
+});
+```
+
+Use [Session](./session) when you want to queue many operations across entity types and commit them in dependency-safe order. Use direct transactions when you want explicit step-by-step control.
+
+## Practical Guidelines
+
+- Keep transactions short. Do not wait for slow external APIs while holding a database transaction open unless it is unavoidable.
+- Put all dependent writes inside the transaction boundary.
+- Let errors bubble out when the operation should roll back.
+- Prefer repository methods or Active Record methods inside the transaction; they already use the active context.
+- Do not expect nested `transaction()` calls to commit independently.
+
+## See Also
+
+- [Session](./session) for Unit of Work batching.
+- [Repository](./repository) for standard read and write methods.
+- [Optimistic Locking](./optimistic-locking) for concurrent update protection.

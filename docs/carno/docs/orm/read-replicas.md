@@ -34,28 +34,27 @@ If you do not configure any replicas, all queries go to the primary. There is no
 
 ## Configuration
 
-Replicas are declared in the `replicas` array inside the connection settings object you pass to `OrmService` (or `CarnoOrm`).
+Replicas are declared in the `replicas` array inside your connection settings, usually in `carno.config.ts`.
 
 Each replica entry is a *partial* `ConnectionSettings`. Any field you omit is inherited from the primary connection settings. This means you typically only need to specify `host` and, optionally, `port`.
 
 ```typescript
-import { Carno } from '@carno.js/core';
-import { CarnoOrm, BunPgDriver } from '@carno.js/orm';
+import { BunPgDriver, type ConnectionSettings } from '@carno.js/orm';
 
-const app = new Carno().use(
-  CarnoOrm.withConfig({
-    host: 'db-primary.internal',
-    port: 5432,
-    username: 'app',
-    password: process.env.DB_PASSWORD,
-    database: 'my_app',
-    driver: BunPgDriver,
-    replicas: [
-      { host: 'db-replica-1.internal' },
-      { host: 'db-replica-2.internal' },
-    ],
-  })
-);
+const config: ConnectionSettings = {
+  host: 'db-primary.internal',
+  port: 5432,
+  username: 'app',
+  password: process.env.DB_PASSWORD,
+  database: 'my_app',
+  driver: BunPgDriver,
+  replicas: [
+    { host: 'db-replica-1.internal' },
+    { host: 'db-replica-2.internal' },
+  ],
+};
+
+export default config;
 ```
 
 In this example, both replicas inherit `port: 5432`, `username`, `password`, and `database` from the primary. You only override `host`.
@@ -93,32 +92,29 @@ When `disconnect()` is called (e.g., on graceful shutdown), the ORM closes all r
 The following is a complete setup demonstrating a primary and two replicas for a PostgreSQL application:
 
 ```typescript
-import { Carno } from '@carno.js/core';
-import { CarnoOrm, BunPgDriver } from '@carno.js/orm';
+import { BunPgDriver, type ConnectionSettings } from '@carno.js/orm';
 
-const app = new Carno().use(
-  CarnoOrm.withConfig({
-    host: 'db-primary.internal',
-    port: 5432,
-    username: 'myapp',
-    password: process.env.DB_PASSWORD,
-    database: 'production',
-    driver: BunPgDriver,
-    max: 20, // Connection pool size for primary
-    replicas: [
-      {
-        host: 'db-replica-eu.internal',
-        max: 10, // Smaller pool for this replica
-      },
-      {
-        host: 'db-replica-us.internal',
-        max: 10,
-      },
-    ],
-  })
-);
+const config: ConnectionSettings = {
+  host: 'db-primary.internal',
+  port: 5432,
+  username: 'myapp',
+  password: process.env.DB_PASSWORD,
+  database: 'production',
+  driver: BunPgDriver,
+  max: 20, // Connection pool size for primary
+  replicas: [
+    {
+      host: 'db-replica-eu.internal',
+      max: 10, // Smaller pool for this replica
+    },
+    {
+      host: 'db-replica-us.internal',
+      max: 10,
+    },
+  ],
+};
 
-await app.listen(3000);
+export default config;
 ```
 
 From this point on, `find()`, `findOne()`, `count()`, and any other read operations will be automatically distributed Round-Robin between `db-replica-eu` and `db-replica-us`. Writes go to `db-primary`.
