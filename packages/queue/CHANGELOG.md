@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [1.4.0](https://github.com/carnojs/carno.js/compare/v1.3.3...v1.4.0) (2026-05-28)
+
+
+### Features
+
+* derived_queries ([#42](https://github.com/carnojs/carno.js/issues/42)) ([18ce0b7](https://github.com/carnojs/carno.js/commit/18ce0b7b27ad7c1bc8999f5c3e671ed5c27b4ef1))
+
+
+
+
+
 # [1.3.0](https://github.com/carnojs/carno.js/compare/v1.1.2...v1.3.0) (2026-03-07)
 
 
