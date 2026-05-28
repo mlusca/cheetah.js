@@ -4,7 +4,7 @@ This directory contains the Docusaurus site published at:
 
 [https://carnojs.github.io/carno.js](https://carnojs.github.io/carno.js)
 
-Use this site for user-facing documentation: guides, examples, API explanations, package-specific documentation, and benchmark details. The repository root README should stay concise and point readers here for implementation guidance.
+Use this site for user-facing documentation: guides, examples, API explanations, package-specific documentation, architecture positioning, and performance notes. The repository root README should stay concise and point readers here for implementation guidance.
 
 ## Local Development
 
@@ -45,5 +45,5 @@ npm run serve
 - Keep package usage examples in the relevant documentation page, not in the root README.
 - Prefer concise explanations followed by complete examples that users can run.
 - Link related pages instead of duplicating large sections.
-- Keep benchmark claims tied to the methodology page.
+- Keep performance claims contextual and tied to the methodology page.
 - Run `npm run build` before publishing documentation changes.

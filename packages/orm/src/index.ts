@@ -11,6 +11,7 @@ export * from './decorators/enum.decorator';
 export * from './decorators/computed.decorator';
 export * from './decorators/version.decorator';
 export * from './decorators/tenant.decorator';
+export * from './decorators/transactional.decorator';
 export * from './orm'
 export * from './orm.service'
 export * from './domain/base-entity'

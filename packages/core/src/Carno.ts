@@ -91,7 +91,6 @@ export class Carno {
     // Cached lifecycle event flags - checked once at startup
     private hasInitHooks = false;
     private hasBootHooks = false;
-    private hasShutdownHooks = false;
 
     constructor(public config: CarnoConfig = {}) {
         this.config.exports = this.config.exports || [];
@@ -348,10 +347,7 @@ export class Carno {
             this.executeLifecycleHooks(EventType.BOOT);
         }
 
-        // Register shutdown handlers
-        if (this.hasShutdownHooks) {
-            this.registerShutdownHandlers();
-        }
+        this.registerShutdownHandlers();
 
         if (!this.config.disableStartupLog) {
             console.log(`Carno running on port ${port}`);
@@ -362,7 +358,6 @@ export class Carno {
         // Cache lifecycle event flags
         this.hasInitHooks = hasEventHandlers(EventType.INIT);
         this.hasBootHooks = hasEventHandlers(EventType.BOOT);
-        this.hasShutdownHooks = hasEventHandlers(EventType.SHUTDOWN);
 
         // Register Container itself so it can be injected
         this.container.register({
@@ -750,8 +745,9 @@ export class Carno {
     /**
      * Execute lifecycle hooks for a specific event type.
      */
-    private executeLifecycleHooks(type: EventType): void {
+    private async executeLifecycleHooks(type: EventType): Promise<void> {
         const handlers = getEventHandlers(type);
+        const shouldAwaitHooks = type === EventType.SHUTDOWN;
 
         for (const handler of handlers) {
             try {
@@ -764,14 +760,22 @@ export class Carno {
 
                     // Handle async hooks
                     if (result instanceof Promise) {
-                        result.catch((err: Error) =>
-                            console.error(`Error in ${type} hook ${handler.methodName}:`, err)
-                        );
+                        if (shouldAwaitHooks) {
+                            await result;
+                        } else {
+                            result.catch((err: Error) =>
+                                console.error(`Error in ${type} hook ${handler.methodName}:`, err)
+                            );
+                        }
                     }
                 }
             } catch (err) {
                 console.error(`Error in ${type} hook ${handler.methodName}:`, err);
             }
+        }
+
+        if (type === EventType.SHUTDOWN) {
+            await this.container.destroy();
         }
     }
 
@@ -779,8 +783,8 @@ export class Carno {
      * Register SIGTERM/SIGINT handlers for graceful shutdown.
      */
     private registerShutdownHandlers(): void {
-        const shutdown = () => {
-            this.executeLifecycleHooks(EventType.SHUTDOWN);
+        const shutdown = async () => {
+            await this.executeLifecycleHooks(EventType.SHUTDOWN);
             this.stop();
             process.exit(0);
         };
@@ -788,4 +792,5 @@ export class Carno {
         process.on('SIGTERM', shutdown);
         process.on('SIGINT', shutdown);
     }
+
 }

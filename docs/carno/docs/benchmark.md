@@ -2,15 +2,15 @@
 sidebar_position: 2
 ---
 
-# ⚡ Benchmark
+# Performance Notes
 
-> **Carno.js is the fastest framework for Bun** — and it's not even close.
+Carno.js is designed first as an opinionated application framework for maintainable Bun services. Its HTTP core is still lightweight and competitive by design, and these benchmarks exist to keep that performance visible, reproducible, and protected over time.
 
 ---
 
-## 🏆 Performance Comparison
+## HTTP Benchmark Snapshot
 
-We put Carno.js head-to-head against other popular Bun frameworks under identical conditions. The results speak for themselves.
+The numbers below come from a small local HTTP benchmark under identical conditions. They are useful for regression tracking and rough comparison, but real application performance depends on routing complexity, middleware, validation, database access, infrastructure, and workload shape.
 
 ### Test Environment
 
@@ -34,7 +34,7 @@ We put Carno.js head-to-head against other popular Bun frameworks under identica
 
 </div>
 
-### ⚡ Carno.js — 40% faster
+### Carno.js
 
 ```ansi
 Summary:
@@ -76,9 +76,9 @@ Response time distribution:
 
 ---
 
-## 🧪 Run Your Own Benchmark
+## Run Your Own Benchmark
 
-Don't just take our word for it! You can run your own benchmarks to verify Carno.js performance.
+You can run the same style of benchmark locally to compare results in your own environment.
 
 ### Prerequisites
 
@@ -120,13 +120,13 @@ bun server.ts
 oha -z 6s http://localhost:3000/
 ```
 
-:::tip Share Your Results!
-Got interesting benchmark results? We'd love to see them! Open an issue or discussion on our [GitHub repository](https://github.com/carnojs/carno.js).
+:::tip Keep benchmarks contextual
+When comparing frameworks, include the runtime version, hardware, route shape, middleware stack, and benchmark command so results are easier to reproduce.
 :::
 
 ---
 
-## 🚀 ORM Bulk Operations
+## ORM Bulk Operations
 
 Carno ORM ships first-class batch APIs that collapse N round-trips into ⌈N/chunkSize⌉ statements. Measured on Bun 1.3, 500 rows, single connection:
 
