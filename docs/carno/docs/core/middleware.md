@@ -4,159 +4,225 @@ sidebar_position: 5
 
 # Middleware
 
-Carno uses the **onion middleware** pattern. Each middleware wraps around the next, allowing you to execute code before and after the route handler.
+Middleware runs between the incoming request and the route handler. It is the right place for cross-cutting behavior that should not live inside every controller method.
+
+Use middleware for:
+
+- Authentication and authorization gates.
+- Request IDs and correlation IDs.
+- Logging and request timing.
+- Response headers.
+- Compression.
+- Per-request context setup.
+- Short-circuiting requests before they reach a handler.
+
+Carno uses the onion middleware pattern for class-based middleware.
 
 ## The Onion Pattern
 
+In an onion chain, each middleware can run code before and after the next layer.
+
+```txt
+Request -> Middleware A -> Middleware B -> Handler -> Middleware B -> Middleware A -> Response
+              before          before       execute      after          after
 ```
-Request → Middleware 1 → Middleware 2 → Handler → Middleware 2 → Middleware 1 → Response
-              ↓              ↓            ↓           ↑              ↑
-           before         before       execute      after          after
-```
 
-Calling `next()` passes control to the next middleware. Code after `next()` runs after the handler completes.
+Calling `await next()` continues to the next middleware or handler. Code after `await next()` runs after the downstream layer has produced a response.
 
-## Creating Middleware
+## Function Middleware
 
-Implement the `CarnoMiddleware` interface with the `handle(ctx, next)` method:
+The simplest middleware is a function.
 
 ```ts
-import { Service, CarnoMiddleware, Context, CarnoClosure } from '@carno.js/core';
+import type { Context } from '@carno.js/core';
 
-@Service()
-export class AuthMiddleware implements CarnoMiddleware {
-  async handle(ctx: Context, next: CarnoClosure): Promise<void> {
-    // Before: runs before the route handler
-    const token = ctx.headers.get('authorization');
+const requestIdMiddleware = (ctx: Context) => {
+  ctx.locals.requestId = crypto.randomUUID();
+};
+```
 
-    if (!token) {
-      ctx.setResponseStatus(401);
-      return; // Stop execution (don't call next)
-    }
+Function middleware can return a `Response` to stop the chain.
 
-    // Pass control to next middleware/handler
-    await next();
+```ts
+const authMiddleware = (ctx: Context) => {
+  const token = ctx.headers.get('authorization');
 
-    // After: runs after the route handler (optional)
+  if (!token) {
+    return new Response('Unauthorized', { status: 401 });
   }
-}
+};
 ```
 
-## The `next` Function
+If a function middleware returns `void`, Carno continues to the next layer.
 
-The `next` function (`CarnoClosure`) is crucial for the onion pattern:
+## Class-Based Middleware
 
-| Action | Effect |
-|--------|--------|
-| `await next()` | Continue to next middleware, wait for completion |
-| `next()` (no await) | Continue without waiting |
-| Don't call `next()` | Stop the chain (early return) |
-
-### Example: Request Timing
+Use a class when the middleware needs dependencies or before/after behavior.
 
 ```ts
+import {
+  type CarnoClosure,
+  type CarnoMiddleware,
+  type Context,
+  Service,
+} from '@carno.js/core';
+
 @Service()
 export class TimingMiddleware implements CarnoMiddleware {
   async handle(ctx: Context, next: CarnoClosure): Promise<void> {
     const start = Date.now();
 
-    await next(); // Wait for handler to complete
+    await next();
 
     const duration = Date.now() - start;
-    console.log(`${ctx.req.method} ${ctx.req.url} - ${duration}ms`);
+    console.log(`${ctx.method} ${ctx.path} ${duration}ms`);
   }
 }
 ```
 
-### Example: Error Handling
+Class middleware must implement `handle(ctx, next)`.
+
+## Returning Early
+
+To block a request, return a `Response` and do not call `next()`.
 
 ```ts
 @Service()
-export class ErrorMiddleware implements CarnoMiddleware {
-  async handle(ctx: Context, next: CarnoClosure): Promise<void> {
-    try {
-      await next();
-    } catch (error) {
-      console.error('Request failed:', error);
-      ctx.setResponseStatus(500);
+export class AuthMiddleware implements CarnoMiddleware {
+  async handle(ctx: Context, next: CarnoClosure): Promise<Response | void> {
+    const token = ctx.headers.get('authorization');
+
+    if (!token) {
+      return new Response('Unauthorized', { status: 401 });
     }
-  }
-}
-```
-
-### Example: Request Context
-
-```ts
-@Service()
-export class RequestIdMiddleware implements CarnoMiddleware {
-  async handle(ctx: Context, next: CarnoClosure): Promise<void> {
-    ctx.locals.requestId = crypto.randomUUID();
 
     await next();
   }
 }
 ```
 
-## Applying Middleware
+If a class middleware does not call `next()` and does not return a `Response`, the framework returns an empty `200` response. In most guard middleware, returning an explicit response is clearer.
 
-### Controller Level
+## Transforming Responses
 
-Apply to all routes in a controller:
+Because `next()` resolves to the downstream `Response`, middleware can transform response headers or body.
 
 ```ts
-import { Controller, Middleware } from '@carno.js/core';
-import { AuthMiddleware } from './auth.middleware';
+@Service()
+export class SecurityHeadersMiddleware implements CarnoMiddleware {
+  async handle(ctx: Context, next: CarnoClosure): Promise<Response> {
+    const response = await next();
+    const headers = new Headers(response.headers);
 
-@Controller()
-@Middleware(AuthMiddleware)
-export class UsersController {
-  // All routes require authentication
+    headers.set('X-Content-Type-Options', 'nosniff');
+    headers.set('X-Frame-Options', 'DENY');
+
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  }
 }
 ```
 
-### Route Level
+## Sharing State With `ctx.locals`
 
-Apply to a specific route:
+`ctx.locals` is the per-request scratchpad shared by middleware and handlers.
+
+```ts
+const currentUserMiddleware = (ctx: Context) => {
+  ctx.locals.user = { id: '42', role: 'admin' };
+};
+```
+
+```ts
+import { Controller, Ctx, Get, type Context } from '@carno.js/core';
+
+@Controller('/me')
+class MeController {
+  @Get()
+  me(@Ctx() ctx: Context) {
+    return ctx.locals.user;
+  }
+}
+```
+
+You can also read values with `@Locals()`.
+
+```ts
+import { Locals } from '@carno.js/core';
+
+@Get('/dashboard')
+dashboard(@Locals('user') user: any) {
+  return { user };
+}
+```
+
+## Applying Middleware
+
+### Global Middleware
+
+Global middleware applies to every route.
+
+```ts
+import { Carno } from '@carno.js/core';
+
+const app = new Carno({
+  globalMiddlewares: [requestIdMiddleware],
+})
+  .services([TimingMiddleware])
+  .middlewares([TimingMiddleware])
+  .controllers([UsersController]);
+
+app.listen(3000);
+```
+
+You can pass function middleware, middleware classes or pre-created middleware instances.
+
+### Controller Middleware
+
+Use `@Middleware()` on a controller to apply middleware to all routes in that controller.
+
+```ts
+import { Controller, Middleware } from '@carno.js/core';
+
+@Controller('/users')
+@Middleware(AuthMiddleware)
+export class UsersController {}
+```
+
+### Route Middleware
+
+Use `@Middleware()` on a route method when only one endpoint needs the middleware.
 
 ```ts
 import { Get, Middleware } from '@carno.js/core';
 
-export class UsersController {
-  @Get()
+class UsersController {
+  @Get('/admin')
   @Middleware(AuthMiddleware)
-  findAll() {
+  adminOnly() {
     return [];
   }
 }
 ```
 
-### Global Middleware
-
-Apply to every route in the application:
-
-```ts
-import { Carno } from '@carno.js/core';
-
-const app = new Carno()
-  .services([AuthMiddleware, LoggerMiddleware])
-  .middlewares([AuthMiddleware, LoggerMiddleware]);
-
-app.listen(3000);
-```
-
 ## Execution Order
 
-Middleware executes in this order:
+Middleware runs in this order:
 
-1. **Global Middleware** - First, in array order
-2. **Controller Middleware** - Next
-3. **Route Middleware** - Last, before handler
+1. `globalMiddlewares` from app configuration.
+2. Middlewares registered with `.middlewares()`.
+3. Controller-level middleware.
+4. Route-level middleware.
+5. Route handler.
 
-For the onion pattern, the **after** phase runs in reverse order.
+For class-based middleware, the after phase runs in reverse order.
 
 ## Dependency Injection
 
-Middleware classes support constructor injection:
+Class middleware is resolved through the DI container, so constructor injection works.
 
 ```ts
 @Service()
@@ -164,44 +230,34 @@ export class LoggerMiddleware implements CarnoMiddleware {
   constructor(private logger: LoggerService) {}
 
   async handle(ctx: Context, next: CarnoClosure): Promise<void> {
-    this.logger.info(`→ ${ctx.req.method} ${ctx.req.url}`);
+    this.logger.info(`-> ${ctx.method} ${ctx.path}`);
 
     await next();
 
-    this.logger.info(`← ${ctx.req.method} ${ctx.req.url}`);
+    this.logger.info(`<- ${ctx.method} ${ctx.path}`);
   }
 }
 ```
 
-## Response Transformation
-
-Middlewares can transform the response by capturing the return value of `next()`:
+Register the middleware class as a service when it has dependencies.
 
 ```ts
-@Service()
-export class ResponseTransformerMiddleware implements CarnoMiddleware {
-  async handle(ctx: Context, next: CarnoClosure): Promise<Response> {
-    const response = await next();
-
-    // Modify headers, body, etc.
-    const headers = new Headers(response.headers);
-    headers.set('X-Custom-Header', 'value');
-
-    return new Response(response.body, {
-      status: response.status,
-      headers,
-    });
-  }
-}
+const app = new Carno()
+  .services([LoggerService, LoggerMiddleware])
+  .middlewares([LoggerMiddleware]);
 ```
 
-## Built-in Middleware
+## Built-In Compression Middleware
 
-### CompressionMiddleware
+`CompressionMiddleware` compresses eligible responses with Brotli, gzip or deflate.
 
-Automatically compresses HTTP responses using **gzip**, **brotli** or **deflate**. Uses Bun's native compression APIs — zero external dependencies.
+It checks:
 
-Only responses that exceed a size threshold and match compressible content types are compressed.
+- `Accept-Encoding` from the request.
+- Existing `Content-Encoding` on the response.
+- Response `Content-Type`.
+- Response size threshold.
+- Whether compressed output is smaller than the original.
 
 ```ts
 import { Carno, CompressionMiddleware } from '@carno.js/core';
@@ -213,25 +269,43 @@ const app = new Carno()
 app.listen(3000);
 ```
 
-#### Custom Configuration
+### Compression Configuration
 
 ```ts
 new CompressionMiddleware({
-  threshold: 512,           // Min bytes to compress (default: 1024)
-  encodings: ['gzip'],      // Encoding preference (default: ['br', 'gzip'])
-  gzipLevel: 9,             // Gzip level 0-9 (default: 6)
-  brotliQuality: 6,         // Brotli quality 0-11 (default: 4)
-  compressibleTypes: [       // Content-Type patterns (default: text/*, json, xml, svg)
+  threshold: 512,
+  encodings: ['br', 'gzip'],
+  gzipLevel: 6,
+  brotliQuality: 4,
+  compressibleTypes: [
     'text/',
     'application/json',
+    'application/javascript',
+    'application/xml',
+    'image/svg+xml',
   ],
-})
+});
 ```
 
 | Option | Default | Description |
-|--------|---------|-------------|
-| `threshold` | `1024` | Minimum response size in bytes to trigger compression |
-| `encodings` | `['br', 'gzip']` | Preferred encoding order (matched against `Accept-Encoding`) |
-| `gzipLevel` | `6` | Gzip compression level (-1 to 9) |
-| `brotliQuality` | `4` | Brotli compression quality (0-11) |
-| `compressibleTypes` | `['text/', 'application/json', ...]` | Content-Type patterns to compress |
+| :--- | :--- | :--- |
+| `threshold` | `1024` | Minimum response size in bytes |
+| `encodings` | `['br', 'gzip']` | Preferred encoding order |
+| `gzipLevel` | `6` | Gzip level from `-1` to `9` |
+| `brotliQuality` | `4` | Brotli quality from `0` to `11` |
+| `compressibleTypes` | text, JSON, JavaScript, XML, SVG | Content-Type fragments eligible for compression |
+
+## Practical Guidelines
+
+- Return `Response` for guard failures instead of mutating context only.
+- Use `ctx.locals` for request-scoped data that handlers need.
+- Keep middleware focused on cross-cutting concerns.
+- Prefer class middleware when dependencies or after-response behavior are needed.
+- Register class middleware as services when it uses constructor injection.
+- Be careful when consuming `response.body`; create a new `Response` if you transform it.
+
+## See Also
+
+- [Context](./context) for request data and response helpers.
+- [Dependency Injection](./dependency-injection) for class middleware dependencies.
+- [Controllers & Routing](./controllers) for route-level middleware.

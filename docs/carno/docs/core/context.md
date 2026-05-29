@@ -6,6 +6,8 @@ sidebar_position: 3
 
 The `Context` object is the central hub for handling HTTP requests in Carno.js. It provides access to request data, response helpers, and shared state between middlewares and handlers.
 
+Carno keeps `Context` lightweight. URL parsing, query parsing, body parsing and `locals` allocation happen lazily, so simple handlers do not pay for data they never read.
+
 ## Accessing the Context
 
 Use the `@Ctx()` decorator to inject the context into your handler:
@@ -175,10 +177,10 @@ async handleData(@Ctx() ctx: Context) {
 ```
 
 **Content-Type handling:**
-- `application/json` → Parses as JSON object
-- `application/x-www-form-urlencoded` or `multipart/form-data` → Parses as FormData
-- `text/*` → Parses as string
-- Other → Returns as ArrayBuffer
+- `application/json` -> Parses as JSON object
+- `application/x-www-form-urlencoded` or `multipart/form-data` -> Parses form data and returns a plain object
+- `text/*` -> Parses as string
+- Other -> Returns as `ArrayBuffer`
 
 :::tip
 When using the `@Body()` decorator, the body is automatically parsed for you. Use `parseBody()` only when you need manual control.
@@ -214,13 +216,15 @@ create(@Ctx() ctx: Context) {
 The `locals` object allows sharing data between middlewares and handlers:
 
 ```ts
+import { Controller, Ctx, Get, Middleware, type Context } from '@carno.js/core';
+
 // Middleware that adds user info
 const authMiddleware = (ctx: Context) => {
   ctx.locals.user = { id: 1, role: 'admin' };
 };
 
 @Controller('/dashboard')
-@Use(authMiddleware)
+@Middleware(authMiddleware)
 class DashboardController {
   @Get()
   dashboard(@Ctx() ctx: Context) {

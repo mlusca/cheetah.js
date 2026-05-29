@@ -4,124 +4,204 @@ sidebar_position: 2
 
 # Controllers & Routing
 
-Controllers are responsible for handling incoming HTTP requests and returning responses. They are defined using classes and decorators.
+Controllers group HTTP endpoints into classes. Each controller has an optional base path, route methods and dependencies resolved by the DI container.
+
+Use controllers for request/response orchestration:
+
+- Read parameters, query strings, headers and body.
+- Call services that contain business logic.
+- Return a response shape.
+- Apply route-level middleware.
+
+Keep controllers thin. They should coordinate the request, not own most domain behavior.
 
 ## Defining a Controller
 
-Use the `@Controller()` decorator to define a controller. You can specify an optional base path.
-
-### Simple Path Syntax
-
-For basic controllers, you can pass the path as a string directly:
+Use `@Controller()` with a base path.
 
 ```ts
 import { Controller, Get } from '@carno.js/core';
 
 @Controller('/users')
 export class UserController {
-  
   @Get()
   findAll() {
-    return 'This action returns all users';
+    return [{ id: 1, name: 'Alice' }];
   }
 }
 ```
 
-### Registration
-
-To register the controller, use the `.controllers()` method on your Carno app instance or module.
+Register controllers on the app or plugin.
 
 ```ts
-const app = new Carno();
-app.controllers([UserController]);
+import { Carno } from '@carno.js/core';
+
+const app = new Carno()
+  .controllers([UserController]);
+
 app.listen(3000);
 ```
 
-## Route Methods
+## HTTP Method Decorators
 
-Carno.js supports standard HTTP methods via decorators:
+Carno provides route decorators for standard HTTP methods.
 
-- `@Get(path?)`
-- `@Post(path?)`
-- `@Put(path?)`
-- `@Delete(path?)`
-- `@Patch(path?)`
-- `@Head(path?)`
-- `@Options(path?)`
+| Decorator | Method |
+| :--- | :--- |
+| `@Get(path?)` | `GET` |
+| `@Post(path?)` | `POST` |
+| `@Put(path?)` | `PUT` |
+| `@Patch(path?)` | `PATCH` |
+| `@Delete(path?)` | `DELETE` |
+| `@Head(path?)` | `HEAD` |
+| `@Options(path?)` | `OPTIONS` |
 
-The `path` argument is optional. If omitted, the route corresponds to the controller's base path.
+The path argument is optional. If omitted, the route uses the controller base path.
 
 ```ts
-@Controller('/cats')
-export class CatsController {
-  @Post()
-  create() {
-    return 'This action adds a new cat';
+@Controller('/posts')
+export class PostController {
+  @Get()
+  list() {
+    return [];
   }
 
   @Get('/:id')
   findOne(@Param('id') id: string) {
-    return `This action returns a #${id} cat`;
+    return { id };
+  }
+
+  @Post()
+  create(@Body() body: CreatePostDto) {
+    return body;
   }
 }
 ```
 
-## Request Parameters
+## Path Rules
 
-Use decorators to access request data.
-
-| Decorator | Description | Example |
-| :--- | :--- | :--- |
-| `@Body(key?)` | Request body (JSON) | `@Body() body` or `@Body('name') name` |
-| `@Query(key?)` | Query string parameters | `@Query() q` or `@Query('limit') limit` |
-| `@Param(key?)` | Route parameters | `@Param() params` or `@Param('id') id` |
-| `@Header(key?)` | Request headers | `@Header() headers` or `@Header('authorization') token` |
-| `@Req()` | The raw `Request` object | `@Req() req` |
-| `@Ctx()` | The full `Context` object | `@Ctx() ctx` |
-
-### Example
+Controller paths and method paths can be written with or without a leading slash.
 
 ```ts
-import { Controller, Post, Param, Body, Query, Header } from '@carno.js/core';
+@Controller('users')
+class UsersController {
+  @Get(':id')
+  findOne() {}
+}
+```
+
+Carno normalizes them to `/users/:id`.
+
+Trailing slashes are normalized on controller paths, and the final route path is built from parent controller path, controller path and method path.
+
+## Route Parameters
+
+Use `:name` segments in route paths and read them with `@Param()`.
+
+```ts
+@Get('/:id/books/:bookId')
+findBook(
+  @Param('id') userId: string,
+  @Param('bookId') bookId: string,
+) {
+  return { userId, bookId };
+}
+```
+
+Use `@Param()` without a key to receive the full params object.
+
+```ts
+@Get('/:id')
+findOne(@Param() params: Record<string, string>) {
+  return params;
+}
+```
+
+## Request Data Decorators
+
+| Decorator | Description |
+| :--- | :--- |
+| `@Body(key?)` | Parsed request body or one body field |
+| `@Query(key?)` | Parsed query string or one query field |
+| `@Param(key?)` | Route params or one param |
+| `@Header(key?)` | Request headers or one header |
+| `@Req()` | Native `Request` object |
+| `@Ctx()` | Carno `Context` |
+| `@Locals(key?)` | Values stored in `ctx.locals` |
+
+```ts
+import {
+  Body,
+  Controller,
+  Header,
+  Param,
+  Patch,
+  Query,
+} from '@carno.js/core';
 
 @Controller('/users')
 class UserController {
-  @Post('/:id')
+  @Patch('/:id')
   update(
     @Param('id') id: string,
-    @Body() updateUserDto: UpdateUserDto,
-    @Query('verbose') verbose: string,
-    @Header('user-agent') userAgent: string
+    @Body() body: UpdateUserDto,
+    @Query('verbose') verbose?: string,
+    @Header('user-agent') userAgent?: string,
   ) {
-    return { id, ...updateUserDto, verbose, userAgent };
+    return { id, body, verbose, userAgent };
   }
 }
 ```
 
-## Nested Controllers (Routing Tree)
+## Dependency Injection in Controllers
 
-You can structure your application using nested controllers. This allows you to build a route tree where children inherit the path prefix of their parent. Middleware applied to a parent controller is also inherited by its children.
+Controllers are resolved by the DI container. Inject services through the constructor.
+
+```ts
+@Controller('/users')
+export class UserController {
+  constructor(private users: UserService) {}
+
+  @Get('/:id')
+  findOne(@Param('id') id: string) {
+    return this.users.findById(id);
+  }
+}
+```
+
+This keeps the controller focused on HTTP concerns while the service owns application behavior.
+
+## Nested Controllers
+
+Use nested controllers to build route trees.
 
 ```ts
 @Controller({
   path: '/api',
-  children: [UsersController, PostsController]
+  children: [UsersController, PostsController],
 })
 export class ApiController {}
 
-@Controller('/users') // Final path: /api/users
+@Controller('/users')
 export class UsersController {
   @Get()
-  getAll() { ... }
+  list() {
+    return [];
+  }
 }
 ```
 
+The final path for `UsersController.list()` is `/api/users`.
+
+Middleware applied to a parent controller is inherited by child controllers.
+
 ## Responses
 
-Carno.js supports multiple response types out of the box. You can return objects, strings, or full `Response` objects.
+Carno accepts several handler return types.
 
-### JSON Response
-By default, if you return an object or array, Carno.js serializes it to JSON and sets `Content-Type: application/json`.
+### Objects and Arrays
+
+Objects and arrays are serialized as JSON.
 
 ```ts
 @Get()
@@ -130,8 +210,9 @@ findAll() {
 }
 ```
 
-### Text Response
-Returning a string sends a `text/plain` response.
+### Strings
+
+Strings are returned as `text/plain`.
 
 ```ts
 @Get('/health')
@@ -140,69 +221,79 @@ health() {
 }
 ```
 
-### No Content Response
-Returning `undefined` or `void` sends a `204 No Content` response.
+### `undefined` or `void`
+
+Returning `undefined` sends `204 No Content`.
 
 ```ts
 @Delete('/:id')
-delete(@Param('id') id: string) {
-  // Delete logic...
-  // Returns 204 No Content
+remove(@Param('id') id: string) {
+  this.users.remove(id);
 }
 ```
 
-### Response Object
-You can return a native `Response` object for full control.
+### Native `Response`
+
+Return a Web `Response` object for full control.
 
 ```ts
-@Get()
-custom() {
-  return new Response('Custom', { status: 201 });
+@Get('/download')
+download() {
+  return new Response('file contents', {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/plain',
+    },
+  });
 }
 ```
 
-### Context Response Helpers
+### Context Helpers
 
-For more control over responses, use the `Context` object and its helper methods:
+Use `Context` helpers when you need a custom status or content type.
 
 ```ts
-import { Controller, Get, Ctx, Context } from '@carno.js/core';
+import { Context, Ctx, Post } from '@carno.js/core';
 
-@Controller('/api')
-class ApiController {
-  // JSON with custom status
-  @Post('/users')
-  create(@Ctx() ctx: Context, @Body() data: any) {
-    return ctx.json({ id: 1, ...data }, 201);
-  }
-
-  // Plain text
-  @Get('/health')
-  health(@Ctx() ctx: Context) {
-    return ctx.text('OK');
-  }
-
-  // HTML response
-  @Get('/page')
-  page(@Ctx() ctx: Context) {
-    return ctx.html('<h1>Hello World</h1>');
-  }
-
-  // Redirect
-  @Get('/old')
-  redirect(@Ctx() ctx: Context) {
-    return ctx.redirect('/new', 301);
-  }
+@Post()
+create(@Ctx() ctx: Context, @Body() body: any) {
+  return ctx.json({ id: 1, ...body }, 201);
 }
 ```
 
-| Method | Description |
+Available helpers:
+
+| Helper | Description |
 | :--- | :--- |
-| `ctx.json(data, status?)` | Returns JSON with `application/json` content type |
-| `ctx.text(data, status?)` | Returns plain text with `text/plain` content type |
-| `ctx.html(data, status?)` | Returns HTML with `text/html` content type |
-| `ctx.redirect(url, status?)` | Returns a redirect response (default: 302) |
+| `ctx.json(data, status?)` | JSON response |
+| `ctx.text(data, status?)` | Plain text response |
+| `ctx.html(data, status?)` | HTML response |
+| `ctx.redirect(url, status?)` | Redirect response |
 
-:::tip
-For detailed documentation on the Context object and all response helpers, see the [Context documentation](./context.md).
-:::
+## Validation
+
+When a `@Body()` parameter is typed as a DTO class decorated with `@Schema()`, Carno validates the body before the handler runs.
+
+```ts
+@Post()
+create(@Body() body: CreateUserDto) {
+  return this.users.create(body);
+}
+```
+
+See [Validation](./validation) for schema setup and adapter configuration.
+
+## Practical Guidelines
+
+- Keep business logic in services, not controllers.
+- Use DTOs for request bodies that need validation.
+- Return native `Response` only when helpers or default serialization are not enough.
+- Use nested controllers for shared path prefixes.
+- Apply middleware at the narrowest useful level: route, controller or global.
+
+## See Also
+
+- [Context](./context) for request data and response helpers.
+- [Validation](./validation) for DTO validation.
+- [Dependency Injection](./dependency-injection) for service injection.
+- [Middleware](./middleware) for route and controller middleware.

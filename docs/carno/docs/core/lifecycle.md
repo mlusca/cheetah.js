@@ -4,98 +4,162 @@ sidebar_position: 8
 
 # Lifecycle Events
 
-Carno.js allows you to hook into key moments of the application lifecycle using decorators.
+Lifecycle hooks let services and controllers react to application startup and shutdown. They are useful for work that belongs to the application boundary rather than to a single request.
 
-## Available Hooks
+Use lifecycle hooks for:
 
-| Decorator | Trigger |
-| :--- | :--- |
-| `@OnApplicationInit()` | Called when the DI container initializes, before the server starts. |
-| `@OnApplicationBoot()` | Called right after the application is fully bootstrapped. |
-| `@OnApplicationShutdown()` | Called when the application receives a termination signal (`SIGTERM`, `SIGINT`). |
+- Opening and closing external connections.
+- Loading configuration.
+- Warming caches.
+- Starting background schedulers.
+- Flushing logs.
+- Releasing resources on shutdown.
 
-## Usage
+## Application Lifecycle
 
-Decorate any method in your `@Service` or `@Controller` classes.
+Carno has three application-level lifecycle moments.
 
-### Execution Priority
-
-All lifecycle decorators accept an optional `priority` parameter (default is `0`). Hooks with a **higher priority number** are executed first. This is crucial when one service depends on another being initialized first.
+| Decorator | When it runs | Typical use |
+| :--- | :--- | :--- |
+| `@OnApplicationInit()` | During bootstrap, after providers are registered and before the server starts listening | Connect databases, load config, prepare clients |
+| `@OnApplicationBoot()` | After the server has started | Startup logs, health checks, post-boot notifications |
+| `@OnApplicationShutdown()` | After `SIGTERM` or `SIGINT` during graceful shutdown | Close connections, flush buffers, stop timers |
 
 ```ts
-import { Service, OnApplicationInit } from '@carno.js/core';
+import {
+  OnApplicationBoot,
+  OnApplicationInit,
+  OnApplicationShutdown,
+  Service,
+} from '@carno.js/core';
 
 @Service()
+export class DatabaseService {
+  @OnApplicationInit()
+  async connect() {
+    // connect before traffic is served
+  }
+
+  @OnApplicationBoot()
+  reportReady() {
+    console.log('Database service ready');
+  }
+
+  @OnApplicationShutdown()
+  async disconnect() {
+    // close connection during shutdown
+  }
+}
+```
+
+## Hook Priority
+
+All application lifecycle decorators accept an optional priority. Higher priority runs first.
+
+```ts
+@Service()
 export class ConfigService {
-  @OnApplicationInit(100) // Runs first
-  async loadConfig() {
-    console.log('Loading configuration...');
+  @OnApplicationInit(100)
+  loadConfig() {
+    // runs first
   }
 }
 
 @Service()
 export class DatabaseService {
-  @OnApplicationInit(50) // Runs after ConfigService
-  async connect() {
-    console.log('Connecting to database...');
+  @OnApplicationInit(50)
+  connect() {
+    // runs after ConfigService
   }
 }
 ```
 
-## Available Hooks
+Use priority when one setup step must happen before another.
 
-1. **Init**: Providers are loaded. `@OnApplicationInit` hooks run.
-2. **Boot**: Server starts. `@OnApplicationBoot` hooks run.
-3. **Runtime**: Requests are handled.
-4. **Shutdown**: Signal received. `@OnApplicationShutdown` hooks run.
+## Startup Flow
+
+At a high level, startup works like this:
+
+1. Services and controllers are registered in the DI container.
+2. Singleton services are resolved.
+3. `@OnApplicationInit()` hooks run.
+4. Controllers are compiled into route handlers.
+5. Bun starts listening.
+6. `@OnApplicationBoot()` hooks run.
+
+`@OnApplicationInit()` is the right hook for dependencies that must be ready before requests are served.
+
+## Shutdown Flow
+
+When the process receives `SIGTERM` or `SIGINT`:
+
+1. `@OnApplicationShutdown()` hooks run.
+2. Container destruction runs `@PreDestroy()` hooks for held singleton instances.
+3. The server stops.
+4. The process exits.
+
+Promises returned from shutdown hooks and `@PreDestroy()` methods are awaited.
 
 ## Bean Lifecycle Hooks
 
-Unlike application-wide lifecycle events, **Bean Lifecycle Hooks** are scoped to individual services/beans managed by the Dependency Injection (DI) container.
+Bean lifecycle hooks are tied to individual instances created by the DI container.
 
 ### `@PostConstruct()`
 
-Marks a method to execute immediately after the container has instantiated the service and resolved all of its dependencies. This is ideal for performing initialization that requires injected dependencies (e.g., establishing a client connection, warming caches, preparing files).
-
-- **Execution**: Run once per instance creation.
-- **Async support**: If the method returns a `Promise`, it executes asynchronously in the background. The container's `get` retrieval remains non-blocking.
+`@PostConstruct()` runs after the container creates an instance and resolves constructor dependencies.
 
 ```ts
-import { Service, PostConstruct } from '@carno.js/core';
-import { DatabaseService } from './DatabaseService';
+import { PostConstruct, Service } from '@carno.js/core';
 
 @Service()
-export class CacheWarmupService {
-  constructor(private db: DatabaseService) {}
-
+export class SearchIndex {
   @PostConstruct()
-  async initializeCache() {
-    console.log('Warming up query cache...');
-    const data = await this.db.query('SELECT * FROM config');
-    // ... cache data
+  prepare() {
+    // local setup after dependencies exist
   }
 }
 ```
+
+If `@PostConstruct()` returns a promise, Carno starts it and logs errors, but container resolution is not blocked. Use `@OnApplicationInit()` when the application must wait for the work before serving traffic.
 
 ### `@PreDestroy()`
 
-Marks a method to execute when the application is shutting down. It is triggered during the `EventType.SHUTDOWN` lifecycle event. This is ideal for cleaning up resources, releasing connections, and ending intervals.
-
-- **Execution**: Executed for all singleton instances currently held by the container.
-- **Graceful Shutdown**: The framework awaits any returned promises from `@PreDestroy` methods before completely stopping the server.
+`@PreDestroy()` runs during container destruction for singleton instances currently held by the container.
 
 ```ts
-import { Service, PreDestroy } from '@carno.js/core';
-import { RedisClient } from 'redis';
+import { PreDestroy, Service } from '@carno.js/core';
 
 @Service()
-export class MemoryStore {
-  private client: RedisClient;
-
+export class MetricsBuffer {
   @PreDestroy()
-  async cleanup() {
-    console.log('Closing Redis connection...');
-    await this.client.quit();
+  async flush() {
+    // flush pending metrics
   }
 }
 ```
+
+Use it for cleanup owned by the service itself.
+
+## Choosing the Right Hook
+
+| Need | Use |
+| :--- | :--- |
+| Must prepare app before traffic | `@OnApplicationInit()` |
+| Log or notify after server is listening | `@OnApplicationBoot()` |
+| Clean up because the process is stopping | `@OnApplicationShutdown()` |
+| Initialize one service instance after injection | `@PostConstruct()` |
+| Clean up one service instance during container destruction | `@PreDestroy()` |
+
+## Practical Guidelines
+
+- Keep constructors lightweight; put setup in lifecycle hooks.
+- Use `@OnApplicationInit()` for async setup that must complete before serving requests.
+- Use priorities sparingly and document why an order matters.
+- Make shutdown hooks idempotent; they may run while the process is already failing.
+- Close timers, sockets and clients in shutdown or pre-destroy hooks.
+
+## See Also
+
+- [Dependency Injection](./dependency-injection) for service creation.
+- [Caching](./caching) for cache driver cleanup.
+- [Logging](./logging) for buffered log flushing.
