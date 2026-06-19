@@ -43,13 +43,11 @@ jobs:
         image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: test
-          MYSQL_USER: test
-          MYSQL_PASSWORD: test
+          MYSQL_DATABASE: mysql_test
         ports:
-          - 3307:3306
+          - 3306:3306
         options: >-
-          --health-cmd "mysqladmin ping"
+          --health-cmd "mysqladmin ping -h localhost -uroot -proot"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -84,10 +82,4 @@ jobs:
         run: bun test
 
       - name: Run MySQL Tests
-        env:
-          MYSQL_HOST: localhost
-          MYSQL_PORT: 3306
-          MYSQL_USER: root
-          MYSQL_PASSWORD: root
-          MYSQL_DATABASE: mysql_test
-        run: bun test:mysql
+        run: bun run test:mysql
