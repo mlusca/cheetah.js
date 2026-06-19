@@ -1,6 +1,6 @@
 {
     "name": "@carno.js/logger",
-    "version": "1.4.1",
+    "version": "1.4.2",
     "description": "High-performance async logger for carno.js",
     "main": "src/index.ts",
     "types": "src/index.ts",

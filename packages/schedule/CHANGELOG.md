@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.4.2](https://github.com/carnojs/carno.js/compare/v1.4.1...v1.4.2) (2026-06-19)
+
+**Note:** Version bump only for package @carno.js/schedule
+
+
+
+
+
+
 ## [1.4.1](https://github.com/carnojs/carno.js/compare/v1.3.3...v1.4.1) (2026-05-28)
 
 **Note:** Version bump only for package @carno.js/schedule

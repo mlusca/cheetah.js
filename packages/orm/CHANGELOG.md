@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.4.2](https://github.com/carnojs/carno.js/compare/v1.4.1...v1.4.2) (2026-06-19)
+
+
+### Bug Fixes
+
+* **sql:** enhance SQL safety ([#47](https://github.com/carnojs/carno.js/issues/47)) ([fbaa678](https://github.com/carnojs/carno.js/commit/fbaa678c57214ac7da8c616efb7061fe7e1d01ff))
+
+
+
+
+
+
 ## [1.4.1](https://github.com/carnojs/carno.js/compare/v1.3.3...v1.4.1) (2026-05-28)
 
 
