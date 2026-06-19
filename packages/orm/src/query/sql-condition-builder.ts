@@ -2,7 +2,7 @@ import { DriverInterface, FilterQuery, Relationship, Statement } from '../driver
 import { EntityStorage, Options } from '../domain/entities';
 import { ValueObject } from '../common/value-object';
 import { extendsFrom } from '../utils';
-import { escapeString } from '../utils/sql-escape';
+import { escapeString, assertSafeIdentifier } from '../utils/sql-escape';
 import { SqlSubqueryBuilder } from './sql-subquery-builder';
 
 type ApplyJoinCallback = (relationship: Relationship<any>, value: FilterQuery<any>, alias: string) => string;
@@ -260,14 +260,18 @@ export class SqlConditionBuilder<T> {
 
   private formatPrimitive(value: string | number | boolean | bigint): string {
     if (typeof value === 'string') {
-      return `'${escapeString(value)}'`;
+      return `'${escapeString(value, this.escapeBackslash())}'`;
     }
 
     return `${value}`;
   }
 
   private formatJson(value: any): string {
-    return `'${escapeString(JSON.stringify(value))}'`;
+    return `'${escapeString(JSON.stringify(value), this.escapeBackslash())}'`;
+  }
+
+  private escapeBackslash(): boolean {
+    return this.driver.dbType === 'mysql';
   }
 
   private findRelationship(key: string, model: Function): Relationship<any> | undefined {
@@ -367,7 +371,7 @@ export class SqlConditionBuilder<T> {
 
     const entity = this.entityStorage.get(model);
     if (!entity) {
-      return property;
+      return assertSafeIdentifier(property);
     }
 
     const column = entity.properties?.[property]?.options.columnName;
@@ -375,7 +379,7 @@ export class SqlConditionBuilder<T> {
       return column;
     }
 
-    return this.resolveRelationColumn(property, entity) ?? property;
+    return this.resolveRelationColumn(property, entity) ?? assertSafeIdentifier(property);
   }
 
   private resolveRelationColumn(property: string, entity: Options): string | undefined {

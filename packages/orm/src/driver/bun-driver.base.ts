@@ -162,17 +162,19 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
       return `'${formatted}'`;
     }
 
+    const escapeBackslash = this.dbType === "mysql";
+
     switch (typeof value) {
       case "string":
-        return `'${escapeString(value)}'`;
+        return `'${escapeString(value, escapeBackslash)}'`;
       case "number":
         return value;
       case "boolean":
         return value;
       case "object":
-        return `'${escapeString(JSON.stringify(value))}'`;
+        return `'${escapeString(JSON.stringify(value), escapeBackslash)}'`;
       default:
-        return `'${escapeString(String(value))}'`;
+        return `'${escapeString(String(value), escapeBackslash)}'`;
     }
   }
 
@@ -209,7 +211,7 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
       return "";
     }
 
-    return ` LIMIT ${limit}`;
+    return ` LIMIT ${this.toRowCount(limit, "limit")}`;
   }
 
   protected buildOffsetClause(offset: number | undefined): string {
@@ -217,7 +219,23 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
       return "";
     }
 
-    return ` OFFSET ${offset}`;
+    return ` OFFSET ${this.toRowCount(offset, "offset")}`;
+  }
+
+  /**
+   * LIMIT/OFFSET cannot be parameterized in the SQL we emit, so the value is
+   * interpolated directly. Coerce to a non-negative integer to guarantee no
+   * SQL injection is possible even if a caller forwards a raw request value
+   * (e.g. `req.query.limit`, which is a string) past the typed API.
+   */
+  private toRowCount(value: number, name: string): number {
+    const n = Number(value);
+
+    if (!Number.isInteger(n) || n < 0) {
+      throw new Error(`Invalid ${name}: expected a non-negative integer`);
+    }
+
+    return n;
   }
 
   protected quote(identifier: string): string {

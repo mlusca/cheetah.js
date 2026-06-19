@@ -1,5 +1,6 @@
 import { DriverInterface, JoinStatement, Statement } from '../driver/driver.interface';
 import { EntityStorage, Options } from '../domain/entities';
+import { assertSafeIdentifier } from '../utils/sql-escape';
 
 export class SqlColumnManager {
   constructor(
@@ -11,8 +12,11 @@ export class SqlColumnManager {
 
   private quoteId(identifier: string): string {
     const q = this.driver.getIdentifierQuote();
+    // Escape any embedded quote char so an identifier can't break out of the
+    // quoting. Fast path: skip the split/join allocation when none is present.
+    const safe = identifier.includes(q) ? identifier.split(q).join(q + q) : identifier;
 
-    return `${q}${identifier}${q}`;
+    return `${q}${safe}${q}`;
   }
 
   generateColumns(model: Function, updatedColumns: string[]): string[] {
@@ -225,7 +229,7 @@ export class SqlColumnManager {
       return relation.columnName;
     }
 
-    return propertyName;
+    return assertSafeIdentifier(propertyName);
   }
 
   private getEntityFromAlias(alias: string): Options {

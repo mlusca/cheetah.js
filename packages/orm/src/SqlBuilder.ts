@@ -26,6 +26,44 @@ import { tenantContext } from './tenant/tenant-context';
 import { Metadata } from '@carno.js/core';
 import { VERSION_PROPERTY, TENANT_PROPERTY, PROPERTIES_METADATA } from './constants';
 import { OptimisticLockError } from './exceptions/optimistic-lock.error';
+import { escapeString } from './utils/sql-escape';
+
+/**
+ * Canonical SQL direction for every accepted `orderBy` value. The ORDER BY
+ * direction is interpolated directly into SQL (it cannot be parameterized), so
+ * it must be validated against this whitelist to prevent SQL injection through
+ * a value like `orderBy: { name: 'ASC; DROP TABLE users; --' }`. Keys are the
+ * upper-cased input; values are the literal SQL emitted. Covers the `QueryOrder`
+ * enum (incl. `NULLS FIRST/LAST` and underscore key-name variants) and the
+ * numeric `QueryOrderNumeric` (1 / -1) forms.
+ */
+const ORDER_DIRECTIONS: ReadonlyMap<string, string> = new Map([
+  ['ASC', 'ASC'],
+  ['DESC', 'DESC'],
+  ['1', 'ASC'],
+  ['-1', 'DESC'],
+  ['ASC NULLS LAST', 'ASC NULLS LAST'],
+  ['ASC NULLS FIRST', 'ASC NULLS FIRST'],
+  ['DESC NULLS LAST', 'DESC NULLS LAST'],
+  ['DESC NULLS FIRST', 'DESC NULLS FIRST'],
+  ['ASC_NULLS_LAST', 'ASC NULLS LAST'],
+  ['ASC_NULLS_FIRST', 'ASC NULLS FIRST'],
+  ['DESC_NULLS_LAST', 'DESC NULLS LAST'],
+  ['DESC_NULLS_FIRST', 'DESC NULLS FIRST'],
+]);
+
+function normalizeOrderDirection(value: unknown): string {
+  const direction = ORDER_DIRECTIONS.get(String(value).trim().toUpperCase());
+
+  if (!direction) {
+    throw new Error(
+      `Invalid ORDER BY direction: ${JSON.stringify(value)}. ` +
+      `Expected one of ASC, DESC (optionally with NULLS FIRST/LAST) or 1 / -1.`,
+    );
+  }
+
+  return direction;
+}
 
 export class SqlBuilder<T> {
   private readonly driver: DriverInterface;
@@ -50,8 +88,11 @@ export class SqlBuilder<T> {
 
   private quoteId(identifier: string): string {
     const q = this.driver.getIdentifierQuote();
+    // Escape any embedded quote char so an identifier can't break out of the
+    // quoting. Fast path: skip the split/join allocation when none is present.
+    const safe = identifier.includes(q) ? identifier.split(q).join(q + q) : identifier;
 
-    return `${q}${identifier}${q}`;
+    return `${q}${safe}${q}`;
   }
 
   private qualifyTable(schema: string, tableName: string): string {
@@ -413,7 +454,10 @@ export class SqlBuilder<T> {
         const metadata = Metadata.get(PROPERTIES_METADATA, this.model) || {};
         const column = metadata[tenantField]?.options?.columnName || tenantField;
 
-        const tenantCondition = `${this.statements.alias}.${column} = ${typeof tenantId === 'string' ? `'${tenantId}'` : tenantId}`;
+        const tenantValue = typeof tenantId === 'string'
+          ? `'${escapeString(tenantId, this.driver.dbType === 'mysql')}'`
+          : tenantId;
+        const tenantCondition = `${this.statements.alias}.${column} = ${tenantValue}`;
         
         if (this.statements.statement === 'insert' && this.statements.values) {
           if (this.statements.values[column] === undefined) {
@@ -440,10 +484,14 @@ export class SqlBuilder<T> {
         // Values have been through processForUpdate which converts property names to column names,
         // so we must check using the DB column name, not the JS property name.
         if (this.statements.values && this.statements.values[column] !== undefined) {
-          const currentVersion = this.statements.values[column];
+          const currentVersion = Number(this.statements.values[column]);
+
+          if (!Number.isFinite(currentVersion)) {
+            throw new Error('Optimistic lock version must be a finite number');
+          }
 
           // Auto-increment the version in the SET clause
-          this.statements.values[column] = Number(currentVersion) + 1;
+          this.statements.values[column] = currentVersion + 1;
 
           const versionCondition = `${this.statements.alias}.${column} = ${currentVersion}`;
           if (this.statements.where) {
@@ -892,11 +940,11 @@ export class SqlBuilder<T> {
 
     if (parentKey) {
       const columnPath = this.buildColumnPath(fullKey);
-      return [`${this.columnManager.discoverAlias(columnPath, true)} ${obj[key]}`];
+      return [`${this.columnManager.discoverAlias(columnPath, true)} ${normalizeOrderDirection(obj[key])}`];
     }
 
     const columnName = ValueProcessor.getColumnName(key, this.entity);
-    return [`${this.columnManager.discoverAlias(columnName, true)} ${obj[key]}`];
+    return [`${this.columnManager.discoverAlias(columnName, true)} ${normalizeOrderDirection(obj[key])}`];
   }
 
   private isNestedObject(value: any): boolean {
