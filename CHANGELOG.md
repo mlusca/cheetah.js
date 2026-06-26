@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.4.3](https://github.com/carnojs/carno.js/compare/v1.4.2...v1.4.3) (2026-06-26)
+
+
+### Bug Fixes
+
+* **core:** concurrency singleton ([#48](https://github.com/carnojs/carno.js/issues/48)) ([3651d7c](https://github.com/carnojs/carno.js/commit/3651d7c49092e4c9cce7e2bc1bee7ec8f9d69baa))
+
+
+
+
+
 ## [1.4.2](https://github.com/carnojs/carno.js/compare/v1.4.1...v1.4.2) (2026-06-19)
 
 
