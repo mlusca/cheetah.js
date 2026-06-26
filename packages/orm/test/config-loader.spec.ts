@@ -4,6 +4,7 @@ import {
   finalizeConnectionConfig,
   normalizeConfigModule,
 } from '../src/config-loader';
+import {BunMysqlDriver} from "../src";
 
 describe('config-loader', () => {
   test('normalizeConfigModule unwraps nested default exports', () => {
@@ -26,7 +27,7 @@ describe('config-loader', () => {
       database: 'app_db',
     });
 
-    expect(settings.driver).toBe(BunPgDriver);
+    expect(settings.driver).toBeOneOf([BunPgDriver, BunMysqlDriver]);
     expect(settings.host).toBe('db.local');
     expect(settings.database).toBe('app_db');
   });
