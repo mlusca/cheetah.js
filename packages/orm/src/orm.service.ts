@@ -4,9 +4,15 @@ import { ENTITIES, EVENTS_METADATA, PROPERTIES_METADATA, PROPERTIES_RELATIONS } 
 import { Project, SyntaxKind } from 'ts-morph';
 import { Orm } from './orm';
 import * as globby from 'globby';
-import { Relationship } from './driver/driver.interface';
+import { ConnectionSettings, Relationship } from './driver/driver.interface';
 import path from 'path';
 import { toSnakeCase } from './utils';
+import {
+  finalizeConnectionConfig,
+  importSourceFile,
+  loadConnectionConfig,
+  normalizeConfigModule,
+} from './config-loader';
 
 
 @Service()
@@ -235,32 +241,39 @@ export class OrmService {
   }
 
   @OnApplicationInit()
-  async onInit(customConfig: any = {}) {
+  async onInit(customConfig: Partial<ConnectionSettings> = {}) {
     const hasCustomConfig = Object.keys(customConfig).length > 0;
-    let config: any = null;
-    let setConfig: any;
+    let configModule: unknown = null;
+    let setConfig: ConnectionSettings;
 
     if (!hasCustomConfig) {
-      const configFile = globby.sync('carno.config.ts', {absolute: true});
-      if (configFile.length === 0) {
-        console.log('No config file found!')
+      const loaded = await loadConnectionConfig();
+      if (!loaded) {
+        console.log('No config file found!');
         return;
       }
 
-      config = await import(configFile[0]);
-      setConfig = config.default;
+      configModule = loaded.module;
+      setConfig = loaded.settings;
     } else {
-      setConfig = customConfig;
+      setConfig = finalizeConnectionConfig(customConfig);
     }
 
     this.orm.setConnection(setConfig);
     await this.orm.connect();
 
-    if (config && typeof config.default.entities === 'string') {
-      const files = globby.sync([config.default.entities, '!node_modules'], {gitignore: true, absolute: true})
+    const normalizedConfig = hasCustomConfig
+      ? normalizeConfigModule({ default: customConfig })
+      : normalizeConfigModule(configModule);
+
+    if (typeof normalizedConfig.entities === 'string') {
+      const files = globby.sync(
+        [normalizedConfig.entities, '!node_modules'],
+        { gitignore: true, absolute: true },
+      );
 
       for (const file of files) {
-        await import(file)
+        await importSourceFile(file);
       }
     }
 

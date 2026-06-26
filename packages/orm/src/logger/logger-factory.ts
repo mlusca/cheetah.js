@@ -36,12 +36,11 @@ function isDebugEnabled(): boolean {
 }
 
 function loadDebugConfig(): boolean {
-  try {
-    const config = require(process.cwd() + '/carno.config');
-    return config?.debug === true || config?.default?.debug === true;
-  } catch {
-    return false;
+  if (process.env.DB_DEBUG === 'true') {
+    return true;
   }
+
+  return false;
 }
 
 function tryLoadCarnoLogger(): Logger | null {
