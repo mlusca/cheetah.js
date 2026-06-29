@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.4.4](https://github.com/carnojs/carno.js/compare/v1.4.3...v1.4.4) (2026-06-29)
+
+**Note:** Version bump only for package @carno.js/websocket
+
+
+
+
+
 ## [1.4.3](https://github.com/carnojs/carno.js/compare/v1.4.2...v1.4.3) (2026-06-26)
 
 **Note:** Version bump only for package @carno.js/websocket
