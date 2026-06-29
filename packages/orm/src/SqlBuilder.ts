@@ -1,5 +1,6 @@
 import {
   AutoPath,
+  ColumnMetadata,
   DriverInterface,
   FilterQuery,
   JoinStatement,
@@ -1027,6 +1028,23 @@ export class SqlBuilder<T> {
     }
 
     this.entity = entity;
+    this.statements.columnMetadata = this.buildColumnMetadata(entity);
+  }
+
+  private buildColumnMetadata(entity: Options): Record<string, ColumnMetadata> {
+    const metadata: Record<string, ColumnMetadata> = {};
+    const properties = entity._metadataIndex?.allProperties || [];
+
+    for (let i = 0; i < properties.length; i += 1) {
+      const property = properties[i];
+      metadata[property.columnName] = {
+        dbType: property.options.dbType,
+        array: property.options.array,
+        type: property.type,
+      };
+    }
+
+    return metadata;
   }
 
   /**
