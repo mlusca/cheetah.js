@@ -5,6 +5,7 @@ import {
   Statement,
   SnapshotConstraintInfo,
   ColDiff,
+  ColumnMetadata,
 } from "./driver.interface";
 import { transactionContext } from "../transaction/transaction-context";
 import { escapeString } from "../utils/sql-escape";
@@ -145,13 +146,17 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
     return await this.sql.begin(callback);
   }
 
-  formatLiteral(value: unknown): string | number | boolean {
-    return this.toDatabaseValue(value);
+  formatLiteral(value: unknown, columnMetadata?: ColumnMetadata): string | number | boolean {
+    return this.toDatabaseValue(value, columnMetadata);
   }
 
-  protected toDatabaseValue(value: unknown): string | number | boolean {
+  protected toDatabaseValue(value: unknown, columnMetadata?: ColumnMetadata): string | number | boolean {
     if (value === null || value === undefined) {
       return "NULL";
+    }
+
+    if (this.shouldSerializeAsPostgresArray(value, columnMetadata)) {
+      return this.formatPostgresArrayLiteral(value);
     }
 
     if (value instanceof Date) {
@@ -176,6 +181,39 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
       default:
         return `'${escapeString(String(value), escapeBackslash)}'`;
     }
+  }
+
+  private shouldSerializeAsPostgresArray(value: unknown, columnMetadata?: ColumnMetadata): value is unknown[] {
+    if (this.dbType !== "postgres" || !Array.isArray(value) || !columnMetadata) {
+      return false;
+    }
+
+    if (columnMetadata.dbType === "json" || columnMetadata.dbType === "jsonb") {
+      return false;
+    }
+
+    return columnMetadata.dbType === "array"
+      || columnMetadata.array === true
+      || columnMetadata.type === Array;
+  }
+
+  private formatPostgresArrayLiteral(value: unknown[]): string {
+    const arrayLiteral = `{${value.map((item) => this.formatPostgresArrayItem(item)).join(",")}}`;
+
+    return `'${escapeString(arrayLiteral, false)}'`;
+  }
+
+  private formatPostgresArrayItem(value: unknown): string {
+    if (value === null || value === undefined) {
+      return "NULL";
+    }
+
+    const serialized = typeof value === "object"
+      ? JSON.stringify(value)
+      : String(value);
+    const raw = serialized === undefined ? String(value) : serialized;
+
+    return `"${raw.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
   }
 
   protected escapeIdentifier(identifier: string): string {
@@ -323,7 +361,8 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
       statement.table,
       statement.values,
       statement.columns,
-      statement.alias
+      statement.alias,
+      statement.columnMetadata
     );
     return this.appendReturningClause(baseSql, statement);
   }
@@ -348,9 +387,9 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
         return `SELECT ${columns ? columns.join(", ") : "*"
           } FROM ${table} ${alias}`;
       case "insert":
-        return this.buildInsertSql(table, values, columns, alias);
+        return this.buildInsertSql(table, values, columns, alias, statement.columnMetadata);
       case "update":
-        return this.buildUpdateSql(table, values, alias);
+        return this.buildUpdateSql(table, values, alias, statement.columnMetadata);
       case "delete":
         return this.buildDeleteSql(table, alias);
       case "count":
@@ -364,19 +403,21 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
     table: string,
     values: any,
     columns: string[] | undefined,
-    alias: string
+    alias: string,
+    columnMetadata?: Record<string, ColumnMetadata>
   ): string {
     const q = this.getIdentifierQuote();
 
     if (Array.isArray(values)) {
-      return this.buildBulkInsertSql(table, values, q);
+      return this.buildBulkInsertSql(table, values, q, columnMetadata);
     }
 
-    const fields = Object.keys(values)
-      .map((v) => `${q}${v}${q}`)
+    const entries = Object.entries(values);
+    const fields = entries
+      .map(([key]) => `${q}${key}${q}`)
       .join(", ");
-    const vals = Object.values(values)
-      .map((value) => this.toDatabaseValue(value))
+    const vals = entries
+      .map(([key, value]) => this.toDatabaseValue(value, columnMetadata?.[key]))
       .join(", ");
 
     return `INSERT INTO ${table} (${fields}) VALUES (${vals})`;
@@ -389,7 +430,12 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
    * are rejected with a descriptive error so callers can normalize upstream
    * (e.g. when `Repository.bulkCreate` is invoked with heterogeneous rows).
    */
-  protected buildBulkInsertSql(table: string, rows: any[], q: string): string {
+  protected buildBulkInsertSql(
+    table: string,
+    rows: any[],
+    q: string,
+    columnMetadata?: Record<string, ColumnMetadata>
+  ): string {
     if (rows.length === 0) {
       throw new Error('bulk insert called with empty rows array');
     }
@@ -416,7 +462,7 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
         if (!(key in row)) {
           throw new Error(`bulk insert: row ${i} missing column "${key}"`);
         }
-        parts[k] = this.toDatabaseValue(row[key]);
+        parts[k] = this.toDatabaseValue(row[key], columnMetadata?.[key]);
       }
       tuples[i] = `(${parts.join(', ')})`;
     }
@@ -424,12 +470,17 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
     return `INSERT INTO ${table} (${fields}) VALUES ${tuples.join(', ')}`;
   }
 
-  protected buildUpdateSql(table: string, values: any, alias: string): string {
+  protected buildUpdateSql(
+    table: string,
+    values: any,
+    alias: string,
+    columnMetadata?: Record<string, ColumnMetadata>
+  ): string {
     const sets = Object.entries(values)
       .map(([key, value]) => {
         const serializedValue = isUpdateExpression(value)
-          ? value.resolve(key, (operand) => this.toDatabaseValue(operand))
-          : this.toDatabaseValue(value);
+          ? value.resolve(key, (operand) => this.toDatabaseValue(operand, columnMetadata?.[key]))
+          : this.toDatabaseValue(value, columnMetadata?.[key]);
 
         return `${key} = ${serializedValue}`;
       })

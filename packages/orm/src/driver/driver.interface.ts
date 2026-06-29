@@ -15,7 +15,7 @@ export interface DriverInterface {
    * `NULL`). Used by bulk-update raw SQL builders that bypass the prepared
    * statement path.
    */
-  formatLiteral(value: unknown): string | number | boolean;
+  formatLiteral(value: unknown, columnMetadata?: ColumnMetadata): string | number | boolean;
 
   executeStatement(
     statement: Statement<any>
@@ -221,6 +221,12 @@ export type JoinStatement<T> = {
   hooks?: { type: string; propertyName: string }[];
 };
 
+export type ColumnMetadata = {
+  dbType?: PropertyOptions["dbType"];
+  array?: boolean;
+  type?: Function;
+};
+
 export type Statement<T> = {
   statement?: "select" | "insert" | "update" | "delete" | "count";
   table?: string;
@@ -232,6 +238,7 @@ export type Statement<T> = {
   strategy?: "select" | "joined";
   where?: string;
   values?: any;
+  columnMetadata?: Record<string, ColumnMetadata>;
   groupBy?: string[];
   orderBy?: string[];
   limit?: number;
