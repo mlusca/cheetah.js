@@ -588,11 +588,16 @@
 @media (max-width: 996px) {
   .hero { padding: 5rem 0 4rem; }
   .heroGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 3rem;
   }
+  /* Let the stacked columns shrink below their content's min-content,
+     otherwise the code window's `white-space: pre` lines force the
+     grid wider than the viewport and everything overflows. */
+  .heroCopy,
+  .heroVisual { min-width: 0; }
   .heroVisual { order: 2; }
-  .codeWindow { transform: none; }
+  .codeWindow { transform: none; max-width: 100%; }
 
   .pillarsGrid { grid-template-columns: repeat(2, 1fr); }
   .pillarItem:nth-child(2n) { border-right: none; }
@@ -613,4 +618,8 @@
   .pillarItem:last-child { border-bottom: none; }
   .codeBody { font-size: 0.75rem; padding: 1.1rem 1.1rem 1.3rem; }
   .heroCtas { justify-content: flex-start; }
+
+  /* Three monospace package tabs don't fit side by side on a phone —
+     they force the row wider than the viewport. Stack them instead. */
+  .installTabs { flex-direction: column; }
 }

@@ -173,6 +173,36 @@ h1 { letter-spacing: -0.035em; }
 [data-theme='dark'] .button--secondary { color: var(--carno-ink); border-color: var(--carno-line); }
 [data-theme='dark'] .button--secondary:hover { background: var(--carno-line); color: var(--carno-ink); }
 
+/* ---------- Mobile navbar drawer ---------- */
+/* The mobile slide-in drawer (rendered only <=996px) is a child of .navbar.
+   Two things break it on mobile:
+   1. .navbar's `backdrop-filter` establishes a containing block for its
+      `position: fixed` descendants, so the drawer's top/bottom:0 resolve
+      against the 64px navbar instead of the viewport — collapsing it to a
+      thin strip and hiding the menu. Drop the filter at mobile widths.
+   2. The drawer has no backdrop-filter of its own, so its background must be
+      opaque or the page shows through and it looks like it never opened. */
+@media (max-width: 996px) {
+  .navbar {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--carno-paper-2);
+  }
+  [data-theme='dark'] .navbar { background: var(--carno-paper); }
+}
+
+.navbar-sidebar,
+.navbar-sidebar__brand {
+  background: var(--carno-paper-2);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-theme='dark'] .navbar-sidebar,
+[data-theme='dark'] .navbar-sidebar__brand {
+  background: var(--carno-paper);
+}
+.navbar-sidebar__brand { border-bottom: 1px solid var(--carno-line); }
+
 /* ---------- Sidebar ---------- */
 .menu__link {
   font-weight: 500;
