@@ -29,8 +29,10 @@
     "@docusaurus/module-type-aliases": "3.9.2",
     "@docusaurus/tsconfig": "3.9.2",
     "@docusaurus/types": "3.9.2",
-    "typescript": "~5.6.2"
+    "typescript": "~5.6.2",
+    "webpack": "5.100.2"
   },
+  "//webpack": "Pinned: webpack 5.101+ tightened the ProgressPlugin option schema, which webpackbar 6.0.1 (pulled in transitively by Docusaurus) violates — breaking `docusaurus build`. Pinning webpack as a direct dep forces the whole tree below that regression until Docusaurus/webpackbar ship a fix.",
   "browserslist": {
     "production": [
       ">0.5%",
