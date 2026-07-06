@@ -73,6 +73,11 @@ const sidebars: SidebarsConfig = {
       label: 'Testing',
       items: ['testing/overview'],
     },
+    {
+      type: 'category',
+      label: 'Community',
+      items: ['community/plugins'],
+    },
   ],
 };
 

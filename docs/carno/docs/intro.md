@@ -33,6 +33,8 @@ Performance remains part of the contract. Carno.js is built on Bun's runtime and
 
 > **Windows:** Wrap scoped package names in double quotes, for example `bun install "@carno.js/core"`.
 
+Beyond the official packages, the community also maintains integrations — see [Community Plugins](./community/plugins.md).
+
 ## Modularity & Clean Code
 
 Carno.js is built with modularity in mind. Instead of a large monolithic configuration, you are encouraged to split your logic into independent **Plugins**. This keeps your codebase organized, your features decoupled, and your business logic easier to test and maintain.
