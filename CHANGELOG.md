@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.4.5](https://github.com/carnojs/carno.js/compare/v1.4.4...v1.4.5) (2026-07-23)
+
+
+### Bug Fixes
+
+* **dependencies:** update webpack version and add type definitions ([930ed41](https://github.com/carnojs/carno.js/commit/930ed41c2a21bf75813365b7a6765cae0dae214e))
+
+
+### Features
+
+* **core:** make lifecycle hooks awaitable and enforce init barrier ([402587f](https://github.com/carnojs/carno.js/commit/402587f517cad78db654443d2ee55f7791e30894))
+
+
+
+
+
 ## [1.4.4](https://github.com/carnojs/carno.js/compare/v1.4.3...v1.4.4) (2026-06-29)
 
 
