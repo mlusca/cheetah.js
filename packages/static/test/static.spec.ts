@@ -10,7 +10,7 @@ const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'public');
 async function createApp(config: Parameters<typeof StaticPlugin.create>[0], port: number): Promise<Carno> {
     const app = new Carno({ disableStartupLog: true });
     app.use(await StaticPlugin.create(config));
-    app.listen(port);
+    await app.listen(port);
     return app;
 }
 
@@ -567,7 +567,7 @@ describe('StaticPlugin', () => {
                 alwaysStatic: false
             }));
             app.controllers(ApiController);
-            app.listen(port);
+            await app.listen(port);
 
             // API routes should work
             const apiRes = await fetch(`http://127.0.0.1:${port}/api/users`);
@@ -600,7 +600,7 @@ describe('StaticPlugin', () => {
                 alwaysStatic: false
             }));
             app.controllers(RootController);
-            app.listen(port);
+            await app.listen(port);
 
             // Root API routes should work
             const healthRes = await fetch(`http://127.0.0.1:${port}/health`);
@@ -640,7 +640,7 @@ describe('StaticPlugin', () => {
                 prefix: '/static'
             }));
             app.controllers(AppController);
-            app.listen(port);
+            await app.listen(port);
 
             // App routes should work at root
             const homeRes = await fetch(`http://127.0.0.1:${port}/`);
@@ -671,7 +671,7 @@ describe('StaticPlugin', () => {
                 alwaysStatic: false
             }));
             app.controllers(OverrideController);
-            app.listen(port);
+            await app.listen(port);
 
             // Controller route should take precedence
             const res = await fetch(`http://127.0.0.1:${port}/data.json`);
@@ -698,7 +698,7 @@ describe('StaticPlugin', () => {
                 prefix: '/public'
             }));
 
-            app.listen(port);
+            await app.listen(port);
 
             // Both prefixes should work
             const assetsRes = await fetch(`http://127.0.0.1:${port}/assets/index.html`);
@@ -723,7 +723,7 @@ describe('StaticPlugin', () => {
                 alwaysStatic: true // Production mode
             }));
             app.controllers(ProdApiController);
-            app.listen(port);
+            await app.listen(port);
 
             // API should work
             const apiRes = await fetch(`http://127.0.0.1:${port}/api/data`);

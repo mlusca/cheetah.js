@@ -3,7 +3,7 @@ import { Carno, Service, PostConstruct, PreDestroy, Container } from "../src";
 import { PRE_DESTROY_META } from "../src/metadata";
 
 describe("PostConstruct and PreDestroy Lifecycle Hooks", () => {
-  it("executes @PostConstruct right after service instantiation/DI", () => {
+  it("executes @PostConstruct right after service instantiation/DI", async () => {
     const events: string[] = [];
 
     @Service()
@@ -34,7 +34,7 @@ describe("PostConstruct and PreDestroy Lifecycle Hooks", () => {
     app.services([DependencyService, MainService]);
     
     // Trigger bootstrap to instantiate everything
-    app.listen(3015);
+    await app.listen(3015);
     app.stop();
 
     // Verification:
@@ -66,7 +66,7 @@ describe("PostConstruct and PreDestroy Lifecycle Hooks", () => {
 
     const app = new Carno({ disableStartupLog: true });
     app.services([AsyncPostConstructService]);
-    app.listen(3016);
+    await app.listen(3016);
     
     expect(postConstructDone).toBe(true);
     // Since get() is synchronous, it does not await the promise, so promiseResolved is still false initially
@@ -227,7 +227,7 @@ describe("PostConstruct and PreDestroy Lifecycle Hooks", () => {
     try {
       const app = new Carno({ disableStartupLog: true });
       app.services([DestroyOnlyService]);
-      app.listen(3017);
+      await app.listen(3017);
 
       const sigterm = handlers.get("SIGTERM");
       expect(sigterm).toBeDefined();
@@ -295,7 +295,7 @@ describe("PostConstruct and PreDestroy Lifecycle Hooks", () => {
     try {
       const app = new Carno({ disableStartupLog: true });
       app.services([Stage3LikeDestroyService]);
-      app.listen(3018);
+      await app.listen(3018);
 
       const sigterm = handlers.get("SIGTERM");
       expect(sigterm).toBeDefined();

@@ -98,7 +98,7 @@ export async function createTestHarness(options: TestOptions = {}): Promise<Test
     let server: Server<any> | undefined;
 
     if (shouldListen(options.listen)) {
-        app.listen(port);
+        await app.listen(port);
         server = (app as any).server;
     }
 

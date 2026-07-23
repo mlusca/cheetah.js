@@ -49,7 +49,7 @@ describe('Carno', () => {
 
     carno = new Carno()
     carno.use(plugin)
-    carno.listen(3001)
+    await carno.listen(3001)
 
     const response = await fetch('http://127.0.0.1:3001/');
     expect(response.status).toBe(200);

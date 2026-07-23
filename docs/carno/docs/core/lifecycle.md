@@ -89,6 +89,8 @@ At a high level, startup works like this:
 
 `@OnApplicationInit()` is the right hook for dependencies that must be ready before requests are served.
 
+Promises returned from `@OnApplicationInit()` and `@OnApplicationShutdown()` are awaited. `app.listen()` does not resolve until every init hook has finished, and the HTTP server is only started after that barrier. `@OnApplicationBoot()` may still return a promise, but listen does not wait for it.
+
 ## Shutdown Flow
 
 When the process receives `SIGTERM` or `SIGINT`:

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, beforeEach } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { Carno, Service, OnApplicationInit, OnApplicationBoot, Controller, Get } from "../src";
 import { clearEventRegistry } from "../src/events/Lifecycle";
 
@@ -26,11 +26,10 @@ describe("Lifecycle hooks", () => {
 
     app = new Carno({ disableStartupLog: true });
     app.services(InitHookService);
-    app.listen(3010);
+    await app.listen(3010);
 
     executionOrder.push("after-listen");
 
-    // The hook should have executed during listen()
     expect(executionOrder).toEqual(["before-listen", "hook", "after-listen"]);
   });
 
@@ -49,11 +48,10 @@ describe("Lifecycle hooks", () => {
 
     app = new Carno({ disableStartupLog: true });
     app.services(BootHookService);
-    app.listen(3011);
+    await app.listen(3011);
 
     executionOrder.push("after-listen");
 
-    // Boot hook should have executed after listen
     expect(executionOrder).toEqual(["before-listen", "boot", "after-listen"]);
   });
 
@@ -75,13 +73,12 @@ describe("Lifecycle hooks", () => {
 
     app = new Carno({ disableStartupLog: true });
     app.services(PriorityService);
-    app.listen(3012);
+    await app.listen(3012);
 
-    // High priority (10) should execute before low priority (1)
     expect(executionOrder).toEqual(["high", "low"]);
   });
 
-  it("does not await async OnApplicationInit hooks before running later hooks", async () => {
+  it("awaits async OnApplicationInit hooks before listen resolves", async () => {
     const executionOrder: string[] = [];
 
     @Service()
@@ -89,7 +86,7 @@ describe("Lifecycle hooks", () => {
       @OnApplicationInit(10)
       async highPriority(): Promise<void> {
         executionOrder.push("high-start");
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await new Promise((resolve) => setTimeout(resolve, 20));
         executionOrder.push("high-end");
       }
 
@@ -101,13 +98,96 @@ describe("Lifecycle hooks", () => {
 
     app = new Carno({ disableStartupLog: true });
     app.services(AsyncPriorityService);
-    app.listen(3013);
+    await app.listen(3013);
 
     executionOrder.push("after-listen");
 
-    expect(executionOrder).toEqual(["high-start", "low", "after-listen"]);
+    // Higher priority async work must finish before lower priority and before listen returns
+    expect(executionOrder).toEqual(["high-start", "high-end", "low", "after-listen"]);
+  });
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(executionOrder).toEqual(["high-start", "low", "after-listen", "high-end"]);
+  it("does not accept traffic until async OnApplicationInit completes", async () => {
+    let initDone = false;
+    let sawRequestDuringInit = false;
+
+    @Service()
+    class WarmupService {
+      @OnApplicationInit()
+      async warm(): Promise<void> {
+        // Overlap a request attempt with init; server must not be up yet
+        await Promise.all([
+          new Promise<void>((resolve) => setTimeout(resolve, 40)),
+          fetch("http://127.0.0.1:3014/ready")
+            .then(() => {
+              sawRequestDuringInit = true;
+            })
+            .catch(() => {
+              // Expected: connection refused while init is still running
+            }),
+        ]);
+        initDone = true;
+      }
+    }
+
+    @Controller()
+    class ReadyController {
+      @Get("/ready")
+      ready() {
+        return { ok: true, initDone };
+      }
+    }
+
+    app = new Carno({ disableStartupLog: true });
+    app.services(WarmupService);
+    app.controllers(ReadyController);
+    await app.listen(3014);
+
+    expect(initDone).toBe(true);
+    expect(sawRequestDuringInit).toBe(false);
+
+    const res = await fetch("http://127.0.0.1:3014/ready");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, initDone: true });
+  });
+
+  it("propagates OnApplicationInit failures and does not start the server", async () => {
+    @Service()
+    class FailingInitService {
+      @OnApplicationInit()
+      async fail(): Promise<void> {
+        throw new Error("init failed");
+      }
+    }
+
+    app = new Carno({ disableStartupLog: true });
+    app.services(FailingInitService);
+
+    await expect(app.listen(3019)).rejects.toThrow("init failed");
+    expect((app as any).server).toBeUndefined();
+  });
+
+  it("does not await async OnApplicationBoot hooks before listen resolves", async () => {
+    const executionOrder: string[] = [];
+
+    @Service()
+    class AsyncBootService {
+      @OnApplicationBoot()
+      async onBoot(): Promise<void> {
+        executionOrder.push("boot-start");
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        executionOrder.push("boot-end");
+      }
+    }
+
+    app = new Carno({ disableStartupLog: true });
+    app.services(AsyncBootService);
+    await app.listen(3020);
+
+    executionOrder.push("after-listen");
+
+    expect(executionOrder).toEqual(["boot-start", "after-listen"]);
+
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(executionOrder).toEqual(["boot-start", "after-listen", "boot-end"]);
   });
 });

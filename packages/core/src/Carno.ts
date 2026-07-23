@@ -299,8 +299,15 @@ export class Carno {
         return this.container.get(token);
     }
 
-    listen(port: number = 3000): void {
-        this.bootstrap();
+    /**
+     * Bootstrap the application and start listening for HTTP requests.
+     *
+     * Resolves when `@OnApplicationInit()` hooks (including async ones) have
+     * finished and the server is accepting connections. `@OnApplicationBoot()`
+     * hooks are started after listen and are not awaited.
+     */
+    async listen(port: number = 3000): Promise<void> {
+        await this.bootstrap();
         this.compileRoutes();
 
         // All routes go through Bun's native SIMD-accelerated router
@@ -342,9 +349,9 @@ export class Carno {
 
         this.server = Bun.serve(config);
 
-        // Execute BOOT hooks after server is ready
+        // Execute BOOT hooks after server is ready (fire-and-forget)
         if (this.hasBootHooks) {
-            this.executeLifecycleHooks(EventType.BOOT);
+            void this.executeLifecycleHooks(EventType.BOOT);
         }
 
         this.registerShutdownHandlers();
@@ -354,7 +361,7 @@ export class Carno {
         }
     }
 
-    private bootstrap(): void {
+    private async bootstrap(): Promise<void> {
         // Cache lifecycle event flags
         this.hasInitHooks = hasEventHandlers(EventType.INIT);
         this.hasBootHooks = hasEventHandlers(EventType.BOOT);
@@ -386,10 +393,8 @@ export class Carno {
             this.container.register(ControllerClass);
         }
 
-        if (this.hasInitHooks) {
-            this.executeLifecycleHooks(EventType.INIT);
-        }
-
+        // Resolve singleton services before INIT so instances (and @PostConstruct)
+        // exist when application init hooks run.
         for (const service of this._services) {
             const token = typeof service === 'function' ? service : service.token;
             const serviceConfig = typeof service === 'function' ? null : service;
@@ -397,6 +402,10 @@ export class Carno {
             if (!serviceConfig || serviceConfig.scope !== Scope.REQUEST) {
                 this.container.get(token);
             }
+        }
+
+        if (this.hasInitHooks) {
+            await this.executeLifecycleHooks(EventType.INIT);
         }
     }
 
@@ -744,10 +753,15 @@ export class Carno {
 
     /**
      * Execute lifecycle hooks for a specific event type.
+     *
+     * INIT and SHUTDOWN are barriers: returned promises are awaited in priority
+     * order before bootstrap/shutdown continues. BOOT is fire-and-forget so
+     * listen() can return once the server is accepting connections.
+     * Failures in INIT abort startup; other phases log and continue.
      */
     private async executeLifecycleHooks(type: EventType): Promise<void> {
         const handlers = getEventHandlers(type);
-        const shouldAwaitHooks = type === EventType.SHUTDOWN;
+        const shouldAwaitHooks = type !== EventType.BOOT;
 
         for (const handler of handlers) {
             try {
@@ -758,7 +772,6 @@ export class Carno {
                 if (instance && typeof (instance as any)[handler.methodName] === 'function') {
                     const result = (instance as any)[handler.methodName]();
 
-                    // Handle async hooks
                     if (result instanceof Promise) {
                         if (shouldAwaitHooks) {
                             await result;
@@ -770,6 +783,9 @@ export class Carno {
                     }
                 }
             } catch (err) {
+                if (type === EventType.INIT) {
+                    throw err;
+                }
                 console.error(`Error in ${type} hook ${handler.methodName}:`, err);
             }
         }

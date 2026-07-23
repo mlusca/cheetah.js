@@ -25,7 +25,7 @@ describe('StaticPlugin Prefix Handling', () => {
             prefix: '/public',
             alwaysStatic: false
         }));
-        app.listen(port);
+        await app.listen(port);
 
         const res = await fetch(`http://127.0.0.1:${port}/public/`);
         expect(res.status).toBe(200); // Should serve index.html
@@ -38,7 +38,7 @@ describe('StaticPlugin Prefix Handling', () => {
             prefix: '/public',
             alwaysStatic: false
         }));
-        app.listen(port);
+        await app.listen(port);
 
         const res = await fetch(`http://127.0.0.1:${port}/public`);
 
@@ -53,7 +53,7 @@ describe('StaticPlugin Prefix Handling', () => {
             prefix: '/public',
             alwaysStatic: false
         }));
-        app.listen(port);
+        await app.listen(port);
 
         const res = await fetch(`http://127.0.0.1:${port}/public/index.html`);
         expect(res.status).toBe(200);

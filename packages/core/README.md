@@ -48,7 +48,7 @@ class GreetController {
 const app = new Carno();
 app.services([GreetService]);
 app.controllers([GreetController]);
-app.listen(3000);
+await app.listen(3000);
 ```
 
 ## API Overview
@@ -107,7 +107,7 @@ await app.stop();           // Stop server
 
 | Decorator | Description |
 | :--- | :--- |
-| `@OnApplicationInit()` | Called after DI container is ready |
+| `@OnApplicationInit()` | Called after DI is ready; awaited before the server listens |
 | `@OnApplicationBoot()` | Called when server starts listening |
 | `@OnApplicationShutdown()` | Called when server is stopping |
 
