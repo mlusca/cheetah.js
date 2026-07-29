@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [1.5.0](https://github.com/carnojs/carno.js/compare/v1.4.5...v1.5.0) (2026-07-29)
+
+
+### Features
+
+* **operators:** add support for case-insensitive pattern matching with $ilike and $notIlike ([8193591](https://github.com/carnojs/carno.js/commit/819359183866a131e230440dacdcd727ecd1461d))
+
+
+
+
+
 ## [1.4.5](https://github.com/carnojs/carno.js/compare/v1.4.4...v1.4.5) (2026-07-23)
 
 **Note:** Version bump only for package @carno.js/orm

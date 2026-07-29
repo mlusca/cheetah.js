@@ -1,6 +1,6 @@
 {
   "name": "@carno.js/websocket",
-  "version": "1.4.5",
+  "version": "1.5.0",
   "description": "Native WebSocket support for Carno.js with rooms, namespaces, and broadcasting",
   "type": "commonjs",
   "main": "src/index.ts",
