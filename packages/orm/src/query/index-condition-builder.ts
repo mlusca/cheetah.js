@@ -4,7 +4,7 @@ import { extendsFrom, toSnakeCase } from '../utils';
 import { escapeString } from '../utils/sql-escape';
 
 const OPERATORS_SET = new Set([
-  '$eq', '$ne', '$in', '$nin', '$like',
+  '$eq', '$ne', '$in', '$nin', '$like', '$notLike', '$ilike', '$notIlike',
   '$gt', '$gte', '$lt', '$lte',
   '$and', '$or', '$nor',
 ]);
@@ -121,6 +121,12 @@ export class IndexConditionBuilder<T> {
         return this.buildNotInCondition(key, value);
       case '$like':
         return this.buildLikeCondition(key, value);
+      case '$notLike':
+        return this.buildNotLikeCondition(key, value);
+      case '$ilike':
+        return this.buildILikeCondition(key, value);
+      case '$notIlike':
+        return this.buildNotILikeCondition(key, value);
       case '$gt':
         return this.buildComparisonCondition(key, value, '>');
       case '$gte':
@@ -162,6 +168,24 @@ export class IndexConditionBuilder<T> {
     const column = this.resolveColumnName(key);
     const escaped = escapeString(value);
     return `${column} LIKE '${escaped}'`;
+  }
+
+  private buildNotLikeCondition(key: string, value: string): string {
+    const column = this.resolveColumnName(key);
+    const escaped = escapeString(value);
+    return `${column} NOT LIKE '${escaped}'`;
+  }
+
+  private buildILikeCondition(key: string, value: string): string {
+    const column = this.resolveColumnName(key);
+    const escaped = escapeString(value);
+    return `${column} ILIKE '${escaped}'`;
+  }
+
+  private buildNotILikeCondition(key: string, value: string): string {
+    const column = this.resolveColumnName(key);
+    const escaped = escapeString(value);
+    return `${column} NOT ILIKE '${escaped}'`;
   }
 
   private buildComparisonCondition(key: string, value: any, operator: string): string {

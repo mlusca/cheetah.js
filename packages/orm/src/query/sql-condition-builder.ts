@@ -8,7 +8,7 @@ import { SqlSubqueryBuilder } from './sql-subquery-builder';
 type ApplyJoinCallback = (relationship: Relationship<any>, value: FilterQuery<any>, alias: string) => string;
 
 const OPERATORS_SET = new Set([
-  '$eq', '$ne', '$in', '$nin', '$like', '$notLike',
+  '$eq', '$ne', '$in', '$nin', '$like', '$notLike', '$ilike', '$notIlike',
   '$gt', '$gte', '$lt', '$lte',
   '$and', '$or', '$exists', '$nexists',
 ]);
@@ -144,6 +144,10 @@ export class SqlConditionBuilder<T> {
         return this.buildLikeCondition(key, value, alias, model);
       case '$notLike':
         return this.buildNotLikeCondition(key, value, alias, model);
+      case '$ilike':
+        return this.buildILikeCondition(key, value, alias, model);
+      case '$notIlike':
+        return this.buildNotILikeCondition(key, value, alias, model);
       case '$gt':
         return this.buildComparisonCondition(key, value, alias, '>', model);
       case '$gte':
@@ -193,6 +197,28 @@ export class SqlConditionBuilder<T> {
     const column = this.resolveColumnName(key, model);
     const escaped = escapeString(value);
     return `${alias}.${column} NOT LIKE '${escaped}'`;
+  }
+
+  private buildILikeCondition(key: string, value: string, alias: string, model: Function): string {
+    const column = this.resolveColumnName(key, model);
+    const escaped = escapeString(value, this.escapeBackslash());
+
+    if (this.driver.dbType === 'mysql') {
+      return `LOWER(${alias}.${column}) LIKE LOWER('${escaped}')`;
+    }
+
+    return `${alias}.${column} ILIKE '${escaped}'`;
+  }
+
+  private buildNotILikeCondition(key: string, value: string, alias: string, model: Function): string {
+    const column = this.resolveColumnName(key, model);
+    const escaped = escapeString(value, this.escapeBackslash());
+
+    if (this.driver.dbType === 'mysql') {
+      return `LOWER(${alias}.${column}) NOT LIKE LOWER('${escaped}')`;
+    }
+
+    return `${alias}.${column} NOT ILIKE '${escaped}'`;
   }
 
   private buildComparisonCondition(key: string, value: any, alias: string, operator: string, model: Function): string {

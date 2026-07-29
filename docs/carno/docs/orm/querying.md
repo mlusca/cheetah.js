@@ -48,6 +48,8 @@ These operators compare a column against a value.
 | **`$lt`** | `<` | Less than. |
 | **`$lte`** | `<=` | Less than or equal to. |
 | **`$like`** | `LIKE` | Pattern matching (case sensitivity depends on DB/Collation). |
+| **`$ilike`** | `ILIKE` | Case-insensitive pattern matching (`ILIKE` on Postgres, `LOWER()+LIKE` on MySQL). |
+| **`$notIlike`** | `NOT ILIKE` | Negated case-insensitive pattern matching. |
 
 ### Examples
 

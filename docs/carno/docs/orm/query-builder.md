@@ -47,6 +47,7 @@ For a comprehensive list of operators and examples, see [Querying & Operators](.
   age: { $gt: 18 },       // Greater than
   score: { $lte: 100 },   // Less than or equal
   name: { $like: 'Jo%' }, // Like
+  email: { $ilike: '%@gmail.com' }, // Case-insensitive Like
   status: { $in: ['active', 'pending'] } // In array
 })
 ```
@@ -59,6 +60,7 @@ Supported operators:
 - `$lt`: Less than
 - `$lte`: Less than or equal
 - `$like`: SQL LIKE
+- `$ilike`: Case-insensitive SQL LIKE
 - `$in`: In array
 - `$nin`: Not in array
 
