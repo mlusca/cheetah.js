@@ -1,6 +1,6 @@
 {
   "name": "@carno.js/schedule",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Schedule module for Carno framework (Bun) ⏰",
   "type": "commonjs",
   "main": "dist/index.js",

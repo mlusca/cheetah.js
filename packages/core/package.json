@@ -1,6 +1,6 @@
 {
     "name": "@carno.js/core",
-    "version": "1.6.1",
+    "version": "1.6.2",
     "description": "Ultra-fast HTTP framework with aggressive AOT/JIT compilation",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
