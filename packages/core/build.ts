@@ -30,7 +30,19 @@ await build({
     esbuildPlugins: [fixImportsPlugin()]
 })
 
-await $`tsc --project tsconfig.json`
+/*
+  Declarations only, and forced.
+
+  tsconfig.json is composite, so a plain `tsc --project` is incremental: with a
+  fresh tsconfig.tsbuildinfo it considers the (already deleted) dist up to date
+  and emits nothing, which is how 1.6.1 shipped without a single .d.ts. The
+  buildinfo is removed and --force passed so the emit always happens.
+
+  tsconfig.dts.json also sets emitDeclarationOnly, otherwise tsc would overwrite
+  the JS that tsup just wrote with its own CommonJS output.
+*/
+await $`rm -rf tsconfig.dts.tsbuildinfo`
+await $`tsc --build tsconfig.dts.json --force`
 
 await Bun.build({
     entrypoints: ['./src/index.ts'],

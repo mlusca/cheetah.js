@@ -3,7 +3,7 @@
     "version": "1.6.1",
     "description": "Ultra-fast HTTP framework with aggressive AOT/JIT compilation",
     "main": "dist/index.js",
-    "types": "src/index.ts",
+    "types": "dist/index.d.ts",
     "scripts": {
         "build": "bun run build.ts",
         "compile": "rm -rf ./dist tsconfig.tsbuildinfo && tsc --build --force",
