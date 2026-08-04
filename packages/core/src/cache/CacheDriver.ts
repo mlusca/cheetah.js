@@ -15,7 +15,7 @@ export interface CacheDriver {
 
     /**
      * Set a value in cache.
-     * @param ttl Time to live in seconds (optional)
+     * @param ttl Time to live in milliseconds (optional). Omit or pass a falsy value for no automatic expiration.
      */
     set<T>(key: string, value: T, ttl?: number): Promise<boolean>;
 
@@ -46,5 +46,9 @@ export interface CacheDriver {
 export interface CacheConfig {
     driver?: CacheDriver;
     prefix?: string;
+    /**
+     * Default time to live in milliseconds applied when `set` / `getOrSet` omit `ttl`.
+     * Omit for no automatic expiration by default.
+     */
     defaultTtl?: number;
 }
