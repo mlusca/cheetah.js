@@ -20,6 +20,9 @@ export interface LoggerConfig {
     /** Pretty print structured data */
     pretty?: boolean;
 
+    /** Output format. `pretty` preserves the legacy human-readable output. */
+    format?: 'pretty' | 'json';
+
     /** Include timestamp */
     timestamp?: boolean;
 
@@ -33,7 +36,7 @@ export interface LoggerConfig {
     flushInterval?: number;
 }
 
-import { OnApplicationShutdown } from '@carno.js/core';
+import { ExecutionContext, OnApplicationShutdown } from '@carno.js/core';
 
 /**
  * Structured log data.
@@ -99,6 +102,7 @@ const LEVEL_ICONS: Record<LogLevel, string> = {
 export class LoggerService {
     private level: LogLevel;
     private pretty: boolean;
+    private format: 'pretty' | 'json';
     private timestamp: boolean;
     private timestampFormat: () => string;
     private prefix: string;
@@ -110,6 +114,7 @@ export class LoggerService {
     constructor(config: LoggerConfig = {}) {
         this.level = this.parseLevel(config.level ?? LogLevel.INFO);
         this.pretty = config.pretty ?? true;
+        this.format = config.format ?? 'pretty';
         this.timestamp = config.timestamp ?? true;
         this.timestampFormat = config.timestampFormat ?? this.defaultTimestamp;
         this.prefix = config.prefix ?? '';
@@ -117,6 +122,9 @@ export class LoggerService {
 
         if (this.flushInterval > 0) {
             this.flushTimer = setInterval(() => this.flush(), this.flushInterval);
+            // The logger must not keep a CLI, test process, or worker alive
+            // solely because it is waiting to flush its small buffer.
+            (this.flushTimer as any).unref?.();
         }
 
         // Ensure logs are flushed when the process exits
@@ -170,7 +178,12 @@ export class LoggerService {
     log(level: LogLevel, message: string, data?: LogData): void {
         if (level < this.level) return;
 
-        const line = this.formatLine(level, message, data);
+        let line: string;
+        try {
+            line = this.formatLine(level, message, this.withExecutionContext(data));
+        } catch {
+            line = this.formatSerializationFallback(level, message);
+        }
 
         if (this.flushInterval === 0) {
             // Sync mode
@@ -220,6 +233,10 @@ export class LoggerService {
     }
 
     private formatLine(level: LogLevel, message: string, data?: LogData): string {
+        if (this.format === 'json') {
+            return this.formatJsonLine(level, message, data);
+        }
+
         const parts: string[] = [];
 
         // Icon
@@ -253,6 +270,66 @@ export class LoggerService {
         return parts.join(' ');
     }
 
+    private formatJsonLine(level: LogLevel, message: string, data?: LogData): string {
+        try {
+            const entry: Record<string, unknown> = {
+                ...(this.timestamp ? { timestamp: this.timestampFormat() } : {}),
+                level: this.levelName(level),
+                message,
+                context: data || {}
+            };
+
+            if (this.prefix) entry.prefix = this.prefix;
+            return JSON.stringify(entry, this.jsonReplacer());
+        } catch {
+            return this.formatSerializationFallback(level, message);
+        }
+    }
+
+    private formatSerializationFallback(level: LogLevel, message: string): string {
+        const safeMessage = typeof message === 'string' ? message : 'Logger serialization failure';
+        if (this.format === 'json') {
+            return JSON.stringify({
+                level: this.levelName(level),
+                message: safeMessage,
+                context: { serializationError: true }
+            });
+        }
+        return `[LOGGER SERIALIZATION ERROR] ${safeMessage}`;
+    }
+
+    private withExecutionContext(data?: LogData): LogData | undefined {
+        const executionContext = ExecutionContext.get();
+        if (!executionContext) return data;
+        return { ...(data || {}), ...executionContext };
+    }
+
+    private levelName(level: LogLevel): string {
+        switch (level) {
+            case LogLevel.DEBUG: return 'debug';
+            case LogLevel.INFO: return 'info';
+            case LogLevel.WARN: return 'warn';
+            case LogLevel.ERROR: return 'error';
+            case LogLevel.FATAL: return 'fatal';
+            default: return 'silent';
+        }
+    }
+
+    private jsonReplacer(): (key: string, value: unknown) => unknown {
+        const seen = new WeakSet<object>();
+        return (_key, value) => {
+            if (value instanceof Error) {
+                return { name: value.name, message: value.message, stack: value.stack };
+            }
+            if (typeof value === 'bigint') return value.toString();
+            if (typeof value === 'object' && value !== null) {
+                if (seen.has(value)) return '[Circular]';
+                seen.add(value);
+            }
+            return value;
+        };
+    }
+
     private formatDataPretty(data: LogData): string {
         const formatted: string[] = [];
 
@@ -265,6 +342,10 @@ export class LoggerService {
     }
 
     private formatValue(value: any): string {
+        if (value instanceof Error) {
+            const summary = `${value.name}: ${value.message}`;
+            return value.stack ? `${summary}\n${value.stack}` : summary;
+        }
         if (value === null) {
             return `${COLORS.null}null${COLORS.reset}`;
         }

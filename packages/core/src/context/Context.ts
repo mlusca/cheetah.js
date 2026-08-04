@@ -8,6 +8,7 @@
  */
 
 import { parseQueryFromURL } from '../utils/parseQuery';
+import { ExecutionContext } from './ExecutionContext';
 
 const EMPTY_PARAMS: Record<string, string> = Object.freeze({}) as Record<string, string>;
 
@@ -104,6 +105,11 @@ export class Context {
 
     get path(): string {
         return this.url.pathname;
+    }
+
+    /** Correlation id assigned to the current HTTP execution, when enabled. */
+    get requestId(): string | undefined {
+        return ExecutionContext.get()?.requestId;
     }
 
     json(data: any, status?: number): Response {
