@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "bun:test";
-import { Container, Metadata } from "@carno.js/core";
+import { Container, ExecutionContext, Metadata, ObservabilityService } from "@carno.js/core";
 import { SchedulerOrchestration } from "../src/scheduler-orchestration.service";
 import { SchedulerRegistry } from "../src/scheduler.registry";
 import { Schedule } from "../src/decorator/schedule.decorator";
@@ -46,6 +46,95 @@ describe("SchedulerOrchestration", () => {
 
     const cronJob = context.registry.getCronJob(cronJobName);
     expect(cronJob).toBeDefined();
+  });
+
+  it("creates isolated context for concurrent scheduled executions", async () => {
+    const contexts: any[] = [];
+    class ContextScheduledService {
+      async handle(): Promise<void> {
+        await Promise.resolve();
+        contexts.push(ExecutionContext.get());
+      }
+    }
+
+    const container = new Container();
+    const registry = new SchedulerRegistry();
+    container.register(ContextScheduledService);
+    container.register({ token: SchedulerRegistry, useValue: registry });
+    container.register({ token: Container, useValue: container });
+    const orchestration = new SchedulerOrchestration(registry, container);
+
+    const callback = (orchestration as any).bindMethod(
+      { target: ContextScheduledService.prototype, methodName: "handle" },
+      "interval",
+      "heartbeat"
+    );
+    await Promise.all([callback(), callback()]);
+
+    expect(contexts).toHaveLength(2);
+    expect(contexts[0]).toMatchObject({ kind: "schedule", scheduleType: "interval", scheduleName: "heartbeat" });
+    expect(contexts[0].requestId).not.toBe(contexts[1].requestId);
+  });
+
+  it("reports callback errors to stderr when no observability plugin is registered", async () => {
+    class FailingScheduledService {
+      async handle(): Promise<void> {
+        throw new Error("scheduled failure");
+      }
+    }
+    const container = new Container();
+    const registry = new SchedulerRegistry();
+    container.register(FailingScheduledService);
+    container.register({ token: SchedulerRegistry, useValue: registry });
+    container.register({ token: Container, useValue: container });
+    const orchestration = new SchedulerOrchestration(registry, container);
+    const callback = (orchestration as any).bindMethod(
+      { target: FailingScheduledService.prototype, methodName: "handle" },
+      "timeout",
+      "failing-task"
+    );
+
+    const originalError = console.error;
+    const errors: unknown[][] = [];
+    console.error = ((...args: unknown[]) => { errors.push(args); }) as typeof console.error;
+    try {
+      await callback();
+      expect(errors).toHaveLength(1);
+      expect(String(errors[0][0])).toContain("Unhandled scheduled execution error");
+    } finally {
+      console.error = originalError;
+    }
+  });
+
+  it("keeps reporting callback errors when the core no-op observability bridge is registered", async () => {
+    class FailingScheduledService {
+      async handle(): Promise<void> {
+        throw new Error("scheduled failure");
+      }
+    }
+    const container = new Container();
+    const registry = new SchedulerRegistry();
+    container.register(FailingScheduledService);
+    container.register({ token: SchedulerRegistry, useValue: registry });
+    container.register({ token: Container, useValue: container });
+    container.register({ token: ObservabilityService, useValue: new ObservabilityService() });
+    const orchestration = new SchedulerOrchestration(registry, container);
+    const callback = (orchestration as any).bindMethod(
+      { target: FailingScheduledService.prototype, methodName: "handle" },
+      "timeout",
+      "failing-task"
+    );
+
+    const originalError = console.error;
+    const errors: unknown[][] = [];
+    console.error = ((...args: unknown[]) => { errors.push(args); }) as typeof console.error;
+    try {
+      await callback();
+      expect(errors).toHaveLength(1);
+      expect(String(errors[0][0])).toContain("Unhandled scheduled execution error");
+    } finally {
+      console.error = originalError;
+    }
   });
 });
 

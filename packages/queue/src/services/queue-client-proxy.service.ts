@@ -1,4 +1,5 @@
 import { Queue, JobsOptions, Job } from 'bullmq';
+import { addObservabilityMetadata } from './observability-context';
 
 
 export class QueueClientProxy {
@@ -13,14 +14,14 @@ export class QueueClientProxy {
     data: any = {},
     options?: JobsOptions
   ): Promise<any> {
-    return this.queue.add(jobName, data, options);
+    return this.queue.add(jobName, addObservabilityMetadata(data), options);
   }
 
 
   async addBulk(
     jobs: Array<{ name: string; data?: any; opts?: JobsOptions }>
   ): Promise<any> {
-    return this.queue.addBulk(jobs as any);
+    return this.queue.addBulk(jobs.map(job => ({ ...job, data: addObservabilityMetadata(job.data) })) as any);
   }
 
 

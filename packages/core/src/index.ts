@@ -18,6 +18,11 @@ export type { MiddlewareHandler, MiddlewareClass, MiddlewareEntry, CarnoConfig }
 
 // Context
 export { Context } from './context/Context';
+export { ExecutionContext } from './context/ExecutionContext';
+export type { ExecutionContextData } from './context/ExecutionContext';
+
+// Observability bridge
+export { ObservabilityService } from './observability/ObservabilityService';
 
 // Decorators - Controller
 export { Controller } from './decorators/Controller';

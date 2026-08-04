@@ -1,5 +1,7 @@
 import {
     Container,
+    ExecutionContext,
+    ObservabilityService,
     Metadata,
     OnApplicationInit,
     OnApplicationShutdown,
@@ -130,22 +132,66 @@ export class SchedulerOrchestration {
         const timeout = Metadata.get(SCHEDULE_TIMEOUT_OPTIONS, Reflect) || [];
 
         schedulers.forEach((scheduler: any) => {
-            this.addCron(this.bindMethod(scheduler), scheduler.options);
+            this.addCron(this.bindMethod(scheduler, 'cron', scheduler.options.name), scheduler.options);
         });
 
         interval.forEach((scheduler: any) => {
-            this.addInterval(this.bindMethod(scheduler), scheduler.timeout, scheduler.name);
+            this.addInterval(this.bindMethod(scheduler, 'interval', scheduler.name), scheduler.timeout, scheduler.name);
         });
 
         timeout.forEach((scheduler: any) => {
-            this.addTimeout(this.bindMethod(scheduler), scheduler.timeout, scheduler.name);
+            this.addTimeout(this.bindMethod(scheduler, 'timeout', scheduler.name), scheduler.timeout, scheduler.name);
         });
     }
 
-    private bindMethod(scheduler: any) {
+    private bindMethod(scheduler: any, scheduleType: 'cron' | 'interval' | 'timeout', scheduleName?: string) {
         const instance = this.resolveInstance(scheduler.target);
+        const method = instance[scheduler.methodName].bind(instance);
 
-        return instance[scheduler.methodName].bind(instance);
+        return async (...args: any[]) => {
+            const context = {
+                requestId: ExecutionContext.createRequestId(),
+                kind: 'schedule' as const,
+                scheduleType,
+                scheduleName: scheduleName || scheduler.methodName
+            };
+
+            return ExecutionContext.run(context, async () => {
+                try {
+                    return await method(...args);
+                } catch (error) {
+                    if (!this.reportExecutionError(context, error)) {
+                        console.error('Unhandled scheduled execution error:', error);
+                    }
+                    // Scheduler callbacks have no caller to receive a rejection.
+                    // Reporting and consuming it prevents unhandled rejections.
+                    return undefined;
+                }
+            });
+        };
+    }
+
+    private reportExecutionError(context: any, error: unknown): boolean {
+        if (!this.container.has(ObservabilityService)) {
+            return false;
+        }
+
+        const observability = this.container.get(ObservabilityService);
+        if (!observability.enabled) {
+            return false;
+        }
+
+        try {
+            observability.onExecutionError(context, error);
+            return true;
+        } catch (observerError) {
+            try {
+                console.error('Observability scheduled error reporting failed:', observerError);
+            } catch {
+                // Observability must never interfere with scheduled execution.
+            }
+            return false;
+        }
     }
 
     private resolveInstance(target: any) {

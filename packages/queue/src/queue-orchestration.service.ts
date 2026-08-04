@@ -5,6 +5,8 @@ import {
   Container,
   Context,
   Scope,
+  ExecutionContext,
+  ObservabilityService,
 } from '@carno.js/core';
 import { QueueRegistry } from './queue.registry';
 import { QueueDiscoveryService } from './services/queue-discovery.service';
@@ -12,6 +14,7 @@ import { QueueBuilderService } from './services/queue-builder.service';
 import { EventBinderService } from './services/event-binder.service';
 import { getQueueToken } from './decorators/inject-queue.decorator';
 import { createQueueProxyFactory } from './services/queue-proxy-factory.service';
+import { getOriginRequestId } from './services/observability-context';
 
 @Service()
 export class QueueOrchestration {
@@ -215,7 +218,7 @@ export class QueueOrchestration {
   }
 
 
-  private executeProcessorWithContext(
+  private async executeProcessorWithContext(
     queueMetadata: any,
     processor: Function,
     job: any
@@ -227,7 +230,38 @@ export class QueueOrchestration {
       job.name
     )].bind(instance);
 
-    return boundProcessor(job);
+    const context = {
+      requestId: getOriginRequestId(job) ?? ExecutionContext.createRequestId(),
+      kind: 'queue' as const,
+      queueName: queueMetadata.name,
+      jobName: job.name,
+      jobId: String(job.id ?? '')
+    };
+
+    return ExecutionContext.run(context, async () => {
+      try {
+        return await boundProcessor(job);
+      } catch (error) {
+        this.reportExecutionError(context, error);
+        throw error;
+      }
+    });
+  }
+
+  private reportExecutionError(context: any, error: unknown): void {
+    if (!this.container.has(ObservabilityService)) {
+      return;
+    }
+
+    try {
+      this.container.get(ObservabilityService).onExecutionError(context, error);
+    } catch (observerError) {
+      try {
+        console.error('Observability queue error reporting failed:', observerError);
+      } catch {
+        // Observability must never replace the processor error.
+      }
+    }
   }
 
 

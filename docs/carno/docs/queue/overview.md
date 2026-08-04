@@ -49,18 +49,22 @@ Use the `@Queue()` decorator to define a processor for a named queue.
 
 ```ts
 import { Queue, Process } from '@carno.js/queue';
+import { LoggerService } from '@carno.js/logger';
 import { Job } from 'bullmq';
 
 @Queue('email')
 export class EmailConsumer {
+  constructor(private logger: LoggerService) {}
   
   @Process('send-welcome')
   async sendWelcomeEmail(job: Job) {
-    console.log(`Sending email to ${job.data.email}`);
+    this.logger.info('Sending welcome email', { email: job.data.email });
     // logic...
   }
 }
 ```
+
+When `CarnoLogger` is registered, jobs receive an isolated context for each execution. Jobs enqueued during a request automatically preserve the originating `requestId`, including when a worker processes jobs concurrently.
 
 ## Adding Jobs
 

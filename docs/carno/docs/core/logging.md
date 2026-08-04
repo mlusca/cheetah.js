@@ -99,6 +99,7 @@ import { createCarnoLogger, LogLevel } from '@carno.js/logger';
 
 const LoggerModule = createCarnoLogger({
   level: LogLevel.DEBUG,
+  format: process.env.NODE_ENV === 'production' ? 'json' : 'pretty',
   pretty: process.env.NODE_ENV !== 'production',
   timestamp: true,
   prefix: 'api',
@@ -115,10 +116,28 @@ Configuration options:
 | :--- | :--- |
 | `level` | Minimum log level to output |
 | `pretty` | Pretty-print structured data |
+| `format` | `'pretty'` (default) preserves the current human-readable output; `'json'` emits valid JSON Lines |
 | `timestamp` | Include timestamp in each line |
 | `timestampFormat` | Custom timestamp formatter |
 | `prefix` | Prefix added to every log line |
 | `flushInterval` | Buffer flush interval in milliseconds. `0` writes synchronously |
+| `httpInstrumentation` | Enables automatic logs, `x-request-id`, and HTTP context. Defaults to `true` when the plugin is registered |
+
+## HTTP Observability and JSON Lines
+
+When the plugin is registered, every request receives an `x-request-id`. A valid incoming value is preserved; otherwise, Carno generates a UUID and returns it in the response header. The ID is also available as `ctx.requestId` and is automatically included in logs emitted during the request.
+
+In JSON mode, each line is an independent object:
+
+```json
+{"timestamp":"12:34:56.789","level":"info","message":"HTTP request completed","context":{"requestId":"...","kind":"http","method":"GET","route":"/users/:id","status":200,"durationMs":1.24}}
+```
+
+The logger never captures request bodies, query strings, or headers automatically. For unhandled errors, the error event contains `error.name`, `error.message`, and `error.stack`, while the HTTP response remains the framework's safe 500 response.
+
+## Context for Jobs and Scheduled Tasks
+
+Jobs created during a request carry the originating `requestId` in the internal `__carno_observability` namespace. The worker restores that context even when processing jobs concurrently. Every cron, interval, and timeout invocation receives a new context. Inject `LoggerService` and the queue or schedule fields are added to its logs automatically.
 
 ## Standalone Logger
 
