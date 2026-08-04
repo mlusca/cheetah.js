@@ -10,18 +10,21 @@ import { MemoryDriver } from './MemoryDriver';
  * - Key prefixing for namespacing
  * - Configurable default TTL
  *
+ * TTL values are always in milliseconds (including `defaultTtl`). Drivers that
+ * only support second precision (e.g. Redis SETEX) convert at the driver boundary.
+ *
  * Usage:
  * ```typescript
  * const cache = new CacheService();
  *
- * // Basic operations
- * await cache.set('user:123', { name: 'John' }, 3600);
+ * // Basic operations (TTL in milliseconds)
+ * await cache.set('user:123', { name: 'John' }, 3_600_000); // 1 hour
  * const user = await cache.get<User>('user:123');
  *
  * // Cache-aside pattern
  * const user = await cache.getOrSet('user:123',
  *   async () => db.findUser(123),
- *   3600
+ *   3_600_000
  * );
  * ```
  */
@@ -57,7 +60,7 @@ export class CacheService {
 
     /**
      * Set a value in cache.
-     * @param ttl Time to live in seconds
+     * @param ttl Time to live in milliseconds. Falls back to `defaultTtl` when omitted.
      */
     async set<T>(key: string, value: T, ttl?: number): Promise<boolean> {
         return this.driver.set(this.key(key), value, ttl ?? this.defaultTtl);
@@ -94,7 +97,7 @@ export class CacheService {
      *
      * @param key Cache key
      * @param cb Callback to compute value if not cached
-     * @param ttl Time to live in seconds
+     * @param ttl Time to live in milliseconds. Falls back to `defaultTtl` when omitted.
      */
     async getOrSet<T>(key: string, cb: () => Promise<T>, ttl?: number): Promise<T> {
         const flightKey = this.key(key);
