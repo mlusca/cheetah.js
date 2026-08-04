@@ -95,6 +95,7 @@ export { CacheService } from './cache/CacheService';
 export { MemoryDriver } from './cache/MemoryDriver';
 export { RedisDriver } from './cache/RedisDriver';
 export type { RedisConfig } from './cache/RedisDriver';
+export type { MemoryDriverOptions } from './cache/MemoryDriver';
 export type { CacheDriver, CacheConfig } from './cache/CacheDriver';
 
 // Testing

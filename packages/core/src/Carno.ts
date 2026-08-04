@@ -874,8 +874,29 @@ export class Carno {
         return path.includes(':') || path.includes('*');
     }
 
-    stop(): void {
+    /**
+     * Stop the HTTP server and release application resources (including CacheService).
+     * Prefer awaiting this so driver cleanup (e.g. MemoryDriver timers) finishes.
+     */
+    async stop(): Promise<void> {
         this.server?.stop?.();
+        this.server = undefined;
+        await this.closeCacheService();
+    }
+
+    /**
+     * Close the registered CacheService when present (stops MemoryDriver cleanup timers, etc.).
+     */
+    private async closeCacheService(): Promise<void> {
+        if (!this.container.has(CacheService)) {
+            return;
+        }
+
+        try {
+            await this.container.get(CacheService).close();
+        } catch (err) {
+            console.error('Error closing CacheService:', err);
+        }
     }
 
     /**
@@ -961,7 +982,7 @@ export class Carno {
     private registerShutdownHandlers(): void {
         const shutdown = async () => {
             await this.executeLifecycleHooks(EventType.SHUTDOWN);
-            this.stop();
+            await this.stop();
             process.exit(0);
         };
 
