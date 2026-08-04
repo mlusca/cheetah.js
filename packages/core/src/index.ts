@@ -18,6 +18,11 @@ export type { MiddlewareHandler, MiddlewareClass, MiddlewareEntry, CarnoConfig }
 
 // Context
 export { Context } from './context/Context';
+export { ExecutionContext } from './context/ExecutionContext';
+export type { ExecutionContextData } from './context/ExecutionContext';
+
+// Observability bridge
+export { ObservabilityService } from './observability/ObservabilityService';
 
 // Decorators - Controller
 export { Controller } from './decorators/Controller';
@@ -90,6 +95,7 @@ export { CacheService } from './cache/CacheService';
 export { MemoryDriver } from './cache/MemoryDriver';
 export { RedisDriver } from './cache/RedisDriver';
 export type { RedisConfig } from './cache/RedisDriver';
+export type { MemoryDriverOptions } from './cache/MemoryDriver';
 export type { CacheDriver, CacheConfig } from './cache/CacheDriver';
 
 // Testing

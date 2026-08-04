@@ -1,6 +1,7 @@
 import { Service, Scope } from "@carno.js/core";
 import { Queue, JobsOptions } from "bullmq";
 import { QueueRegistry } from "../queue.registry";
+import { addObservabilityMetadata } from './observability-context';
 
 @Service({ scope: Scope.SINGLETON })
 export class QueueClient {
@@ -14,7 +15,7 @@ export class QueueClient {
   ): Promise<any> {
     const queue = this.getQueue(queueName);
 
-    return queue.add(jobName, data, options);
+    return queue.add(jobName, addObservabilityMetadata(data), options);
   }
 
   async addBulk(
@@ -23,7 +24,7 @@ export class QueueClient {
   ): Promise<any> {
     const queue = this.getQueue(queueName);
 
-    return queue.addBulk(jobs as any);
+    return queue.addBulk(jobs.map(job => ({ ...job, data: addObservabilityMetadata(job.data) })) as any);
   }
 
   private getQueue(queueName: string): Queue {

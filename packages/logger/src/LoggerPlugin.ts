@@ -1,5 +1,6 @@
-import { Carno } from '@carno.js/core';
+import { Carno, ObservabilityService } from '@carno.js/core';
 import { LoggerService, LoggerConfig, LogLevel } from './LoggerService';
+import { LoggerObservabilityService } from './LoggerObservabilityService';
 
 /**
  * Logger plugin configuration.
@@ -7,6 +8,9 @@ import { LoggerService, LoggerConfig, LogLevel } from './LoggerService';
 export interface LoggerPluginConfig extends LoggerConfig {
     /** Auto-register as singleton in DI */
     autoRegister?: boolean;
+
+    /** Enable automatic HTTP correlation and request completion logs. */
+    httpInstrumentation?: boolean;
 }
 
 /**
@@ -32,13 +36,21 @@ export interface LoggerPluginConfig extends LoggerConfig {
  */
 export function createCarnoLogger(config: LoggerPluginConfig = {}) {
     const logger = new LoggerService(config);
-    return new Carno()
-        .services([
+    const services: any[] = [
             {
                 token: LoggerService,
                 useValue: logger
             }
-        ])
+    ];
+
+    if (config.httpInstrumentation !== false) {
+        services.push({
+            token: ObservabilityService,
+            useValue: new LoggerObservabilityService(logger)
+        });
+    }
+
+    return new Carno().services(services);
 }
 
 export const CarnoLogger = createCarnoLogger();

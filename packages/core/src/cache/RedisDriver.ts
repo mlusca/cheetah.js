@@ -77,7 +77,10 @@ export class RedisDriver implements CacheDriver {
         const serialized = typeof value === 'string' ? value : JSON.stringify(value);
 
         if (ttl) {
-            await this.client.setex(key, ttl, serialized);
+            // Public API uses milliseconds; Redis SETEX expects whole seconds.
+            // Round up so entries never expire before the requested instant.
+            const ttlSeconds = Math.ceil(ttl / 1000);
+            await this.client.setex(key, ttlSeconds, serialized);
         } else {
             await this.client.set(key, serialized);
         }

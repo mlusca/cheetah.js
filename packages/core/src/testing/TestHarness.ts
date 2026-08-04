@@ -145,7 +145,7 @@ export async function createTestHarness(options: TestOptions = {}): Promise<Test
         delete: (path, init) => request(path, { ...init, method: 'DELETE' }),
 
         close: async () => {
-            app.stop();
+            await app.stop();
         }
     };
 }

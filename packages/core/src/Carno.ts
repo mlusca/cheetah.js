@@ -18,6 +18,8 @@ import type { CacheConfig } from './cache/CacheDriver';
 import { DEFAULT_STATIC_ROUTES } from './DefaultRoutes';
 import { ZodAdapter } from './validation/ZodAdapter';
 import type { CarnoMiddleware } from './middleware/CarnoMiddleware';
+import { ExecutionContext, type ExecutionContextData } from './context/ExecutionContext';
+import { ObservabilityService } from './observability/ObservabilityService';
 
 export type MiddlewareHandler = (ctx: Context) => Response | void | Promise<Response | void>;
 
@@ -83,6 +85,7 @@ export class Carno {
     private hasCors = false;
     private validator: ValidatorAdapter | null = null;
     private server: any;
+    private observability = new ObservabilityService();
 
     // WebSocket support
     _wsHandlerBuilder: ((container: Container) => any) | null = null;
@@ -310,15 +313,16 @@ export class Carno {
         await this.bootstrap();
         this.compileRoutes();
 
+        const routes = this.observability.enabled
+            ? this.instrumentRoutes({ ...DEFAULT_STATIC_ROUTES, ...this.routes })
+            : { ...DEFAULT_STATIC_ROUTES, ...this.routes };
+
         // All routes go through Bun's native SIMD-accelerated router
         const config: any = {
             port,
             fetch: this.handleNotFound.bind(this),
             error: this.handleError.bind(this),
-            routes: {
-                ...DEFAULT_STATIC_ROUTES,
-                ...this.routes
-            }
+            routes
         };
 
         // Wire in WebSocket support if a handler builder was registered
@@ -332,15 +336,7 @@ export class Carno {
                 const pathname = new URL(req.url).pathname;
 
                 if (upgradePaths.has(pathname)) {
-                    const upgraded = server.upgrade(req, {
-                        data: {
-                            id: crypto.randomUUID(),
-                            namespace: pathname,
-                        },
-                    });
-
-                    if (upgraded) return;
-                    return new Response('WebSocket upgrade failed', { status: 400 });
+                    return this.handleWebSocketUpgrade(req, server, pathname);
                 }
 
                 return fallback(req);
@@ -378,6 +374,13 @@ export class Carno {
             useValue: this
         });
 
+        // A no-op bridge keeps the core independent from optional logging
+        // packages.  An observability plugin can replace this provider.
+        this.container.register({
+            token: ObservabilityService,
+            useValue: this.observability
+        });
+
         // Always register CacheService (Memory by default)
         const cacheConfig = typeof this.config.cache === 'object' ? this.config.cache : {};
         this.container.register({
@@ -388,6 +391,8 @@ export class Carno {
         for (const service of this._services) {
             this.container.register(service);
         }
+
+        this.observability = this.container.get(ObservabilityService);
 
         for (const ControllerClass of this._controllers) {
             this.container.register(ControllerClass);
@@ -674,10 +679,161 @@ export class Carno {
     }
 
     /**
+     * Adds the opt-in request boundary around every Bun route, including
+     * static responses registered through `routes`.
+     */
+    private instrumentRoutes(routes: Record<string, Record<string, Response | Function> | Response | Function>): Record<string, Record<string, Function> | Function> {
+        const instrumented: Record<string, Record<string, Function> | Function> = {};
+
+        for (const [route, entry] of Object.entries(routes)) {
+            if (entry instanceof Response) {
+                instrumented[route] = (req: Request) => this.runHttpRequest(req, route, () => entry.clone());
+                continue;
+            }
+
+            if (typeof entry === 'function') {
+                instrumented[route] = (req: Request) => this.runHttpRequest(req, route, () => entry(req));
+                continue;
+            }
+
+            const methods: Record<string, Function> = {};
+            for (const [method, handler] of Object.entries(entry)) {
+                methods[method] = (req: Request) => this.runHttpRequest(req, route, () => {
+                    if (handler instanceof Response) return handler.clone();
+                    return handler(req);
+                });
+            }
+            instrumented[route] = methods;
+        }
+
+        return instrumented;
+    }
+
+    private async runHttpRequest(req: Request, route: string, handler: () => Response | Promise<Response>): Promise<Response> {
+        const requestId = this.getRequestId(req);
+        const context: ExecutionContextData = {
+            requestId,
+            kind: 'http',
+            method: req.method,
+            route
+        };
+        const startedAt = performance.now();
+
+        return ExecutionContext.run(context, async () => {
+            try {
+                const response = await handler();
+                return this.completeHttpRequest(response, context, startedAt);
+            } catch (error) {
+                if (!this.isExpectedHttpError(error)) {
+                    this.reportExecutionError(context, error);
+                }
+                const response = this.handleError(error as Error, true);
+                return this.completeHttpRequest(response, context, startedAt);
+            }
+        });
+    }
+
+    private isExpectedHttpError(error: unknown): boolean {
+        return error instanceof HttpException || error instanceof ValidationException;
+    }
+
+    private completeHttpRequest(response: Response, context: ExecutionContextData, startedAt: number): Response {
+        const durationMs = Math.max(0, performance.now() - startedAt);
+        this.reportHttpRequestComplete(context, response.status, durationMs);
+        return this.withRequestId(response, context.requestId);
+    }
+
+    private reportHttpRequestComplete(context: ExecutionContextData, status: number, durationMs: number): void {
+        try {
+            this.observability.onHttpRequestComplete(context, status, durationMs);
+        } catch (error) {
+            this.reportObservabilityFailure('request completion', error);
+        }
+    }
+
+    private reportExecutionError(context: ExecutionContextData, error: unknown): void {
+        try {
+            this.observability.onExecutionError(context, error);
+        } catch (observerError) {
+            this.reportObservabilityFailure('error reporting', observerError);
+        }
+    }
+
+    private reportObservabilityFailure(phase: string, error: unknown): void {
+        try {
+            console.error(`Observability ${phase} failed:`, error);
+        } catch {
+            // Observability must never interfere with the request lifecycle.
+        }
+    }
+
+    private getRequestId(req: Request): string {
+        const incoming = req.headers.get('x-request-id');
+        // Avoid header/log injection and unbounded cardinality while allowing
+        // common UUID, trace, and service-generated identifiers.
+        if (ExecutionContext.isValidRequestId(incoming)) {
+            return incoming;
+        }
+        return ExecutionContext.createRequestId();
+    }
+
+    private withRequestId(response: Response, requestId: string): Response {
+        const headers = new Headers(response.headers);
+        headers.set('x-request-id', requestId);
+        return new Response(response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers
+        });
+    }
+
+    private handleWebSocketUpgrade(req: Request, server: any, pathname: string): Response | void | Promise<Response | void> {
+        const upgrade = (requestId?: string) => server.upgrade(req, {
+            data: {
+                id: crypto.randomUUID(),
+                namespace: pathname,
+            },
+            ...(requestId ? { headers: { 'x-request-id': requestId } } : {})
+        });
+
+        if (!this.observability.enabled) {
+            if (upgrade()) return;
+            return new Response('WebSocket upgrade failed', { status: 400 });
+        }
+
+        const context: ExecutionContextData = {
+            requestId: this.getRequestId(req),
+            kind: 'http',
+            method: req.method,
+            route: pathname
+        };
+        const startedAt = performance.now();
+
+        return ExecutionContext.run(context, () => {
+            if (upgrade(context.requestId)) {
+                this.reportHttpRequestComplete(context, 101, Math.max(0, performance.now() - startedAt));
+                return;
+            }
+            return this.completeHttpRequest(
+                new Response('WebSocket upgrade failed', { status: 400 }),
+                context,
+                startedAt
+            );
+        });
+    }
+
+    /**
      * Fallback handler - only called for unmatched routes.
      * All matched routes go through Bun's native router.
      */
-    private handleNotFound(req: Request): Response {
+    private handleNotFound(req: Request): Response | Promise<Response> {
+        if (this.observability.enabled) {
+            return this.runHttpRequest(req, 'NOT_FOUND', () => this.handleNotFoundResponse(req));
+        }
+        return this.handleNotFoundResponse(req);
+    }
+
+    private handleNotFoundResponse(req: Request): Response {
         // CORS preflight for unmatched routes
         if (this.hasCors && req.method === 'OPTIONS') {
             const origin = req.headers.get('origin');
@@ -687,7 +843,7 @@ export class Carno {
             }
         }
 
-        return NOT_FOUND_RESPONSE;
+        return NOT_FOUND_RESPONSE.clone();
     }
 
     private buildResponse(result: any): Response {
@@ -718,15 +874,36 @@ export class Carno {
         return path.includes(':') || path.includes('*');
     }
 
-    stop(): void {
+    /**
+     * Stop the HTTP server and release application resources (including CacheService).
+     * Prefer awaiting this so driver cleanup (e.g. MemoryDriver timers) finishes.
+     */
+    async stop(): Promise<void> {
         this.server?.stop?.();
+        this.server = undefined;
+        await this.closeCacheService();
+    }
+
+    /**
+     * Close the registered CacheService when present (stops MemoryDriver cleanup timers, etc.).
+     */
+    private async closeCacheService(): Promise<void> {
+        if (!this.container.has(CacheService)) {
+            return;
+        }
+
+        try {
+            await this.container.get(CacheService).close();
+        } catch (err) {
+            console.error('Error closing CacheService:', err);
+        }
     }
 
     /**
      * Error handler for Bun.serve.
      * Converts exceptions to proper HTTP responses.
      */
-    private handleError(error: Error): Response {
+    private handleError(error: Error, alreadyReported: boolean = false): Response {
         let response: Response;
 
         // HttpException - return custom response
@@ -739,8 +916,12 @@ export class Carno {
         }
         // Unknown error - return 500
         else {
-            console.error('Unhandled error:', error);
-            response = INTERNAL_ERROR_RESPONSE;
+            if (!alreadyReported) {
+                console.error('Unhandled error:', error);
+            }
+            // The request-id wrapper transfers the body stream to a fresh
+            // response, so the pre-built fallback must remain untouched.
+            response = INTERNAL_ERROR_RESPONSE.clone();
         }
 
         // Apply CORS headers if configured
@@ -801,7 +982,7 @@ export class Carno {
     private registerShutdownHandlers(): void {
         const shutdown = async () => {
             await this.executeLifecycleHooks(EventType.SHUTDOWN);
-            this.stop();
+            await this.stop();
             process.exit(0);
         };
 

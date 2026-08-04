@@ -47,13 +47,15 @@ Schedules a method using a **Cron expression**. The method runs repeatedly accor
 ```ts
 import { Service } from '@carno.js/core';
 import { Schedule, CronExpression } from '@carno.js/schedule';
+import { LoggerService } from '@carno.js/logger';
 
 @Service()
 export class TasksService {
+  constructor(private logger: LoggerService) {}
 
   @Schedule('0 * * * *')
   handleEveryHour() {
-    console.log('Runs at the start of every hour');
+    this.logger.info('Hourly task started');
   }
 
   // Using the CronExpression helper
@@ -69,6 +71,8 @@ export class TasksService {
   }
 }
 ```
+
+With `CarnoLogger` registered, every cron, interval, and timeout invocation receives its own observability context. Logs written through `LoggerService` automatically include the task identifier and name without sharing context between concurrent executions.
 
 **Options** (`CronOptions`):
 
