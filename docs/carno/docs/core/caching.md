@@ -95,6 +95,14 @@ async getProduct(id: string) {
 
 This keeps controller and service code from repeating the same check-then-fetch boilerplate.
 
+### Singleflight (same process only)
+
+When several callers miss the same key at the same time, `getOrSet` runs the callback **once** and shares the result with every concurrent waiter on that `CacheService` instance.
+
+- Coordination is **local to the process** (an in-memory map of in-flight promises).
+- Multi-instance deployments with Redis still run **one computation per process** on a shared miss; there is no distributed lock.
+- If the callback rejects, all concurrent waiters see the error and a later call may retry.
+
 ## Key Prefixing
 
 Use a prefix to isolate environments, modules or tenants.
@@ -114,15 +122,38 @@ Prefixing is especially useful when multiple applications share the same Redis d
 
 ## Memory Driver
 
-`MemoryDriver` stores values in the current process.
+`MemoryDriver` stores values in the current process. Capacity and cleanup defaults protect against unbounded growth:
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `maxEntries` | `10_000` | Maximum keys retained; least-recently-used entries are evicted when full |
+| `cleanupIntervalMs` | `60_000` | Periodic scan that drops expired keys never read again. Use `0` to disable |
+
+Reads and overwrites refresh LRU order (via `Map` insertion order). Expired entries are still removed lazily on `get`/`has`. The cleanup timer is `unref`'d so it does not keep the process alive by itself. `app.stop()` and graceful shutdown (`SIGTERM`/`SIGINT`) call `CacheService.close()` so the timer and in-memory storage are released with the application.
 
 ```ts
 import { CacheService, MemoryDriver } from '@carno.js/core';
 
+// Defaults: maxEntries=10_000, cleanup every 60s
 const cache = new CacheService({
   driver: new MemoryDriver(),
 });
+
+// Custom capacity and cleanup
+const bounded = new CacheService({
+  driver: new MemoryDriver({
+    maxEntries: 50_000,
+    cleanupIntervalMs: 30_000,
+  }),
+});
+
+// Opt out of the timer (lazy expiration only)
+const lazyOnly = new CacheService({
+  driver: new MemoryDriver({ cleanupIntervalMs: 0 }),
+});
 ```
+
+The positional form `new MemoryDriver(cleanupIntervalMs)` remains supported for compatibility; prefer the options object for new code.
 
 Use it for:
 
@@ -132,6 +163,10 @@ Use it for:
 - Short-lived process-local values.
 
 Do not use memory cache as your only shared cache when the application runs multiple instances. Each process has its own isolated memory.
+
+:::note Known risk: TTL units with Redis
+Documentation and `MemoryDriver` treat TTL as **milliseconds**. `RedisDriver` currently passes the value to `setex`, which expects **seconds**. Mixing `defaultTtl: 60_000` across drivers is therefore inconsistent. This divergence is intentional until a dedicated compatibility release; prefer driver-specific TTLs when using Redis.
+:::
 
 ## Redis Driver
 

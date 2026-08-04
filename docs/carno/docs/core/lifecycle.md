@@ -97,7 +97,9 @@ When the process receives `SIGTERM` or `SIGINT`:
 
 1. `@OnApplicationShutdown()` hooks run.
 2. Container destruction runs `@PreDestroy()` hooks for held singleton instances.
-3. The server stops.
+3. The server stops and the registered `CacheService` is closed (cancels `MemoryDriver` cleanup timers, etc.).
+
+Calling `await app.stop()` also stops the server and closes `CacheService`. Prefer awaiting `stop()` so driver cleanup finishes before the process exits.
 4. The process exits.
 
 Promises returned from shutdown hooks and `@PreDestroy()` methods are awaited.
