@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { app, cacheService, execute, mockLogger, purgeDatabase, startDatabase } from '../node-database';
 import {
   BaseEntity,
@@ -68,6 +68,25 @@ describe('ORM Cache System', () => {
   });
 
   describe('Cache with TTL (cache: number)', () => {
+    test('forwards numeric cache TTL to CacheService in milliseconds (no conversion)', async () => {
+      await productRepo.create({ name: 'TTL Spy', price: 10 });
+      const setSpy = spyOn(cacheService, 'set');
+
+      try {
+        await productRepo.find({
+          where: { name: 'TTL Spy' },
+          cache: 5000,
+        });
+
+        expect(setSpy).toHaveBeenCalled();
+        const lastCall = setSpy.mock.calls[setSpy.mock.calls.length - 1];
+        // key, value, ttl — TTL must remain milliseconds for the public contract
+        expect(lastCall[2]).toBe(5000);
+      } finally {
+        setSpy.mockRestore();
+      }
+    });
+
     test('should cache query result with TTL', async () => {
       // Given
       resetQueryCounter();
@@ -250,6 +269,28 @@ describe('ORM Cache System', () => {
 
 
   describe('Cache with Date (cache: Date)', () => {
+    test('forwards remaining Date interval to CacheService in milliseconds', async () => {
+      await productRepo.create({ name: 'Date Spy', price: 20 });
+      const setSpy = spyOn(cacheService, 'set');
+      const expireAt = new Date(Date.now() + 60_000);
+
+      try {
+        await productRepo.find({
+          where: { name: 'Date Spy' },
+          cache: expireAt,
+        });
+
+        expect(setSpy).toHaveBeenCalled();
+        const lastCall = setSpy.mock.calls[setSpy.mock.calls.length - 1];
+        const ttlMs = lastCall[2] as number;
+        // ORM computes remaining ms; RedisDriver alone converts with Math.ceil to seconds.
+        expect(ttlMs).toBeGreaterThan(59_000);
+        expect(ttlMs).toBeLessThanOrEqual(60_000);
+      } finally {
+        setSpy.mockRestore();
+      }
+    });
+
     test('should cache query result until Date expires', async () => {
       // Given
       resetQueryCounter();
