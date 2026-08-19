@@ -14,7 +14,7 @@ Performance remains part of the contract. Carno.js is built on Bun's runtime and
 
 - **Enterprise Application Architecture**: Controllers, services, providers, lifecycle hooks, and modules are first-class concepts.
 - **Familiar for NestJS and Spring developers**: Carno.js uses a proven, decorator-driven, dependency-injected programming model without forcing a Node-first runtime.
-- **Bun Native Performance**: Built specifically to use Bun's HTTP server and runtime capabilities, with benchmarks available for comparison and regression tracking.
+- **Bun Native Runtime**: Built specifically to use Bun's HTTP server and runtime capabilities.
 - **TypeScript First**: Decorators, strong typing, and DTO validation are core to the framework.
 - **Modular**: The core stays focused. You only install what you need (`@carno.js/orm`, `@carno.js/queue`, etc.).
 - **Dependency Injection**: A DI container manages application components and scopes (Singleton, Request, Instance).

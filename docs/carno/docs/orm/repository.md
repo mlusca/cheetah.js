@@ -112,7 +112,7 @@ const exists = await userRepository.existsByEmail('alice@example.com');
 
 `findBy...` and `findOneBy...` return a single entity or `undefined`. Use `findAllBy...` for lists.
 
-See [Derived Query Methods](./derived-query-methods) for the full reference, including prefixes, operators, ordering, limits, TypeScript ergonomics, validation, and performance notes.
+See [Derived Query Methods](./derived-query-methods) for the full reference, including prefixes, operators, ordering, limits, TypeScript ergonomics, and validation.
 
 ## Serialization in Repository Mode
 
@@ -142,7 +142,7 @@ The `Repository` class comes with a comprehensive set of built-in methods for co
 - **`exists(where)`**: Checks if at least one entity matches the criteria.
 - **`count(where)`**: Returns the count of entities matching the criteria.
 
-See [Pagination](./pagination) for the full `findPage()` reference, validation rules, and performance notes.
+See [Pagination](./pagination) for the full `findPage()` reference and validation rules.
 
 ### Writing
 
