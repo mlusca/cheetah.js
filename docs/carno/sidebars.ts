@@ -70,6 +70,17 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'HTTP Client',
+      items: [
+        'client/overview',
+        'client/plugin',
+        'client/codegen',
+        'client/http',
+        'client/generation',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Testing',
       items: ['testing/overview'],
     },

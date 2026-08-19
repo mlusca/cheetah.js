@@ -6,7 +6,7 @@ sidebar_position: 1
 
 `@carno.js/core` is the foundation of a Carno application. It provides the HTTP server integration, routing decorators, request context, dependency injection container, middleware pipeline, validation integration, cache service and lifecycle hooks.
 
-The core package is intentionally small. Features that are not required by every application, such as ORM, queues, scheduling, static files, websockets and logging, live in first-party packages that can be added as plugins.
+The core package is intentionally small. Features that are not required by every application, such as ORM, queues, scheduling, static files, websockets, logging and the optional typed HTTP client, live in first-party packages that can be added as plugins.
 
 ## What Core Owns
 
