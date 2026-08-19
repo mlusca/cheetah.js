@@ -1,0 +1,77 @@
+{
+  "name": "@carno.js/client",
+  "version": "1.6.3",
+  "description": "Type-safe HTTP client for Carno.js with automatic codegen",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "sideEffects": false,
+  "files": [
+    "src",
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "bin": {
+    "carno-client": "./src/cli.ts"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "browser": "./src/client/index.ts",
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./http": {
+      "types": "./src/client/index.ts",
+      "default": "./src/client/index.ts"
+    },
+    "./vite": {
+      "types": "./src/vite/plugin.ts",
+      "bun": "./src/vite/plugin.ts",
+      "import": "./dist/vite/plugin.js",
+      "require": "./dist/vite/plugin.js",
+      "default": "./dist/vite/plugin.js"
+    },
+    "./register": {
+      "types": "./src/bun/register.ts",
+      "default": "./src/bun/register.ts"
+    },
+    "./codegen": {
+      "types": "./src/codegen/index.ts",
+      "default": "./src/codegen/index.ts"
+    }
+  },
+  "scripts": {
+    "compile": "rm -rf ./dist tsconfig.tsbuildinfo && tsc --build --force",
+    "build": "tsc --build --force",
+    "test": "bun test",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "@carno.js/core": "^1.6.3",
+    "vite": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@carno.js/core": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    }
+  },
+  "keywords": [
+    "carno",
+    "carno.js",
+    "codegen",
+    "type-safe",
+    "client",
+    "http"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

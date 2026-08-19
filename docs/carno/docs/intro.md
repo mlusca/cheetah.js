@@ -30,6 +30,7 @@ Performance remains part of the contract. Carno.js is built on Bun's runtime and
 | **`@carno.js/websocket`** | Native WebSocket support with rooms, namespaces, and broadcasting. | `bun install @carno.js/websocket` |
 | **`@carno.js/cli`** | Command Line Interface for migrations and tools. | `bun install -d @carno.js/cli` |
 | **`@carno.js/logger`**| Fast and flexible logging solution. | `bun install @carno.js/logger` |
+| **`@carno.js/client`** | Type-safe HTTP client generated from controllers. | `bun add @carno.js/client` |
 
 > **Windows:** Wrap scoped package names in double quotes, for example `bun install "@carno.js/core"`.
 
@@ -66,4 +67,5 @@ app.listen(3000);
 - **Queue**: Handling asynchronous jobs and events.
 - **Schedule**: Defining recurring tasks.
 - **WebSocket**: Real-time communication with rooms, namespaces, and broadcasting.
+- **HTTP Client**: Why codegen exists, the `Client()` plugin, the HTTP client, and generation from Vite or CI.
 - **Testing**: Utilities for integration testing your application.

@@ -57,6 +57,12 @@
       ],
       "@carno.js/websocket/*": [
         "./packages/websocket/src/*"
+      ],
+      "@carno.js/client": [
+        "./packages/client"
+      ],
+      "@carno.js/client/*": [
+        "./packages/client/src/*"
       ]
     },
     "types": [
@@ -79,6 +85,9 @@
     },
     {
       "path": "./packages/websocket"
+    },
+    {
+      "path": "./packages/client"
     }
   ]
 }

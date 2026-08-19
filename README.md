@@ -50,6 +50,7 @@ This repository is the monorepo for the Carno.js ecosystem. The README is intent
 | `@carno.js/static` | Static file serving for Bun applications. |
 | `@carno.js/websocket` | WebSocket gateways, rooms, namespaces, and broadcasting. |
 | `@carno.js/logger` | Logging utilities for Carno.js applications. |
+| `@carno.js/client` | Type-safe HTTP client generated from controllers. |
 | `@carno.js/cli` | Command-line tools, including ORM migration workflows. |
 
 ## Getting Started
