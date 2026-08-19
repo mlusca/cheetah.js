@@ -74,6 +74,14 @@ export function globToRegExp(pattern: string): RegExp {
     return new RegExp(out);
 }
 
+function stripTrailingSlashes(value: string): string {
+    let end = value.length;
+    while (end > 0 && value.charCodeAt(end - 1) === 47) {
+        end -= 1;
+    }
+    return end === value.length ? value : value.slice(0, end);
+}
+
 function escapeRegex(char: string): string {
     return /[.+^${}()|[\]\\]/.test(char) ? `\\${char}` : char;
 }
@@ -111,7 +119,7 @@ export function inferWatchDirectories(root: string, include: string[]): string[]
         const posix = normalizeSlashes(pattern);
         const star = posix.search(/[*?]/);
         const prefix = star === -1 ? posix : posix.slice(0, star);
-        const trimmed = prefix.replace(/\/+$/, '');
+        const trimmed = stripTrailingSlashes(prefix);
         const first = trimmed.split('/').filter(Boolean)[0];
         const candidate = first ? path.resolve(root, first) : root;
 

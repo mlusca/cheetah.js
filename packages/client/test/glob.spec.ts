@@ -21,5 +21,7 @@ describe('glob and path helpers', () => {
         expect(normalizeRoutePath('/users' + '/:id')).toBe('/users/:id');
         expect(normalizeRoutePath('/parent' + '/child' + '/route')).toBe('/parent/child/route');
         expect(normalizeRoutePath('/root' + '/middle' + '/')).toBe('/root/middle');
+        expect(normalizeRoutePath('/users///:id')).toBe('/users/:id');
+        expect(normalizeRoutePath('//api//users')).toBe('/api/users');
     });
 });

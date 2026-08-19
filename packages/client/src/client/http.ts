@@ -20,7 +20,7 @@ const ABSOLUTE_URL = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
 const RELATIVE_URL_BASE = 'http://carno.invalid';
 
 export function client<const App>(baseUrl: string, config: ClientConfig = {}): ClientCreate<App> {
-    const origin = baseUrl.replace(/\/+$/, '');
+    const origin = stripTrailingSlashes(baseUrl);
     return createProxy(origin, '', config) as ClientCreate<App>;
 }
 
@@ -192,6 +192,14 @@ function normalizeError(parsed: unknown, response: Response): ClientErrorValue {
         statusCode: response.status,
         message: typeof parsed === 'string' && parsed ? parsed : response.statusText
     };
+}
+
+function stripTrailingSlashes(value: string): string {
+    let end = value.length;
+    while (end > 0 && value.charCodeAt(end - 1) === 47) {
+        end -= 1;
+    }
+    return end === value.length ? value : value.slice(0, end);
 }
 
 function createRequestUrl(origin: string, pathname: string): { url: URL; href: () => string } {

@@ -68,6 +68,20 @@ describe('client', () => {
 
         await prefixedApi.users({ id: '42' }).get();
         expect(prefixed[0].url).toBe('/api/users/42');
+
+        const trailing: FetchCall[] = [];
+        const trailingApi = client<App>('http://localhost:3000///', {
+            fetcher: mockFetch(trailing, async () => Response.json({ id: '1' }))
+        });
+        await trailingApi.users.get();
+        expect(trailing[0].url).toBe('http://localhost:3000/users');
+
+        const prefixedSlash: FetchCall[] = [];
+        const prefixedSlashApi = client<App>('/api/', {
+            fetcher: mockFetch(prefixedSlash, async () => Response.json({ id: '1' }))
+        });
+        await prefixedSlashApi.users.get();
+        expect(prefixedSlash[0].url).toBe('/api/users');
     });
 
     test('returns data: null for 204 and empty bodies', async () => {

@@ -37,7 +37,19 @@ export function normalizeRoutePath(path: string): string {
         path = path.slice(0, -1);
     }
 
-    return path.replace(/\/+/g, '/');
+    return collapseSlashes(path);
+}
+
+function collapseSlashes(value: string): string {
+    let result = '';
+    for (let i = 0; i < value.length; i++) {
+        const ch = value.charCodeAt(i);
+        if (ch === 47 && result.charCodeAt(result.length - 1) === 47) {
+            continue;
+        }
+        result += value[i];
+    }
+    return result;
 }
 
 export function splitPathSegments(path: string): string[] {
