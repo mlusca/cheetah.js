@@ -291,6 +291,60 @@ function Architecture() {
 }
 
 /* ---------------------------------------------------------------
+ * Familiar foundations — a discovery bridge for structured-framework
+ * developers without defining Carno.js through another framework.
+ * --------------------------------------------------------------- */
+function FamiliarFoundations() {
+  const concepts = [
+    { label: 'Modules', value: 'Composable Carno instances' },
+    { label: 'Dependencies', value: 'Explicit service registration' },
+    { label: 'Scopes', value: 'Singleton · Request · Instance' },
+    { label: 'Runtime', value: 'Bun, end to end' },
+  ];
+
+  return (
+    <section className={styles.foundationSection}>
+      <div className="container">
+        <div className={styles.foundationCard}>
+          <div className={styles.foundationCopy}>
+            <span className={styles.sectionEyebrow}>Familiar foundations</span>
+            <Heading as="h2" className={styles.foundationTitle}>
+              Bring your architectural instincts.
+              <br />
+              <em className={styles.serifEm}>Leave the runtime behind.</em>
+            </Heading>
+            <p className={styles.foundationLede}>
+              If you have worked with NestJS or Spring, concepts such as
+              controllers, services, dependency injection, modules, and
+              lifecycle hooks will feel familiar. Carno.js applies those ideas
+              through its own Bun-native runtime, application model, and
+              first-party ecosystem.
+            </p>
+            <Link className={styles.foundationLink} to="/docs/coming-from-nestjs">
+              Coming from NestJS? Read the guide
+              <span className={styles.arrow} aria-hidden>→</span>
+            </Link>
+          </div>
+
+          <div className={styles.foundationMap} aria-label="Carno.js architecture concepts">
+            <div className={styles.foundationMapHead}>
+              <span>Concept</span>
+              <span>Carno.js model</span>
+            </div>
+            {concepts.map((concept) => (
+              <div className={styles.foundationMapRow} key={concept.label}>
+                <span className={styles.foundationMapLabel}>{concept.label}</span>
+                <span className={styles.foundationMapValue}>{concept.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ---------------------------------------------------------------
  * Install — refined tabs
  * --------------------------------------------------------------- */
 function Install() {
@@ -383,6 +437,7 @@ export default function Home(): ReactNode {
         <Pillars />
         <HomepageFeatures />
         <Architecture />
+        <FamiliarFoundations />
         <Install />
         <ClosingCta />
       </main>

@@ -402,6 +402,112 @@
   line-height: 1.55;
 }
 
+/* ---------- FAMILIAR FOUNDATIONS ---------- */
+.foundationSection {
+  padding: 6rem 0;
+  background: var(--carno-paper);
+  border-top: 1px solid var(--carno-line);
+}
+
+.foundationCard {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  border: 1px solid var(--carno-line);
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--carno-paper-2);
+  box-shadow: 0 24px 60px -48px rgba(28, 25, 23, 0.55);
+}
+
+.foundationCopy {
+  padding: 3.5rem;
+}
+
+.foundationTitle {
+  font-size: clamp(2rem, 1.4rem + 2vw, 3.15rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+  color: var(--carno-ink);
+  margin: 0 0 1.25rem;
+}
+
+.foundationLede {
+  max-width: 38rem;
+  margin: 0 0 2rem;
+  color: var(--carno-mute);
+  font-size: 1.05rem;
+  line-height: 1.68;
+}
+
+.foundationLink {
+  display: inline-flex;
+  align-items: center;
+  color: var(--carno-ink);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid var(--ifm-color-primary);
+  padding-bottom: 0.2rem;
+  transition: color .18s ease, border-color .18s ease;
+}
+
+.foundationLink:hover {
+  color: var(--ifm-color-primary);
+  text-decoration: none;
+}
+
+.foundationMap {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background:
+    linear-gradient(135deg, var(--carno-amber-soft) 0%, transparent 58%),
+    var(--carno-line-soft);
+  border-left: 1px solid var(--carno-line);
+  padding: 2rem;
+}
+
+.foundationMapHead,
+.foundationMapRow {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.65fr) 1.35fr;
+  gap: 1rem;
+  align-items: center;
+}
+
+.foundationMapHead {
+  padding: 0 1rem 0.85rem;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--carno-mute-2);
+}
+
+.foundationMapRow {
+  min-height: 64px;
+  padding: 1rem;
+  border-top: 1px solid var(--carno-line);
+}
+
+.foundationMapLabel {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--ifm-color-primary);
+}
+
+.foundationMapValue {
+  color: var(--carno-ink);
+  font-size: 0.94rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
 /* ---------- INSTALL ---------- */
 .installSection {
   padding: 6rem 0;
@@ -610,6 +716,13 @@
   }
   .archIndex { display: none; }
   .archTag { width: fit-content; }
+
+  .foundationCard { grid-template-columns: 1fr; }
+  .foundationCopy { padding: 2.75rem; }
+  .foundationMap {
+    border-left: none;
+    border-top: 1px solid var(--carno-line);
+  }
 }
 
 @media (max-width: 600px) {
@@ -618,6 +731,15 @@
   .pillarItem:last-child { border-bottom: none; }
   .codeBody { font-size: 0.75rem; padding: 1.1rem 1.1rem 1.3rem; }
   .heroCtas { justify-content: flex-start; }
+
+  .foundationCopy { padding: 2rem 1.5rem; }
+  .foundationMap { padding: 1.25rem; }
+  .foundationMapHead,
+  .foundationMapRow {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+  .foundationMapHead span:last-child { display: none; }
 
   /* Three monospace package tabs don't fit side by side on a phone —
      they force the row wider than the viewport. Stack them instead. */

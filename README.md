@@ -76,6 +76,7 @@ Then follow the full setup guide in the documentation:
 The documentation site is the source of truth for usage examples and API guidance:
 
 - [Introduction](https://carnojs.github.io/carno.js/docs/intro)
+- [Coming from NestJS](https://carnojs.github.io/carno.js/docs/coming-from-nestjs)
 - [Core framework](https://carnojs.github.io/carno.js/docs/core/overview)
 - [ORM](https://carnojs.github.io/carno.js/docs/orm/overview)
 - [Queue](https://carnojs.github.io/carno.js/docs/queue/overview)

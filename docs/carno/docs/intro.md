@@ -10,6 +10,8 @@ It is inspired by the structured developer experience of NestJS and the enterpri
 
 Performance remains part of the contract. Carno.js is built on Bun's runtime and keeps the HTTP layer lightweight, while the primary product focus is maintainability: clear boundaries, explicit dependencies, testable services, and an application model that remains predictable as teams and features grow.
 
+If you already work with NestJS, the [guide for developers coming from NestJS](./coming-from-nestjs.md) maps familiar concepts to Carno.js and explains where its Bun-native application model deliberately differs.
+
 ## Design Goals
 
 - **Enterprise Application Architecture**: Controllers, services, providers, lifecycle hooks, and modules are first-class concepts.

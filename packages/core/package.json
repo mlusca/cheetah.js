@@ -1,7 +1,27 @@
 {
     "name": "@carno.js/core",
     "version": "1.6.3",
-    "description": "Ultra-fast HTTP framework with aggressive AOT/JIT compilation",
+    "description": "Bun-native TypeScript application framework with explicit architecture, dependency injection, decorators, and AOT/JIT-compiled HTTP routing",
+    "keywords": [
+        "bun",
+        "typescript",
+        "backend-framework",
+        "bun-framework",
+        "dependency-injection",
+        "decorators",
+        "aot",
+        "jit"
+    ],
+    "homepage": "https://carnojs.github.io/carno.js/",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/carnojs/carno.js.git",
+        "directory": "packages/core"
+    },
+    "bugs": {
+        "url": "https://github.com/carnojs/carno.js/issues"
+    },
+    "license": "MIT",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {

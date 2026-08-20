@@ -5,7 +5,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Getting Started',
-      items: ['intro', 'installation', 'cli'],
+      items: ['intro', 'installation', 'coming-from-nestjs', 'cli'],
     },
     {
       type: 'category',

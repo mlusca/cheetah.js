@@ -8,6 +8,8 @@ sidebar_position: 1
 
 The core package is intentionally small. Features that are not required by every application, such as ORM, queues, scheduling, static files, websockets, logging and the optional typed HTTP client, live in first-party packages that can be added as plugins.
 
+Developers translating an existing NestJS architecture can start with [Coming from NestJS](../coming-from-nestjs.md) for a concept map and an incremental migration path.
+
 ## What Core Owns
 
 Core is responsible for:
