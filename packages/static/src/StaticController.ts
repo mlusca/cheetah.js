@@ -1,6 +1,6 @@
 import { Controller, Get, Ctx, Context } from '@carno.js/core';
 import { getMimeType } from './MimeTypes';
-import { isSafePath } from './utils';
+import { isSafePath, isSpaNavigablePath } from './utils';
 import { getStaticConfig, getCachedFileResponse, isProductionMode } from './config';
 import type { ResolvedConfig } from './types';
 import * as path from 'path';
@@ -87,8 +87,8 @@ export class StaticController {
             if (indexResult) return indexResult;
         }
 
-        // SPA fallback: serve index.html for non-existent routes
-        if (config.spa) {
+        // SPA fallback: serve index.html for browser routes, not assets or /api
+        if (config.spa && isSpaNavigablePath(ctx.path)) {
             const indexPath = path.join(
                 config.root,
                 Array.isArray(config.index) ? config.index[0] : config.index

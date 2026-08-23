@@ -352,6 +352,52 @@ describe('StaticPlugin', () => {
             expect(res.status).toBe(200);
             expect(await res.text()).toContain('Hello from static!');
         });
+
+        it('should 404 missing asset paths instead of returning the SPA shell', async () => {
+            app = await createApp({
+                root: FIXTURES_DIR,
+                alwaysStatic: false,
+                spa: true
+            }, port);
+
+            const res = await fetch(`http://127.0.0.1:${port}/missing-file.js`);
+
+            expect(res.status).toBe(404);
+            expect(await res.text()).not.toContain('Hello from static!');
+        });
+
+        it('should 404 unknown /api paths instead of returning the SPA shell', async () => {
+            app = await createApp({
+                root: FIXTURES_DIR,
+                alwaysStatic: false,
+                spa: true
+            }, port);
+
+            const res = await fetch(`http://127.0.0.1:${port}/api/does-not-exist`);
+
+            expect(res.status).toBe(404);
+            expect(await res.text()).not.toContain('Hello from static!');
+        });
+    });
+
+    describe('SPA Mode (alwaysStatic: true)', () => {
+        it('should 404 missing assets and unknown /api paths in production', async () => {
+            app = await createApp({
+                root: FIXTURES_DIR,
+                alwaysStatic: true,
+                spa: true
+            }, port);
+
+            const missingJs = await fetch(`http://127.0.0.1:${port}/missing-file.js`);
+            expect(missingJs.status).toBe(404);
+
+            const missingApi = await fetch(`http://127.0.0.1:${port}/api/does-not-exist`);
+            expect(missingApi.status).toBe(404);
+
+            const spaRoute = await fetch(`http://127.0.0.1:${port}/dashboard`);
+            expect(spaRoute.status).toBe(200);
+            expect(await spaRoute.text()).toContain('Hello from static!');
+        });
     });
 
     // ============================================================

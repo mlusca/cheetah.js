@@ -65,6 +65,11 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'SPA',
+      items: ['spa/overview', 'spa/react', 'spa/angular'],
+    },
+    {
+      type: 'category',
       label: 'Views',
       items: ['views/overview'],
     },

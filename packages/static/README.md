@@ -60,7 +60,7 @@ app.use(await StaticPlugin.create({
 
 ### SPA Mode (Single Page Applications)
 
-If you are serving a frontend app (React, Vue, Angular) that uses client-side routing, enable `spa: true`. This will serve `index.html` for any unknown routes that don't match a static file.
+If you are serving a frontend app (React, Vue, Angular) that uses client-side routing, enable `spa: true`. This will serve `index.html` for unknown browser routes that don't match a static file. Requests with a file extension (`/missing-file.js`) and unknown `/api/*` paths return `404` instead of the SPA shell.
 
 ```typescript
 app.use(await StaticPlugin.create({

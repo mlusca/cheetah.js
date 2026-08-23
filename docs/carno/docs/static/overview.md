@@ -37,8 +37,10 @@ app.listen(3000);
 ### Development Mode
 When `alwaysStatic` is `false` (default in development):
 - Files are read **on-demand** from the disk.
-- You can modify HTML/CSS/JS files and see changes instantly without restarting the server.
+- You can modify files that are written to the static root and see changes on the next request without restarting the server.
 - Uses a wildcard controller internally.
+
+For React and Angular, the normal HMR workflow uses Vite or Angular CLI as the development file server and proxies `/api` to Carno. `StaticPlugin` can still be used in development with `alwaysStatic: false` when Vite or Angular writes a build to disk with `vite build --watch` or `ng build --watch`, but that mode requires a browser reload and does not provide framework HMR.
 
 ### Production Mode 🚀
 When `alwaysStatic` is `true` (recommended for production):
@@ -70,6 +72,10 @@ app.use(await StaticPlugin.create({
     spa: true
 }));
 ```
+
+For the complete development and production workflow, including Vite and Angular CLI proxies, see the [SPA guide](../spa/overview).
+
+The static plugin serves files that already exist on disk. In development, Vite and Angular CLI should normally serve their own development bundles and proxy `/api` to Carno. Use `StaticPlugin` for the compiled frontend directory in production.
 
 ### Multiple Static Directories
 You can use the plugin multiple times to serve different folders.

@@ -52,3 +52,25 @@ export function isSafePath(filePath: string, root: string): boolean {
     const rootResolved = path.resolve(root);
     return resolved.startsWith(rootResolved + path.sep) || resolved === rootResolved;
 }
+
+/**
+ * Whether a missing path should fall back to index.html in SPA mode.
+ *
+ * Browser routes such as `/dashboard` and `/users/profile` have no file
+ * extension. Asset requests (`/missing-file.js`) and the `/api` namespace
+ * must not receive the SPA shell.
+ */
+export function isSpaNavigablePath(requestPath: string): boolean {
+    const clean = requestPath.split('?')[0] || '/';
+    const normalized = clean.startsWith('/') ? clean : `/${clean}`;
+
+    if (path.posix.extname(normalized) || path.win32.extname(normalized)) {
+        return false;
+    }
+
+    if (normalized === '/api' || normalized.startsWith('/api/')) {
+        return false;
+    }
+
+    return true;
+}
