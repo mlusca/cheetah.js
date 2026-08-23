@@ -1,6 +1,6 @@
 {
   "name": "@carno.js/orm",
-  "version": "1.6.3",
+  "version": "1.7.0",
   "description": "A simple ORM for Carno.js.",
   "type": "commonjs",
   "main": "dist/index.js",

@@ -1,6 +1,6 @@
 {
   "name": "@carno.js/client",
-  "version": "1.6.3",
+  "version": "1.7.0",
   "description": "Type-safe HTTP client for Carno.js with automatic codegen",
   "license": "MIT",
   "main": "src/index.ts",

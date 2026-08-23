@@ -1,6 +1,6 @@
 {
     "name": "@carno.js/static",
-    "version": "1.6.3",
+    "version": "1.7.0",
     "description": "Static file serving plugin for Carno.js with maximum performance",
     "type": "commonjs",
     "main": "dist/index.js",

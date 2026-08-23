@@ -1,6 +1,6 @@
 {
   "name": "@carno.js/views",
-  "version": "1.6.3",
+  "version": "1.7.0",
   "description": "Optional MVC view adapter for Carno.js with Handlebars, EJS, Pug, and custom engines",
   "type": "commonjs",
   "main": "dist/index.js",
