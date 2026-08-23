@@ -63,6 +63,12 @@
       ],
       "@carno.js/client/*": [
         "./packages/client/src/*"
+      ],
+      "@carno.js/views": [
+        "./packages/views"
+      ],
+      "@carno.js/views/*": [
+        "./packages/views/src/*"
       ]
     },
     "types": [
@@ -88,6 +94,9 @@
     },
     {
       "path": "./packages/client"
+    },
+    {
+      "path": "./packages/views"
     }
   ]
 }

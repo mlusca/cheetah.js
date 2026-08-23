@@ -32,6 +32,7 @@ If you already work with NestJS, the [guide for developers coming from NestJS](.
 | **`@carno.js/websocket`** | Native WebSocket support with rooms, namespaces, and broadcasting. | `bun install @carno.js/websocket` |
 | **`@carno.js/cli`** | Command Line Interface for migrations and tools. | `bun install -d @carno.js/cli` |
 | **`@carno.js/logger`**| Fast and flexible logging solution. | `bun install @carno.js/logger` |
+| **`@carno.js/views`** | Optional MVC views with Handlebars, EJS, Pug, or a custom engine. | `bun install @carno.js/views` |
 | **`@carno.js/client`** | Type-safe HTTP client generated from controllers. | `bun add @carno.js/client` |
 
 > **Windows:** Wrap scoped package names in double quotes, for example `bun install "@carno.js/core"`.

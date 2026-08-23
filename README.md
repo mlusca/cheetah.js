@@ -26,7 +26,7 @@
 
 Carno.js is an opinionated application framework for Bun, shaped for teams that want the familiar structure of NestJS and the enterprise patterns popularized by Spring in the Java ecosystem.
 
-It combines a fast Bun-native HTTP core, dependency injection, decorators, validation, middleware, lifecycle hooks, and optional packages for data access, queues, scheduling, static files, WebSockets, and logging. The goal is to keep applications organized as they grow, with clear boundaries between controllers, services, modules, and infrastructure.
+It combines a fast Bun-native HTTP core, dependency injection, decorators, validation, middleware, lifecycle hooks, and optional packages for data access, queues, scheduling, static files, views, WebSockets, and logging. The goal is to keep applications organized as they grow, with clear boundaries between controllers, services, modules, and infrastructure.
 
 This repository is the monorepo for the Carno.js ecosystem. The README is intentionally concise; feature guides, examples, and API details live in the documentation site.
 
@@ -48,6 +48,7 @@ This repository is the monorepo for the Carno.js ecosystem. The README is intent
 | `@carno.js/queue` | Background job processing built around BullMQ. |
 | `@carno.js/schedule` | Cron, interval, and timeout scheduling. |
 | `@carno.js/static` | Static file serving for Bun applications. |
+| `@carno.js/views` | Optional MVC views with Handlebars, EJS, Pug, or a custom engine. |
 | `@carno.js/websocket` | WebSocket gateways, rooms, namespaces, and broadcasting. |
 | `@carno.js/logger` | Logging utilities for Carno.js applications. |
 | `@carno.js/client` | Type-safe HTTP client generated from controllers. |
@@ -82,6 +83,7 @@ The documentation site is the source of truth for usage examples and API guidanc
 - [Queue](https://carnojs.github.io/carno.js/docs/queue/overview)
 - [Schedule](https://carnojs.github.io/carno.js/docs/schedule/overview)
 - [Static files](https://carnojs.github.io/carno.js/docs/static/overview)
+- [Views](https://carnojs.github.io/carno.js/docs/views/overview)
 - [WebSocket](https://carnojs.github.io/carno.js/docs/websocket/overview)
 - [Testing](https://carnojs.github.io/carno.js/docs/testing/overview)
 

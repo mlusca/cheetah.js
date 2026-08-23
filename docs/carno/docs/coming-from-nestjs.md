@@ -117,6 +117,7 @@ The following map is useful when reading Carno.js documentation. “Closest conc
 | Pipes and DTO validation | `@Schema()` plus a validation adapter | Zod is available by default; Valibot is supported |
 | Platform adapter | Bun-native HTTP layer | No Express or Fastify adapter sits in the request path |
 | ORM integration | Optional `@carno.js/orm` package | The first-party ORM is available, but core does not require it |
+| `@Render()` | Injected `ViewService` from `@carno.js/views` | There is no `@Render` decorator in v1; the controller injects the service and calls `html()` or `respond()` |
 
 Use this table to orient yourself, then learn the Carno.js behavior on its own terms. Copying assumptions from NestJS is where most migration surprises begin.
 
@@ -211,7 +212,7 @@ Move controllers, parameter decorators, validation schemas, middleware, and erro
 
 ### 5. Replace infrastructure deliberately
 
-Choose whether to keep an existing portable database client, adopt `@carno.js/orm`, or place persistence behind a repository abstraction. Do the same for queues, schedules, logging, and WebSockets. These packages are modular; adopting Carno.js core does not force an all-at-once ecosystem migration.
+Choose whether to keep an existing portable database client, adopt `@carno.js/orm`, or place persistence behind a repository abstraction. Do the same for queues, schedules, logging, views, and WebSockets. These packages are modular; adopting Carno.js core does not force an all-at-once ecosystem migration.
 
 ### 6. Verify lifecycle and failure behavior
 
@@ -256,10 +257,16 @@ Staying with NestJS can be the better engineering choice when the application de
 
 The goal of this guide is not to make Carno.js look like NestJS. It is to help you use knowledge you already have while recognizing where a new runtime and application model require new decisions.
 
+## Server-rendered views
+
+NestJS often renders templates with `@Render('name')` on a controller method. Carno.js v1 does not ship that decorator. Install `@carno.js/views`, register `CarnoViews({ engine: 'handlebars' })` (or `ejs` / `pug` / a custom `ViewEngine`), inject `ViewService`, and return `views.html(name, data)` or `views.respond(ctx, name, data)`.
+
+Content negotiation is explicit on `respond()`: `text/html` renders the template, `application/json` returns `Response.json(data)`, and a missing or `*/*` Accept header uses HTML by default. When Accept refuses both HTML and JSON (`q=0`), `respond()` returns `406 Not Acceptable`.
+
 ## Continue with Carno.js
 
 1. Follow [Installation & Setup](./installation) to start a minimal Bun application.
 2. Read [Core Overview](./core/overview) to understand the request and composition model.
 3. Study [Dependency Injection](./core/dependency-injection) before introducing custom providers or request scope.
 4. Review [Lifecycle Events](./core/lifecycle) before moving database clients, workers, or long-lived resources.
-5. Evaluate the optional [ORM](./orm/overview), [Queue](./queue/overview), and [Schedule](./schedule/overview) packages independently.
+5. Evaluate the optional [ORM](./orm/overview), [Queue](./queue/overview), [Schedule](./schedule/overview), and [Views](./views/overview) packages independently. There is no `@Render()` equivalent: inject `ViewService` and call `html()` or `respond()`.

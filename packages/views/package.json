@@ -1,0 +1,57 @@
+{
+  "name": "@carno.js/views",
+  "version": "1.6.3",
+  "description": "Optional MVC view adapter for Carno.js with Handlebars, EJS, Pug, and custom engines",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "compile": "rm -rf ./dist tsconfig.tsbuildinfo && tsc --build --force",
+    "build": "tsc --build --force",
+    "test": "bun test",
+    "prepublishOnly": "bun run build"
+  },
+  "peerDependencies": {
+    "@carno.js/core": "^1.0.0",
+    "ejs": "^3.0.0",
+    "handlebars": "^4.0.0",
+    "pug": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ejs": {
+      "optional": true
+    },
+    "handlebars": {
+      "optional": true
+    },
+    "pug": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "ejs": "^3.1.10",
+    "handlebars": "^4.7.8",
+    "pug": "^3.0.3"
+  },
+  "keywords": [
+    "carno",
+    "carno.js",
+    "views",
+    "mvc",
+    "handlebars",
+    "ejs",
+    "pug"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -65,6 +65,11 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Views',
+      items: ['views/overview'],
+    },
+    {
+      type: 'category',
       label: 'WebSocket',
       items: ['websocket/overview'],
     },
