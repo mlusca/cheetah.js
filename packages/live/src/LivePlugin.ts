@@ -81,11 +81,14 @@ export class LivePlugin {
         );
         const emitter = new AppEmitter(bus, config);
 
+        const dispose: (() => Promise<void> | void)[] = [() => engine.stop()];
+
         setLiveRuntime({
             engine,
             transport,
             resolver: options.scopeResolver ?? new ConnectionScopeResolver(),
-            scopes: new Map()
+            scopes: new Map(),
+            dispose
         });
 
         const plugin = new Carno({ exports: [] });
@@ -131,6 +134,7 @@ export class LivePlugin {
 
                 // Two emitters on one table would wake the same instance twice.
                 emitter.setCoveredTables(pgEmitter.coveredTables());
+                dispose.push(() => pgEmitter.detach());
 
                 void pgEmitter.attach().catch(error => {
                     console.error('[carno:live] the Postgres emitter failed to attach', error);
@@ -145,6 +149,8 @@ export class LivePlugin {
                 void distributedBus.start().catch(error => {
                     console.error('[carno:live] the distributed bus failed to start', error);
                 });
+
+                dispose.push(() => distributedBus.stop());
             }
 
             emitter.attach();
