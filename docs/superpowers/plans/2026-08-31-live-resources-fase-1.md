@@ -63,10 +63,10 @@ para a Fase 2, e o plano dela deve começar por aí.
 
 Três comportamentos que a spec não trata e que aparecem na implementação:
 
-- **Write revertido por rollback ainda invalida.** A emissão acontece no
-  `execute()`, não no commit. Uma transação abortada gera um recompute que produz
-  o mesmo dado e portanto nenhum patch (§4.5, regra 1). Degrada com segurança:
-  custa CPU, nunca dado errado.
+- **Rolled-back writes do not invalidate.** `notifyWrite()` records the statement
+  while the transaction is open, and `Orm.transaction()` releases the queue only
+  after the driver confirms the commit. On an error or rollback, the queue is
+  discarded before any recompute, so no uncommitted patch reaches the client.
 - **Leitura com cache-hit do ORM precisa registrar dependência.** `execute()`
   retorna cedo no cache-hit. Se o hook ficasse depois disso, um resource cujo
   primeiro compute pegou cache nunca seria invalidado. O hook de leitura vai
@@ -6060,5 +6060,3 @@ buracos.
    de verdade.** É melhor que 32 bits e vive num módulo só. Se a taxa de
    colisão virar preocupação real, trocar por xxhash ou SHA-256 truncado é uma
    mudança de um arquivo.
-
-

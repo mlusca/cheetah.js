@@ -337,11 +337,11 @@ that data source.
 Invalidations are coalesced for `coalesceMs` milliseconds. Several writes in
 one short window normally become one recompute per affected instance.
 
-The application emitter runs at statement execution time rather than waiting
-for transaction commit. A rolled-back write can therefore trigger a recompute,
-but the recomputed content normally hashes to the previous value and produces
-no patch. This trades some extra work for correctness: a rollback cannot leave
-the screen permanently frozen.
+The application emitter records a write after its SQL statement succeeds. When
+the write belongs to an ORM transaction, the statement is queued until the
+driver confirms the transaction's commit. A rollback discards the queued
+invalidation, so clients never receive a patch for data that was not committed.
+Writes outside a transaction remain immediate.
 
 ## Keyed updates and patches
 

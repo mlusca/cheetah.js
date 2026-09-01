@@ -1,4 +1,5 @@
 import type { Statement } from '../driver/driver.interface';
+import { transactionContext } from '../transaction/transaction-context';
 
 export type StatementListener = (statement: Statement<any>) => void;
 
@@ -15,6 +16,7 @@ class StatementObserver {
   private readListener: StatementListener | null = null;
   private writeListener: StatementListener | null = null;
   private writeAttemptListener: StatementListener | null = null;
+  private pendingWrites = new Map<unknown, Statement<any>[]>();
 
   /** Called for every read, before the query cache is consulted. */
   onRead(listener: StatementListener | null): void {
@@ -35,6 +37,7 @@ class StatementObserver {
     this.readListener = null;
     this.writeListener = null;
     this.writeAttemptListener = null;
+    this.pendingWrites.clear();
   }
 
   notifyRead(statement: Statement<any>): void {
@@ -44,9 +47,39 @@ class StatementObserver {
   }
 
   notifyWrite(statement: Statement<any>): void {
-    if (this.writeListener) {
+    if (!this.writeListener) {
+      return;
+    }
+
+    const transaction = transactionContext.getContext();
+
+    if (transaction) {
+      const pending = this.pendingWrites.get(transaction) || [];
+      pending.push(statement);
+      this.pendingWrites.set(transaction, pending);
+      return;
+    }
+
+    this.writeListener(statement);
+  }
+
+  /** Flushes writes after the database transaction has committed. */
+  commitTransaction(transaction: unknown): void {
+    const pending = this.pendingWrites.get(transaction);
+    this.pendingWrites.delete(transaction);
+
+    if (!pending || !this.writeListener) {
+      return;
+    }
+
+    for (const statement of pending) {
       this.writeListener(statement);
     }
+  }
+
+  /** Discards writes from a transaction that rolled back or failed to commit. */
+  rollbackTransaction(transaction: unknown): void {
+    this.pendingWrites.delete(transaction);
   }
 
   notifyWriteAttempt(statement: Statement<any>): void {
