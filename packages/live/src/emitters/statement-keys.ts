@@ -57,6 +57,36 @@ function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function unwrapOuterParentheses(value: string): string {
+    let current = value.trim();
+
+    while (current.startsWith('(') && current.endsWith(')')) {
+        let depth = 0;
+        let enclosesWholeExpression = true;
+
+        for (let index = 0; index < current.length; index++) {
+            if (current[index] === '(') {
+                depth++;
+            } else if (current[index] === ')') {
+                depth--;
+
+                if (depth === 0 && index !== current.length - 1) {
+                    enclosesWholeExpression = false;
+                    break;
+                }
+            }
+        }
+
+        if (!enclosesWholeExpression || depth !== 0) {
+            break;
+        }
+
+        current = current.slice(1, -1).trim();
+    }
+
+    return current;
+}
+
 /**
  * Extract primary-key values only when the WHERE clause is exactly a primary
  * key equality or a primary-key IN list. Anything else degrades to the table.
@@ -69,7 +99,7 @@ export function extractRowIds(
         return null;
     }
 
-    const trimmed = where.trim();
+    const trimmed = unwrapOuterParentheses(where.trim());
     const column = `(?:[\\w"\`\\[\\]]+\\.)?["\`\\[]?${escapeRegExp(primaryKeyColumn)}["\`\\]]?`;
 
     const equality = new RegExp(`^${column}\\s*=\\s*(\\d+|'[^']*')$`, 'i').exec(trimmed);
