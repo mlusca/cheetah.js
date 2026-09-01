@@ -22,6 +22,7 @@ import type {
     ViewsModuleOptions,
 } from './types';
 import { isViewEngine, resolveViewEngine } from './view-engine';
+import { liveIsland } from './live-island';
 
 interface ResolvedView {
     filename: string;
@@ -137,6 +138,10 @@ export class ViewService {
     constructor(options: ViewsModuleOptions) {
         this.options = resolveViewsOptions(options);
         this.helpers = this.options.helpers;
+        // Available in every template without ceremony. It costs nothing when
+        // no island calls it, and an app with islands should not have to
+        // register it in every entry point.
+        this.helpers.liveIsland = liveIsland;
     }
 
     registerHelper(name: string, helper: ViewHelper): void {
