@@ -29,6 +29,13 @@ export interface LiveSignalOptions {
 
 const PENDING: LiveState<any> = { data: undefined, pending: true, error: null, stale: false };
 
+/** bun:test Injector.create has no APP_EFFECT_SCHEDULER (an unnamed InjectionToken). */
+function isMissingEffectScheduler(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+
+    return message.includes('NullInjectorError') && message.includes('No provider for InjectionToken');
+}
+
 const reconcilers = new WeakMap<object, () => void>();
 
 /**
@@ -86,9 +93,17 @@ export function liveSignal(
     }
 
     try {
-        effect(() => reconcile(), options.injector ? { injector: options.injector } : undefined);
-    } catch {
-        // bun:test has no EffectScheduler. Production Angular always does.
+        // LiveSlot.point() writes the output signal synchronously. Angular 18
+        // forbids that inside an effect unless allowSignalWrites is set.
+        effect(() => reconcile(), {
+            allowSignalWrites: true,
+            injector: options.injector
+        });
+    } catch (error) {
+        // bun:test has no EffectScheduler. Any other construction failure is real.
+        if (!isMissingEffectScheduler(error)) {
+            throw error;
+        }
     }
 
     destroyRef.onDestroy(() => slot.close());
