@@ -460,10 +460,8 @@ export class SqlBuilder<T> {
 
     if (isWrite) {
       await this.invalidateCache();
-      // After execution, so a failed write does not invalidate. A write rolled
-      // back later by its transaction still notifies: the recompute produces
-      // the same data and therefore no patch, so it costs CPU, never
-      // correctness.
+      // The observer publishes immediately outside a transaction and queues
+      // this statement until commit when the write is transactional.
       statementObserver.notifyWrite(this.statements);
     }
 

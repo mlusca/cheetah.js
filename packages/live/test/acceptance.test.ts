@@ -127,6 +127,101 @@ describe('Live Resources acceptance', () => {
         });
     });
 
+    test('does not publish an uncommitted write that is later rolled back', async () => {
+        await withDatabase(TABLE_STATEMENTS, async context => {
+            const harness = await createTestHarness({
+                controllers: [TasksController],
+                plugins: [LivePlugin.create({ controllers: [TasksController], config: { coalesceMs: 5 } })],
+                listen: true
+            });
+
+            let probe: ProbeClient | undefined;
+
+            try {
+                const task = await Task.create({ title: 'before transaction', tenant: 'acme' });
+                probe = await ProbeClient.connect(harness.port!);
+                probe.send({
+                    t: 'sub',
+                    sid: 'a',
+                    resource: 'TasksController.list',
+                    inputs: { params: {}, query: { tenant: 'acme' } }
+                });
+                await probe.wait(message => message.t === 'snapshot');
+
+                let failureMessage = '';
+                let patchBeforeRollback = false;
+
+                try {
+                    await context.orm.transaction(async () => {
+                        await Task.update({ id: task.id }, { title: 'should be rolled back' });
+
+                        // Keep the transaction open long enough for an eager
+                        // invalidation implementation to recompute and publish.
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                        patchBeforeRollback = probe!.received.some(message => message.t === 'patch');
+                        throw new Error('rollback live write');
+                    });
+                } catch (error) {
+                    failureMessage = (error as Error).message;
+                }
+
+                expect(failureMessage).toBe('rollback live write');
+                expect(patchBeforeRollback).toBe(false);
+                await new Promise(resolve => setTimeout(resolve, 50));
+                expect(probe.received.some(message => message.t === 'patch')).toBe(false);
+
+                const persisted = await context.executeSql(
+                    `SELECT title FROM live_tasks WHERE id = ${task.id}`
+                );
+                expect(persisted.rows[0].title).toBe('before transaction');
+            } finally {
+                probe?.close();
+                await harness.close();
+            }
+        });
+    });
+
+    test('publishes a transactional write only after commit', async () => {
+        await withDatabase(TABLE_STATEMENTS, async context => {
+            const harness = await createTestHarness({
+                controllers: [TasksController],
+                plugins: [LivePlugin.create({ controllers: [TasksController], config: { coalesceMs: 5 } })],
+                listen: true
+            });
+
+            let probe: ProbeClient | undefined;
+
+            try {
+                const task = await Task.create({ title: 'before commit', tenant: 'acme' });
+                probe = await ProbeClient.connect(harness.port!);
+                probe.send({
+                    t: 'sub',
+                    sid: 'a',
+                    resource: 'TasksController.list',
+                    inputs: { params: {}, query: { tenant: 'acme' } }
+                });
+                await probe.wait(message => message.t === 'snapshot');
+
+                let patchBeforeCommit = false;
+
+                await context.orm.transaction(async () => {
+                    await Task.update({ id: task.id }, { title: 'after commit' });
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    patchBeforeCommit = probe!.received.some(message => message.t === 'patch');
+                });
+
+                expect(patchBeforeCommit).toBe(false);
+                const patch = await probe.wait(message => message.t === 'patch');
+                expect((patch as any).ops).toEqual(expect.arrayContaining([
+                    expect.objectContaining({ op: 'upsert' })
+                ]));
+            } finally {
+                probe?.close();
+                await harness.close();
+            }
+        });
+    });
+
     test('resubscribing with the current hash retransmits nothing (criterion 3)', async () => {
         await withDatabase(TABLE_STATEMENTS, async () => {
             const harness = await createTestHarness({
