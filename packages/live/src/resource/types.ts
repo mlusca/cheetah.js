@@ -11,4 +11,7 @@ export interface LiveResource {
     meta: LiveMeta;
     params: ParamMetadata[];
     invoke(args: unknown[]): Promise<unknown>;
+    /** Full HTTP path, controller prefix included. Used by the ETag layer. */
+    httpPath: string;
+    httpMethod: string;
 }

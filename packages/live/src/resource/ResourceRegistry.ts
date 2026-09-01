@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { PARAMS_META, ROUTES_META, type ParamMetadata } from '@carno.js/core';
+import { CONTROLLER_META, PARAMS_META, ROUTES_META, type ParamMetadata } from '@carno.js/core';
 import type { Dependency } from '../graph/types';
 import { LIVE_META, type LiveMeta } from '../metadata';
 import { dependencyContext } from './dependency-context';
@@ -50,6 +50,8 @@ export class ResourceRegistry {
      */
     register(ControllerClass: new (...args: any[]) => any, instance: any): void {
         const routes: RouteInfoLike[] = Reflect.getMetadata(ROUTES_META, ControllerClass) || [];
+        const controllerMeta: { path?: string } = Reflect.getMetadata(CONTROLLER_META, ControllerClass) || {};
+        const prefix = controllerMeta.path ?? '';
 
         for (const route of routes) {
             const meta: LiveMeta | undefined = Reflect.getMetadata(
@@ -110,7 +112,9 @@ export class ResourceRegistry {
                 handlerName: route.handlerName,
                 meta,
                 params,
-                invoke: (args: unknown[]) => Promise.resolve(instance[route.handlerName](...args))
+                invoke: (args: unknown[]) => Promise.resolve(instance[route.handlerName](...args)),
+                httpPath: joinRoutePath(prefix, route.path),
+                httpMethod: route.method.toUpperCase()
             });
         }
     }
@@ -121,6 +125,14 @@ export class ResourceRegistry {
 
     ids(): string[] {
         return [...this.resources.keys()];
+    }
+
+    /** Every live route, as the HTTP layer addresses it. */
+    livePaths(): { method: string; path: string }[] {
+        return [...this.resources.values()].map(resource => ({
+            method: resource.httpMethod,
+            path: resource.httpPath
+        }));
     }
 
     /** Run the handler and report what it read. */
@@ -163,4 +175,11 @@ function buildArgs(params: ParamMetadata[], inputs: LiveInputs): unknown[] {
     }
 
     return args;
+}
+
+/** Same join the core router does: collapse the slashes, keep the root. */
+export function joinRoutePath(prefix: string, path: string): string {
+    const joined = `${prefix}${path}`.replace(/\/{2,}/g, '/');
+
+    return joined.length > 1 ? joined.replace(/\/$/, '') : (joined || '/');
 }

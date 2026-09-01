@@ -36,7 +36,7 @@ export { Param, Query, Body, Header, Req, Ctx, Locals } from './decorators/param
 export type { ParamMetadata, ParamType } from './decorators/params';
 
 // Runtime metadata used by integrations that scan decorated routes.
-export { ROUTES_META, PARAMS_META } from './metadata';
+export { ROUTES_META, PARAMS_META, CONTROLLER_META } from './metadata';
 
 // Decorators - Middleware
 export { Use, Use as Middleware } from './decorators/Middleware';
