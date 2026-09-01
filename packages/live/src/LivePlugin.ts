@@ -17,9 +17,12 @@ import { LiveService } from './LiveService';
 import { ResourceRegistry } from './resource/ResourceRegistry';
 import { setLiveRuntime } from './runtime';
 import { LiveETagMiddleware } from './http/etag';
+import { FanTransport } from './transport/FanTransport';
 import { LiveGateway } from './transport/LiveGateway';
 import { ConnectionScopeResolver, type LiveScopeResolver } from './transport/scope-resolver';
 import { SocketTransport } from './transport/SocketTransport';
+import { SseTransport } from './transport/SseTransport';
+import { createSseRoutes } from './transport/sse-routes';
 
 export interface LivePluginOptions {
     /** Controllers holding @Live() handlers. Validated at bootstrap. */
@@ -61,6 +64,11 @@ export interface LivePluginOptions {
      * header, and it only touches routes that are live.
      */
     etag?: boolean;
+    /**
+     * Serve the protocol over Server-Sent Events as well, for clients whose
+     * proxy blocks WebSocket. Off by default: it adds two public routes.
+     */
+    sse?: boolean;
 }
 
 export class LivePlugin {
@@ -77,7 +85,9 @@ export class LivePlugin {
             })
             : null;
         const bus: InvalidationBus = distributedBus ?? new InProcessBus();
-        const transport = new SocketTransport();
+        const sockets = new SocketTransport();
+        const fan = new FanTransport();
+        fan.add(sockets);
         let sink: ObservabilityService | null = null;
         const metrics = new LiveMetrics({
             onMetric: (name, value, tags) => sink?.onMetric(name, value, tags)
@@ -88,7 +98,7 @@ export class LivePlugin {
             graph,
             subs,
             bus,
-            transport,
+            fan,
             config,
             options.authorizer ?? new AllowAllAuthorizer(),
             metrics
@@ -99,7 +109,7 @@ export class LivePlugin {
 
         setLiveRuntime({
             engine,
-            transport,
+            transport: sockets,
             resolver: options.scopeResolver ?? new ConnectionScopeResolver(),
             scopes: new Map(),
             dispose
@@ -107,6 +117,26 @@ export class LivePlugin {
 
         const plugin = new Carno({ exports: [] });
         plugin.services([LiveService]);
+
+        if (options.sse) {
+            const sse = new SseTransport({
+                heartbeatMs: config.sseHeartbeatMs,
+                maxConnections: config.sseMaxConnections,
+                onDisconnect: connectionId => engine.dropConnection(connectionId)
+            });
+
+            fan.add(sse);
+            dispose.push(() => sse.stop());
+
+            const routes = createSseRoutes({
+                transport: sse,
+                streamPath: config.ssePath,
+                controlPath: config.sseControlPath
+            });
+
+            plugin.route('GET', routes.streamPath, routes.stream);
+            plugin.route('POST', routes.controlPath, routes.control);
+        }
 
         let teachEtag: ((paths: { method: string; path: string }[]) => void) | null = null;
 
