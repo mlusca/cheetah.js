@@ -69,6 +69,12 @@
       ],
       "@carno.js/views/*": [
         "./packages/views/src/*"
+      ],
+      "@carno.js/live": [
+        "./packages/live"
+      ],
+      "@carno.js/live/*": [
+        "./packages/live/src/*"
       ]
     },
     "types": [
@@ -97,6 +103,9 @@
     },
     {
       "path": "./packages/views"
+    },
+    {
+      "path": "./packages/live"
     }
   ]
 }
