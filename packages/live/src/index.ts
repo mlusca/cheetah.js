@@ -48,3 +48,4 @@ export { canonical, NonSerializableInputError } from './shared/canonical';
 export { fnv1a64 } from './shared/hash';
 export { normalizeLiveInputs, resourceIdOf } from './shared/descriptor';
 export type { LiveDataOf, LiveDescriptor, LiveInputsOf } from './shared/descriptor';
+export type { OptimisticEntry, OptimisticList } from './client/optimistic';
