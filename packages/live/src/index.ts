@@ -21,6 +21,10 @@ export { ConnectionScopeResolver } from './transport/scope-resolver';
 export type { LiveHandshake, LiveScopeResolver } from './transport/scope-resolver';
 export type { LiveInputs, LiveScope } from './shared/inputs';
 
+// Authorization
+export { AllowAllAuthorizer, authKeysOf, isAuthKey } from './auth/authorizer';
+export type { LiveAuthorizationRequest, LiveAuthorizer } from './auth/authorizer';
+
 // Invalidation
 export { InProcessBus } from './bus/InProcessBus';
 export type { InvalidationBus, InvalidationHandler } from './bus/InvalidationBus';
