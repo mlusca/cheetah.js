@@ -33,6 +33,10 @@ export { Get, Post, Put, Delete, Patch, Head, Options } from './decorators/metho
 
 // Decorators - Parameters
 export { Param, Query, Body, Header, Req, Ctx, Locals } from './decorators/params';
+export type { ParamMetadata, ParamType } from './decorators/params';
+
+// Runtime metadata used by integrations that scan decorated routes.
+export { ROUTES_META, PARAMS_META } from './metadata';
 
 // Decorators - Middleware
 export { Use, Use as Middleware } from './decorators/Middleware';
