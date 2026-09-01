@@ -1,6 +1,23 @@
 import type { HttpMethod, RouteSchema, RouteSlot, TypeAlias } from './types';
 import { camelCase, controllerKey, isValidIdentifier, quoteProp, splitPathSegments } from './normalize';
 
+const HTTP_METHOD_TYPE =
+    `export type HttpMethod = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'head' | 'options';`;
+
+const DESCRIPTOR_TYPES = [
+    `export type LiveShared = 'private' | 'tenant' | 'public';`,
+    '',
+    'export interface RouteDescriptor<R = unknown> {',
+    '  readonly method: HttpMethod;',
+    '  readonly path: string;',
+    '  /** Only on @Live() routes: the id the subscription protocol addresses. */',
+    '  readonly resourceId?: string;',
+    '  readonly live?: { readonly shared: LiveShared; readonly key?: string };',
+    "  /** Phantom: carries the route's types. Never present at runtime. */",
+    '  readonly __route?: R;',
+    '}'
+].join('\n');
+
 interface PathNode {
     methods: Map<HttpMethod, RouteSchema>;
     children: Map<string, PathNode>;
@@ -28,6 +45,12 @@ export function emitApp(routes: RouteSchema[], aliases: TypeAlias[] = []): strin
     lines.push(`export type App = ${appType};`);
     lines.push('');
     lines.push(pathConsts);
+    lines.push('');
+    lines.push(HTTP_METHOD_TYPE);
+    lines.push('');
+    lines.push(DESCRIPTOR_TYPES);
+    lines.push('');
+    lines.push(emitRoutes(routes));
     lines.push('');
 
     return lines.join('\n');
@@ -138,8 +161,9 @@ function namedSlotsObject(slots: RouteSlot[]): string | undefined {
     return `{ ${fields.join('; ')} }`;
 }
 
-function emitPaths(routes: RouteSchema[]): string {
-    const grouped = new Map<string, Map<string, string>>();
+/** Group routes the way both `paths` and `routes` expose them. */
+function groupRoutes(routes: RouteSchema[]): Map<string, Map<string, RouteSchema>> {
+    const grouped = new Map<string, Map<string, RouteSchema>>();
 
     for (const route of routes) {
         const group = pathGroup(route);
@@ -149,13 +173,19 @@ function emitPaths(routes: RouteSchema[]): string {
 
         const bucket = grouped.get(group)!;
         let key = route.handlerName;
-        if (bucket.has(key) && bucket.get(key) !== route.path) {
+        if (bucket.has(key) && bucket.get(key)!.path !== route.path) {
             key = `${route.handlerName}_${route.method}`;
         }
-        bucket.set(key, route.path);
+        bucket.set(key, route);
     }
 
+    return grouped;
+}
+
+function emitPaths(routes: RouteSchema[]): string {
+    const grouped = groupRoutes(routes);
     const groups = [...grouped.keys()].sort();
+
     if (!groups.length) {
         return 'export const paths = {} as const;';
     }
@@ -164,13 +194,66 @@ function emitPaths(routes: RouteSchema[]): string {
     for (const group of groups) {
         const entries = [...grouped.get(group)!.entries()].sort(([a], [b]) => a.localeCompare(b));
         lines.push(`  ${quoteProp(group)}: {`);
-        for (const [name, path] of entries) {
-            lines.push(`    ${quoteProp(name)}: ${JSON.stringify(path)},`);
+        for (const [name, route] of entries) {
+            lines.push(`    ${quoteProp(name)}: ${JSON.stringify(route.path)},`);
         }
         lines.push('  },');
     }
     lines.push('} as const;');
     return lines.join('\n');
+}
+
+function emitRoutes(routes: RouteSchema[]): string {
+    const grouped = groupRoutes(routes);
+    const groups = [...grouped.keys()].sort();
+
+    if (!groups.length) {
+        return 'export const routes = {} as const;';
+    }
+
+    const lines = ['export const routes = {'];
+    for (const group of groups) {
+        const entries = [...grouped.get(group)!.entries()].sort(([a], [b]) => a.localeCompare(b));
+        lines.push(`  ${quoteProp(group)}: {`);
+        for (const [name, route] of entries) {
+            lines.push(`    ${quoteProp(name)}: ${descriptorLiteral(route)},`);
+        }
+        lines.push('  },');
+    }
+    lines.push('} as const;');
+    return lines.join('\n');
+}
+
+function descriptorLiteral(route: RouteSchema): string {
+    const fields = [
+        `method: ${JSON.stringify(route.method)}`,
+        `path: ${JSON.stringify(route.path)}`
+    ];
+
+    if (route.live) {
+        // Only subscribable routes carry the controller name, because only they
+        // are addressed by it over the wire.
+        fields.push(`resourceId: ${JSON.stringify(`${route.controllerName}.${route.handlerName}`)}`);
+
+        const live = [`shared: ${JSON.stringify(route.live.shared)}`];
+
+        if (route.live.key) {
+            live.push(`key: ${JSON.stringify(route.live.key)}`);
+        }
+
+        fields.push(`live: { ${live.join(', ')} }`);
+    }
+
+    return `{ ${fields.join(', ')} } as RouteDescriptor<${typeAccessor(route)}>`;
+}
+
+/** `/cards/:id` + get becomes `App["cards"][":id"]["get"]`. */
+function typeAccessor(route: RouteSchema): string {
+    const segments = splitPathSegments(route.path)
+        .map((segment) => `[${JSON.stringify(segment)}]`)
+        .join('');
+
+    return `App${segments}[${JSON.stringify(route.method)}]`;
 }
 
 function pathGroup(route: RouteSchema): string {
