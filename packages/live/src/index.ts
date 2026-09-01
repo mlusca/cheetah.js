@@ -13,6 +13,10 @@ export { LiveService } from './LiveService';
 export { LiveEngine } from './LiveEngine';
 export type { LiveTransport, LiveStats } from './LiveEngine';
 
+// Metrics
+export { LiveMetrics } from './observability';
+export type { MetricSink } from './observability';
+
 // Configuration
 export { DEFAULT_LIVE_CONFIG, resolveLiveConfig } from './config';
 export type { LiveConfig } from './config';

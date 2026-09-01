@@ -16,6 +16,7 @@ import {
 } from './resource/instance-id';
 import type { ResourceRegistry } from './resource/ResourceRegistry';
 import type { LiveInputs, LiveResource, LiveScope } from './resource/types';
+import { LiveMetrics } from './observability';
 
 export interface LiveTransport {
     /**
@@ -73,7 +74,8 @@ export class LiveEngine {
         private readonly bus: InvalidationBus,
         private readonly transport: LiveTransport,
         private readonly config: LiveConfig,
-        private readonly authorizer: LiveAuthorizer = new AllowAllAuthorizer()
+        private readonly authorizer: LiveAuthorizer = new AllowAllAuthorizer(),
+        private readonly metrics: LiveMetrics = LiveMetrics.none()
     ) {}
 
     start(): void {
@@ -429,6 +431,8 @@ export class LiveEngine {
     }
 
     private onInvalidation(events: InvalidationEvent[]): void {
+        const before = this.pending.size;
+
         for (const event of events) {
             if (isAuthKey(event.key)) {
                 // Not data: nothing to recompute, only permissions to re-check.
@@ -444,6 +448,10 @@ export class LiveEngine {
             }
         }
 
+        // Newly pending, not total pending: an invalidation that woke nothing
+        // because the instances were already queued did not cost a fan-out.
+        this.metrics.invalidation(events.length, this.pending.size - before);
+
         if (this.pending.size === 0 || this.flushTimer) {
             return;
         }
@@ -457,6 +465,8 @@ export class LiveEngine {
     private async flush(): Promise<void> {
         const batch = [...this.pending];
         this.pending.clear();
+
+        this.metrics.instances(this.instances.size);
 
         for (let i = 0; i < batch.length; i += this.config.fanoutQueueThreshold) {
             const slice = batch.slice(i, i + this.config.fanoutQueueThreshold);
@@ -497,6 +507,7 @@ export class LiveEngine {
     }
 
     private async runCompute(instance: LiveInstance): Promise<void> {
+        const startedAt = performance.now();
         let data: unknown;
         let deps;
 
@@ -514,8 +525,9 @@ export class LiveEngine {
 
         if (hash === instance.hash) {
             // Recompute is not a patch. Coarse invalidation costs CPU, never
-            // traffic and never a re-render.
+            // traffic and never a re-render. This is the number of §10.
             this.recomputesWithoutPatch++;
+            this.metrics.recompute(instance.resource.id, false, 0, performance.now() - startedAt);
             return;
         }
 
@@ -525,6 +537,8 @@ export class LiveEngine {
         instance.data = data;
         instance.hash = hash;
         instance.revision += 1;
+
+        this.metrics.recompute(instance.resource.id, true, ops.length, performance.now() - startedAt);
 
         await this.broadcast(instance, sid => ({
             t: 'patch',
