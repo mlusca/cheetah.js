@@ -1,7 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
-import type { HttpMethod, RouteLive, RouteSchema, RouteSlot, ScanResult, ScanWarning } from './types';
+import type {
+    HttpMethod,
+    RouteLive,
+    RouteSchema,
+    RouteSlot,
+    ScanResult,
+    ScanWarning,
+    TypeAlias
+} from './types';
 import type { ResolvedClientOptions } from './options';
 import { collectSourceFiles } from './glob';
 import {
@@ -32,6 +40,19 @@ const HTTP_DECORATORS: Record<string, HttpMethod> = {
 };
 
 const PARAM_DECORATORS = new Set(['Param', 'Query', 'Body', 'Header']);
+
+/** Parameters a live resource may not take: none of them survive a recompute. */
+const LIVE_FORBIDDEN_PARAMS = new Set(['Req', 'Ctx', 'Header', 'Locals']);
+
+/**
+ * Shapes with no agreed wire form, which the runtime canonicalizer refuses.
+ *
+ * The check is shallow on purpose: it reads the serialized type of the slot, so
+ * it catches `since: Date` and misses a `Date` buried inside a named DTO. The
+ * runtime still throws NonSerializableInputError for those; this is the early
+ * warning, not the guarantee.
+ */
+const NON_SERIALIZABLE_INPUT = /(^|\W)(Date|File|Blob|FormData|RegExp)(\W|$)|\b(Map|Set)</;
 
 interface ControllerIR {
     id: string;
@@ -114,11 +135,12 @@ export function scanProject(options: ResolvedClientOptions, files?: string[]): S
 
     routes.sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method));
 
-    return {
-        routes,
-        warnings,
-        aliases: collectAliases(ctx)
-    };
+    const aliases = collectAliases(ctx);
+
+    warnDuplicateResourceIds(routes, warnings);
+    warnMissingCollectionKey(routes, aliases, warnings);
+
+    return { routes, warnings, aliases };
 }
 
 function loadCompilerOptions(options: ResolvedClientOptions): ts.CompilerOptions {
@@ -316,6 +338,10 @@ function readRoute(
 
     const live = readLive(method, checker);
 
+    if (live) {
+        checkLiveHandler(method, httpMethod, handlerName, live, checker, sourceFile, warnings);
+    }
+
     return {
         method: httpMethod,
         relativePath,
@@ -328,6 +354,66 @@ function readRoute(
         response,
         live
     };
+}
+
+function checkLiveHandler(
+    method: ts.MethodDeclaration,
+    httpMethod: HttpMethod,
+    handlerName: string,
+    live: RouteLive,
+    checker: ts.TypeChecker,
+    sourceFile: ts.SourceFile,
+    warnings: ScanWarning[]
+): void {
+    void live;
+
+    if (httpMethod !== 'get' && httpMethod !== 'post') {
+        warnings.push(locate(
+            `${handlerName} carries @Live() on @${httpMethod.toUpperCase()}(). Subscribing re-runs the ` +
+            `handler whenever the data changes, so it has to be idempotent: only @Get() and @Post() may be live.`,
+            sourceFile,
+            method
+        ));
+    }
+
+    for (const parameter of method.parameters) {
+        for (const decorator of getNodeDecorators(parameter)) {
+            const name = decoratorName(decorator);
+
+            if (name && LIVE_FORBIDDEN_PARAMS.has(name)) {
+                warnings.push(locate(
+                    `${handlerName} is a live resource and takes @${name}(). There is no request, no header ` +
+                    `set and no middleware locals during a recompute; a live resource has to be a pure ` +
+                    `function of its declared inputs.`,
+                    sourceFile,
+                    parameter
+                ));
+            }
+        }
+    }
+
+    // The declared type, not the serialized one: serialization already turns a
+    // Date into the `string` it becomes on the wire, so by the time a slot
+    // exists there is nothing left to catch. What the author wrote is what
+    // tells them their handler will not receive what its signature promises.
+    for (const parameter of method.parameters) {
+        if (!findParamDecorator(parameter)) {
+            continue;
+        }
+
+        const declared = checker.typeToString(checker.getTypeAtLocation(parameter));
+
+        if (!NON_SERIALIZABLE_INPUT.test(declared)) {
+            continue;
+        }
+
+        warnings.push(locate(
+            `${handlerName} takes \`${trimNodeText(parameter.name)}: ${declared}\`, which cannot be canonicalized ` +
+            `into an instance key. Live inputs must be JSON: strings, numbers, booleans, arrays and plain objects.`,
+            sourceFile,
+            parameter
+        ));
+    }
 }
 
 const LIVE_SHARED = new Set(['private', 'tenant', 'public']);
@@ -594,4 +680,86 @@ function locate(message: string, sourceFile: ts.SourceFile, node: ts.Node): Scan
         file: sourceFile.fileName,
         line: line + 1
     };
+}
+
+/**
+ * The subscription protocol addresses a resource by `Controller.handler`. Two
+ * classes with the same name in different files produce the same id, and one
+ * of them silently shadows the other at startup.
+ */
+function warnDuplicateResourceIds(routes: RouteSchema[], warnings: ScanWarning[]): void {
+    const seen = new Map<string, RouteSchema>();
+
+    for (const route of routes) {
+        if (!route.live) {
+            continue;
+        }
+
+        const id = `${route.controllerName}.${route.handlerName}`;
+        const previous = seen.get(id);
+
+        if (previous) {
+            warnings.push({
+                message:
+                    `Two live resources share the id \`${id}\`: ` +
+                    `${previous.method.toUpperCase()} ${previous.path} and ` +
+                    `${route.method.toUpperCase()} ${route.path}. Rename one of the controllers.`,
+                file: route.filePath
+            });
+            continue;
+        }
+
+        seen.set(id, route);
+    }
+}
+
+/** The array element type, or null when the response is not a collection. */
+function arrayElementType(response: string): string | null {
+    const trimmed = response.trim();
+
+    if (trimmed.endsWith('[]')) {
+        const inner = trimmed.slice(0, -2).trim();
+        return inner.startsWith('(') && inner.endsWith(')') ? inner.slice(1, -1).trim() : inner;
+    }
+
+    const generic = /^Array<(.+)>$/.exec(trimmed);
+    return generic ? generic[1].trim() : null;
+}
+
+/**
+ * §4.6: without a key, an array diff is positional. Inserting at the top
+ * rebuilds the whole list, the user loses input focus and animations restart.
+ */
+function warnMissingCollectionKey(
+    routes: RouteSchema[],
+    aliases: TypeAlias[],
+    warnings: ScanWarning[]
+): void {
+    const byName = new Map(aliases.map((alias) => [alias.name, alias.type]));
+
+    for (const route of routes) {
+        if (!route.live || route.live.key) {
+            continue;
+        }
+
+        const element = arrayElementType(route.response);
+
+        if (!element) {
+            continue;
+        }
+
+        const resolved = byName.get(element) ?? element;
+
+        if (!/(^|[{;]\s*)id\??\s*:/.test(resolved)) {
+            continue;
+        }
+
+        warnings.push({
+            message:
+                `${route.controllerName}.${route.handlerName} returns rows with an \`id\`, but its @Live() ` +
+                `declares no \`key\`. Patches would be positional: inserting at the top rebuilds the whole ` +
+                `list, so the user loses input focus and animations restart. Declare @Live({ key: 'id' }).`,
+            file: route.filePath
+        });
+    }
 }
