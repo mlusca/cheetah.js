@@ -1,6 +1,9 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { LiveGateway } from '../src/transport/LiveGateway';
 import { SocketTransport } from '../src/transport/SocketTransport';
 import { ConnectionScopeResolver } from '../src/transport/scope-resolver';
+import { getLiveRuntime, resetLiveRuntime, setLiveRuntime } from '../src/runtime';
+import type { LiveScope } from '../src/shared/inputs';
 import type { ServerMessage } from '../src/shared/protocol';
 
 class FakeSocket {
@@ -54,5 +57,108 @@ describe('ConnectionScopeResolver', () => {
 
         expect(await resolver.resolve({ connectionId: 'c1' })).toEqual({ principal: 'c1' });
         expect(await resolver.resolve({ connectionId: 'c2' })).toEqual({ principal: 'c2' });
+    });
+});
+
+describe('LiveGateway', () => {
+    afterEach(() => {
+        resetLiveRuntime();
+    });
+
+    test('a sub sent immediately after hello uses the resolved scope', async () => {
+        let releaseHello!: () => void;
+        const helloGate = new Promise<void>(resolve => {
+            releaseHello = resolve;
+        });
+
+        let releaseSub!: () => void;
+        const subSeen = new Promise<void>(resolve => {
+            releaseSub = resolve;
+        });
+
+        let usedScope: LiveScope | undefined;
+
+        setLiveRuntime({
+            engine: {
+                subscribe: async (_connectionId: string, _sid: string, _resource: string, _inputs: unknown, scope: LiveScope) => {
+                    usedScope = scope;
+                    releaseSub();
+                },
+                unsubscribe() {},
+                dropConnection() {},
+                resync: async () => {}
+            } as any,
+            transport: new SocketTransport(),
+            resolver: {
+                resolve: async () => {
+                    await helloGate;
+                    return { principal: 'user-1', tenant: 'acme' };
+                }
+            },
+            scopes: new Map()
+        });
+
+        const gateway = new LiveGateway();
+        const socket = new FakeSocket('c1');
+        gateway.onOpen(socket as any);
+        gateway.onMessage(socket as any, JSON.stringify({ t: 'hello', v: 1, token: 't' }));
+        gateway.onMessage(
+            socket as any,
+            JSON.stringify({ t: 'sub', sid: 's1', resource: 'UsersController.list', inputs: { params: {}, query: {} } })
+        );
+
+        // Let both handlers start. Hello parks on the resolver; without
+        // per-connection ordering, sub would already have subscribed.
+        await new Promise(resolve => setTimeout(resolve, 0));
+        releaseHello();
+        await subSeen;
+
+        expect(usedScope).toEqual({ principal: 'user-1', tenant: 'acme' });
+        gateway.onClose(socket as any);
+    });
+
+    test('close drops a queued sub so a slow hello cannot resurrect the connection', async () => {
+        let releaseHello!: () => void;
+        const helloGate = new Promise<void>(resolve => {
+            releaseHello = resolve;
+        });
+
+        let subscribed = false;
+
+        setLiveRuntime({
+            engine: {
+                subscribe: async () => {
+                    subscribed = true;
+                },
+                unsubscribe() {},
+                dropConnection() {},
+                resync: async () => {}
+            } as any,
+            transport: new SocketTransport(),
+            resolver: {
+                resolve: async () => {
+                    await helloGate;
+                    return { principal: 'user-1' };
+                }
+            },
+            scopes: new Map()
+        });
+
+        const gateway = new LiveGateway();
+        const socket = new FakeSocket('c1');
+        gateway.onOpen(socket as any);
+        gateway.onMessage(socket as any, JSON.stringify({ t: 'hello', v: 1, token: 't' }));
+        gateway.onMessage(
+            socket as any,
+            JSON.stringify({ t: 'sub', sid: 's1', resource: 'UsersController.list', inputs: { params: {}, query: {} } })
+        );
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+        gateway.onClose(socket as any);
+        releaseHello();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(subscribed).toBe(false);
+        expect(getLiveRuntime().scopes.has('c1')).toBe(false);
     });
 });

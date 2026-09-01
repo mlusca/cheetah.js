@@ -256,11 +256,156 @@ describe('LiveEngine lifecycle', () => {
         expect(engine.stats().recomputes).toBe(1);
     });
 
+    test('resubscribe after an invalidation during unsub grace does not send stale state', async () => {
+        const { engine, bus, transport } = build({ unsubGraceMs: 80 });
+        await engine.subscribe('c1', 's1', 'UsersController.list', { params: {}, query: {} }, {});
+        const hash = (transport.messagesFor('c1')[0] as any).hash;
+        engine.unsubscribe('c1', 's1');
+        transport.clear();
+
+        rows.push({ id: 2, name: 'Bob', hits: 0 });
+        bus.publish([{ key: 'orm:users', columns: ['name'] }]);
+        await settle();
+
+        await engine.subscribe('c1', 's2', 'UsersController.list', { params: {}, query: {} }, {}, hash);
+
+        const [message] = transport.messagesFor('c1');
+        expect(message.t).toBe('snapshot');
+        expect((message as any).data).toEqual([
+            { id: 1, name: 'Ada' },
+            { id: 2, name: 'Bob' }
+        ]);
+    });
+
     test('dropping a connection releases everything it held', async () => {
         const { engine } = build({ unsubGraceMs: 1 });
         await engine.subscribe('c1', 's1', 'UsersController.list', { params: {}, query: {} }, {});
         engine.dropConnection('c1');
         await new Promise(resolve => setTimeout(resolve, 20));
+
+        expect(engine.stats().instances).toBe(0);
+    });
+
+    test('dropping the connection during the first createInstance does not orphan the instance', async () => {
+        let releaseCompute!: () => void;
+        const computeGate = new Promise<void>(resolve => {
+            releaseCompute = resolve;
+        });
+
+        @Controller('/slow')
+        class SlowController {
+            @Get('/')
+            @Live({ shared: 'public' })
+            async list() {
+                await computeGate;
+                return [{ id: 1 }];
+            }
+        }
+
+        const resources = new ResourceRegistry();
+        resources.register(SlowController, new SlowController());
+        const engine = new LiveEngine(
+            resources,
+            new DependencyGraph(),
+            new SubscriptionRegistry(),
+            new InProcessBus(),
+            new FakeTransport(),
+            resolveLiveConfig({ coalesceMs: 1, unsubGraceMs: 15 })
+        );
+        engine.start();
+
+        const pending = engine.subscribe('c1', 's1', 'SlowController.list', { params: {}, query: {} }, {});
+        await new Promise(resolve => setTimeout(resolve, 0));
+        engine.dropConnection('c1');
+        releaseCompute();
+        await pending;
+        await new Promise(resolve => setTimeout(resolve, 40));
+
+        expect(engine.stats().instances).toBe(0);
+    });
+
+    test('dropping the first subscriber during createInstance does not roll back a second', async () => {
+        let releaseCompute!: () => void;
+        const computeGate = new Promise<void>(resolve => {
+            releaseCompute = resolve;
+        });
+
+        @Controller('/slow2')
+        class SlowController {
+            @Get('/')
+            @Live({ shared: 'public' })
+            async list() {
+                await computeGate;
+                return [{ id: 1 }];
+            }
+        }
+
+        const resources = new ResourceRegistry();
+        resources.register(SlowController, new SlowController());
+        const transport = new FakeTransport();
+        const engine = new LiveEngine(
+            resources,
+            new DependencyGraph(),
+            new SubscriptionRegistry(),
+            new InProcessBus(),
+            transport,
+            resolveLiveConfig({ coalesceMs: 1, unsubGraceMs: 15 })
+        );
+        engine.start();
+
+        const first = engine.subscribe('c1', 's1', 'SlowController.list', { params: {}, query: {} }, {});
+        const second = engine.subscribe('c2', 's1', 'SlowController.list', { params: {}, query: {} }, {});
+        await new Promise(resolve => setTimeout(resolve, 0));
+        engine.dropConnection('c1');
+        releaseCompute();
+        await Promise.all([first, second]);
+
+        expect(transport.messagesFor('c2')[0]).toMatchObject({ t: 'snapshot' });
+        expect(engine.stats().instances).toBe(1);
+        await new Promise(resolve => setTimeout(resolve, 40));
+        expect(engine.stats().instances).toBe(1);
+    });
+
+    test('resubscribing the same sid does not leak the instance after one unsub', async () => {
+        const { engine, transport } = build({ unsubGraceMs: 20 });
+        const inputs = { params: {}, query: {} };
+
+        await engine.subscribe('c1', 's1', 'UsersController.list', inputs, {});
+        transport.clear();
+        await engine.subscribe('c1', 's1', 'UsersController.list', inputs, {});
+
+        expect(transport.messagesFor('c1')).toHaveLength(1);
+
+        engine.unsubscribe('c1', 's1');
+        await new Promise(resolve => setTimeout(resolve, 40));
+
+        expect(engine.stats().instances).toBe(0);
+    });
+
+    test('reusing a sid for different inputs releases the previous instance', async () => {
+        const { engine } = build({ unsubGraceMs: 20 });
+
+        await engine.subscribe('c1', 's1', 'UsersController.list', { params: {}, query: {} }, {});
+        await engine.subscribe('c1', 's1', 'UsersController.list', { params: {}, query: { q: 'A' } }, {});
+        engine.unsubscribe('c1', 's1');
+        await new Promise(resolve => setTimeout(resolve, 40));
+
+        expect(engine.stats().instances).toBe(0);
+    });
+
+    test('two sids on the same instance both have to unsubscribe', async () => {
+        const { engine } = build({ unsubGraceMs: 20 });
+        const inputs = { params: {}, query: {} };
+
+        await engine.subscribe('c1', 's1', 'UsersController.list', inputs, {});
+        await engine.subscribe('c1', 's2', 'UsersController.list', inputs, {});
+        engine.unsubscribe('c1', 's1');
+        await new Promise(resolve => setTimeout(resolve, 40));
+
+        expect(engine.stats().instances).toBe(1);
+
+        engine.unsubscribe('c1', 's2');
+        await new Promise(resolve => setTimeout(resolve, 40));
 
         expect(engine.stats().instances).toBe(0);
     });
