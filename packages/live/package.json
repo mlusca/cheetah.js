@@ -1,0 +1,45 @@
+{
+  "name": "@carno.js/live",
+  "version": "1.7.0",
+  "description": "Server-owned reactive state for Carno.js: live resources, dependency-graph invalidation, and framework-native client stores",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/core.d.ts",
+      "require": "./dist/client/core.js",
+      "default": "./dist/client/core.js"
+    },
+    "./react": {
+      "types": "./dist/client/react.d.ts",
+      "require": "./dist/client/react.js",
+      "default": "./dist/client/react.js"
+    }
+  },
+  "scripts": {
+    "compile": "rm -rf ./dist tsconfig.tsbuildinfo && tsc --build --force",
+    "build": "tsc --build --force",
+    "test": "bun test",
+    "prepublishOnly": "bun run build"
+  },
+  "peerDependencies": {
+    "@carno.js/core": "^1.7.0",
+    "@carno.js/orm": "^1.7.0",
+    "@carno.js/websocket": "^1.7.0",
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@carno.js/orm": { "optional": true },
+    "react": { "optional": true }
+  },
+  "keywords": ["carno", "carno.js", "live", "realtime", "reactive", "websocket"],
+  "license": "MIT",
+  "publishConfig": { "access": "public" }
+}
