@@ -181,6 +181,7 @@ export class SqlBuilder<T> {
     this.originalColumns = columns || [];
     this.statements.alias = this.getAlias(tableName);
     this.statements.table = this.qualifyTable(schema, tableName);
+    this.statements.primaryKeyColumnName = this.entity._primaryKeyColumnName || 'id';
     return this;
   }
 
@@ -282,6 +283,7 @@ export class SqlBuilder<T> {
     this.statements.table = this.qualifyTable(schema, tableName);
     this.statements.values = this.withUpdatedValues(processedValues, this.entity);
     this.statements.instance = ValueProcessor.createInstance(processedValues, this.model, 'update');
+    this.statements.primaryKeyColumnName = this.entity._primaryKeyColumnName || 'id';
     return this;
   }
 
@@ -291,6 +293,7 @@ export class SqlBuilder<T> {
     this.statements.statement = 'delete';
     this.statements.alias = this.getAlias(tableName);
     this.statements.table = this.qualifyTable(schema, tableName);
+    this.statements.primaryKeyColumnName = this.entity._primaryKeyColumnName || 'id';
 
     return this;
   }
