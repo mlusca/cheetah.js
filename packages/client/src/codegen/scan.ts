@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
-import type { HttpMethod, RouteSchema, RouteSlot, ScanResult, ScanWarning } from './types';
+import type { HttpMethod, RouteLive, RouteSchema, RouteSlot, ScanResult, ScanWarning } from './types';
 import type { ResolvedClientOptions } from './options';
 import { collectSourceFiles } from './glob';
 import {
@@ -53,6 +53,7 @@ interface CollectedRoute {
     headers: RouteSlot[];
     body: RouteSlot[];
     response: string;
+    live?: RouteLive;
 }
 
 export function scanProject(options: ResolvedClientOptions, files?: string[]): ScanResult {
@@ -313,6 +314,8 @@ function readRoute(
     const returnType = signature ? checker.getReturnTypeOfSignature(signature) : checker.getTypeAtLocation(method);
     const response = serializeResponseType(returnType, ctx, method);
 
+    const live = readLive(method, checker);
+
     return {
         method: httpMethod,
         relativePath,
@@ -322,8 +325,55 @@ function readRoute(
         query,
         headers,
         body,
-        response
+        response,
+        live
     };
+}
+
+const LIVE_SHARED = new Set(['private', 'tenant', 'public']);
+
+/**
+ * Read @Live({ shared, key }) off a handler.
+ *
+ * Only string literals are read. A computed value cannot be resolved at build
+ * time, and guessing one would put a wrong `shared` in the bundle — which is
+ * the field that decides whether two users may share a computed instance.
+ */
+function readLive(method: ts.MethodDeclaration, checker: ts.TypeChecker): RouteLive | undefined {
+    const decorator = findDecorator(method, 'Live');
+
+    if (!decorator) {
+        return undefined;
+    }
+
+    const live: RouteLive = { shared: 'private' };
+    const arg = firstDecoratorArg(decorator);
+
+    if (!arg || !ts.isObjectLiteralExpression(arg)) {
+        return live;
+    }
+
+    const sharedExpr = getObjectProperty(arg, 'shared');
+
+    if (sharedExpr) {
+        const resolved = resolveStringLiteral(sharedExpr, checker);
+
+        if (resolved.value && LIVE_SHARED.has(resolved.value)) {
+            live.shared = resolved.value as RouteLive['shared'];
+        }
+    }
+
+    const keyExpr = getObjectProperty(arg, 'key');
+
+    if (keyExpr) {
+        const resolved = resolveStringLiteral(keyExpr, checker);
+
+        if (resolved.value) {
+            live.key = resolved.value;
+        }
+    }
+
+    return live;
 }
 
 function flattenController(
@@ -360,7 +410,8 @@ function flattenController(
             query: route.query,
             headers: route.headers,
             body: route.body,
-            response: route.response
+            response: route.response,
+            live: route.live
         });
     }
 

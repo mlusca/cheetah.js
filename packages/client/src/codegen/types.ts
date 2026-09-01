@@ -6,6 +6,12 @@ export interface RouteSlot {
     optional?: boolean;
 }
 
+export interface RouteLive {
+    shared: 'private' | 'tenant' | 'public';
+    /** Field that identifies a row of a returned collection. */
+    key?: string;
+}
+
 export interface RouteSchema {
     method: HttpMethod;
     path: string;
@@ -19,6 +25,8 @@ export interface RouteSchema {
     headers: RouteSlot[];
     body: RouteSlot[];
     response: string;
+    /** Present when the handler carries @Live(). */
+    live?: RouteLive;
 }
 
 export interface ScanWarning {
