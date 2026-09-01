@@ -26,6 +26,11 @@
       "types": "./dist/client/vanilla.d.ts",
       "require": "./dist/client/vanilla.js",
       "default": "./dist/client/vanilla.js"
+    },
+    "./angular": {
+      "types": "./dist/client/angular.d.ts",
+      "require": "./dist/client/angular.js",
+      "default": "./dist/client/angular.js"
     }
   },
   "scripts": {
@@ -38,13 +43,22 @@
     "@carno.js/core": "^1.7.0",
     "@carno.js/orm": "^1.7.0",
     "@carno.js/websocket": "^1.7.0",
-    "react": ">=18.0.0"
+    "react": ">=18.0.0",
+    "@angular/core": ">=18.0.0"
   },
   "peerDependenciesMeta": {
-    "@carno.js/orm": { "optional": true },
-    "react": { "optional": true }
+    "@carno.js/orm": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "@angular/core": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@angular/core": "^18.2.0",
     "@happy-dom/global-registrator": "^20.0.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.1.0",
@@ -54,5 +68,7 @@
   },
   "keywords": ["carno", "carno.js", "live", "realtime", "reactive", "websocket"],
   "license": "MIT",
-  "publishConfig": { "access": "public" }
+  "publishConfig": {
+    "access": "public"
+  }
 }
