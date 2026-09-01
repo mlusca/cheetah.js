@@ -21,6 +21,11 @@
       "types": "./dist/client/react.d.ts",
       "require": "./dist/client/react.js",
       "default": "./dist/client/react.js"
+    },
+    "./vanilla": {
+      "types": "./dist/client/vanilla.d.ts",
+      "require": "./dist/client/vanilla.js",
+      "default": "./dist/client/vanilla.js"
     }
   },
   "scripts": {
