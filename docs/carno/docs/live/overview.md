@@ -4,9 +4,10 @@ sidebar_position: 1
 
 # Live resources
 
-Live resources connect a normal Carno.js `GET` route to a server-owned
-subscription. The route still works over HTTP, but a client can also subscribe
-to its result over WebSocket and receive updates when the data it read changes.
+Live resources connect a normal Carno.js read route (`GET` or `POST`) to a
+server-owned subscription. The route still works over HTTP, but a client can
+also subscribe to its result over WebSocket, SSE, or conditional polling and
+receive updates when the data it read changes.
 
 The important distinction is that a live resource is not a second version of a
 controller method. It is the same read operation with a lifecycle around it:
@@ -36,10 +37,10 @@ The feature is designed for server-owned state. Selection, focus, open dialogs,
 form drafts, and other interaction state should remain local to the UI. A live
 patch updates the server data; it does not replace the component's local state.
 
-Phase 1 uses an in-process invalidation bus and a WebSocket transport. It is a
-complete single-process implementation, but it is not yet a distributed
-cross-node invalidation system. The exact boundaries are listed in
-[Phase 1 limitations](#phase-1-limitations).
+The live engine is process-local by design, with optional PostgreSQL
+`LISTEN/NOTIFY` invalidation and a distributed bus for carrying invalidation
+events between nodes. The exact current boundaries are listed in
+[Current boundaries](#current-boundaries).
 
 For clusters and writes made outside the application, see
 [Scaling live resources](./scaling.md). For typed subscriptions and optimistic
@@ -165,9 +166,8 @@ This handler now has two compatible uses:
   data followed by patches when it changes.
 
 The resource identifier is derived from the controller class and method name:
-`TasksController.list`. Phase 1 clients use this identifier as a string. The
-typed route descriptors planned for a later phase are not required by the
-server or by the client core today.
+`TasksController.list`. Clients may use that string directly, or use the typed
+route descriptors emitted by `@carno.js/client`.
 
 ### Handler rules
 
@@ -440,10 +440,10 @@ function App() {
 }
 ```
 
-`useLive` receives the resource identifier and the same `params`/`query`
-shape used by the server. In Phase 1 the response type is supplied by the
-caller, so use the generic type to describe the DTO returned by the handler.
-The `@carno.js/client` route code generator does not yet emit live descriptors.
+`useLive` receives the resource identifier or a typed descriptor and the same
+`params`/`query` shape used by the server. A string resource can use a generic
+type supplied by the caller; a generated descriptor carries the handler's
+input and response types.
 
 ### The `LiveState` value
 
@@ -528,8 +528,9 @@ After a disconnect, the client reconnects with exponential backoff and full
 jitter, sends `hello`, and resubscribes active stores with their current hash.
 The hash handshake is safe because a patch is only valid against a specific
 revision, while a full snapshot can establish state on a newly connected
-session. Phase 1 does not provide a distributed bus for another process to
-share an instance; cross-node failover is a later phase.
+session. A distributed invalidation bus can notify another process, but each
+process recomputes its own process-local instance and sends updates to its own
+connections.
 
 ## WebSocket protocol
 
@@ -669,25 +670,23 @@ silently presenting a potentially old value as current. Fix the underlying
 handler or data-source error; a later invalidation can make the resource
 current again.
 
-## Phase 1 limitations
+## Current boundaries
 
-The following behavior is intentionally outside this phase:
+The following boundaries are intentional:
 
-- only `@Get()` resources are supported; read-only `@Post()` resources are
-  planned for Phase 2;
-- invalidation is in-process only; PostgreSQL `LISTEN/NOTIFY`, database
-  triggers, and distributed buses are planned for Phase 2;
-- direct SQL, external APIs, Redis, files, and other non-ORM sources require
-  explicit invalidation;
-- the framework-agnostic client core and React adapter are available now;
-  Angular, Vue, and vanilla adapters are planned for Phase 3;
-- view islands, SSE, conditional polling, and integration with the generated
-  `@carno.js/client` route descriptors are planned for later phases;
-- optimistic mutation overlays and continuous authorization re-evaluation are
-  not part of the Phase 1 runtime;
-- a live process does not synchronize instances with another process. A
-  reconnect can recover state through a hash or snapshot, but a distributed
-  invalidation bus is required for cross-node updates.
+- `@Get()` and `@Post()` handlers may be live. The conditional-polling fallback
+  is limited to live `GET` routes;
+- ORM writes are observed automatically. Direct SQL, external APIs, Redis,
+  files, and other non-ORM sources require explicit invalidation;
+- PostgreSQL notification and distributed-bus integrations carry invalidation
+  events, but instances and dependency graphs remain local to each process;
+- the client core supports React, Angular, Vue, and vanilla adapters; none of
+  them owns the DOM or component-local state;
+- server-rendered islands, SSE, conditional polling, and generated route
+  descriptors are available, with their requirements documented in the linked
+  guides;
+- a reconnect can recover state through a hash or snapshot, but a process does
+  not share its in-memory instance cache with another process.
 
 ## Public API reference
 

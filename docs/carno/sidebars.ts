@@ -81,7 +81,15 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Live',
-      items: ['live/overview', 'live/scaling', 'live/typed-client'],
+      items: [
+        'live/overview',
+        'live/scaling',
+        'live/typed-client',
+        'live/adapters',
+        'live/islands',
+        'live/degradation',
+        'live/metrics',
+      ],
     },
     {
       type: 'category',

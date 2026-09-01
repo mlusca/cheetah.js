@@ -11,9 +11,8 @@ nothing. It does not say what comes back, and a typo becomes an
 A route descriptor fixes that. It is one object per route, emitted by the client
 codegen, carrying the method, the path, the resource identifier when the route
 is live, and — as a phantom type — everything the route accepts and returns. It
-serves two uses today: calling the route over HTTP, and subscribing to it.
-Prefetching for server-side rendering is a third use the descriptor is designed
-for, and it is not implemented yet.
+serves three uses: calling the route over HTTP, subscribing to it, and
+prefetching its value for server-side rendering with `LiveService.prefetch()`.
 
 ## What the codegen emits
 
