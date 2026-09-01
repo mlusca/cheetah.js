@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { EnvironmentInjector, Injector, runInInjectionContext, signal } from '@angular/core';
+import { DestroyRef, EnvironmentInjector, Injector, runInInjectionContext, signal } from '@angular/core';
 import { LiveClient, type LiveSocket } from '../src/client/core';
 import { LIVE_CLIENT, liveSignal, provideLive, reconcileLiveSignal } from '../src/client/angular';
 import type { LiveDescriptor } from '../src/shared/descriptor';
@@ -130,5 +130,22 @@ describe('liveSignal', () => {
 
         expect(otherSocket.sent.some(raw => raw.includes('"t":"sub"'))).toBe(true);
         expect(socket.sent).toEqual([]);
+    });
+
+    test('a non-scheduler error from effect is not swallowed', () => {
+        const destroyRef = injector.get(DestroyRef);
+        const broken = {
+            get(token: unknown) {
+                if (token === DestroyRef) {
+                    return destroyRef;
+                }
+
+                throw new Error('boom from injector');
+            }
+        } as Injector;
+
+        expect(() => host(() => liveSignal(cardsList, undefined, { injector: broken }))).toThrow(
+            'boom from injector'
+        );
     });
 });
