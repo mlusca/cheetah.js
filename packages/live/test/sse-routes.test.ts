@@ -3,7 +3,7 @@ import { Controller, Get } from '@carno.js/core';
 import { createTestHarness } from '../../core/dist/testing/TestHarness.js';
 import { Live } from '../src/decorators/Live';
 import { LivePlugin } from '../src/LivePlugin';
-import { closeLiveRuntime } from '../src/runtime';
+import { closeLiveRuntime, getLiveRuntime } from '../src/runtime';
 
 // happy-dom (loaded by react-rerender.test.tsx) replaces global fetch with a
 // browser fetch that enforces CORS and buffers the body. These tests talk to
@@ -11,6 +11,9 @@ import { closeLiveRuntime } from '../src/runtime';
 const fetch =
     (globalThis as { __carnoNativeFetch?: typeof globalThis.fetch }).__carnoNativeFetch
     ?? globalThis.fetch;
+const NativeAbortController =
+    (globalThis as { __carnoNativeAbortController?: typeof AbortController }).__carnoNativeAbortController
+    ?? globalThis.AbortController;
 
 @Controller('/numbers')
 class NumbersController {
@@ -140,6 +143,54 @@ describe('SSE routes', () => {
         });
 
         expect(response.status).toBe(400);
+        await harness.close();
+    });
+
+    test('cancelling the stream drops the scope and refuses a late control message', async () => {
+        const harness = await createTestHarness({
+            controllers: [NumbersController],
+            plugins: [LivePlugin.create({
+                controllers: [NumbersController],
+                sse: true,
+                config: { sseHeartbeatMs: 0 }
+            })],
+            listen: true
+        });
+
+        const abort = new NativeAbortController();
+        const response = await fetch(`http://127.0.0.1:${harness.port}/live/sse`, { signal: abort.signal });
+        const reader = response.body!.getReader();
+        const ready = JSON.parse(
+            new TextDecoder().decode((await reader.read()).value).replace(/^data: /, '').trim()
+        );
+        expect(typeof ready.cid).toBe('string');
+
+        await fetch(`http://127.0.0.1:${harness.port}/live/control`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cid: ready.cid, message: { t: 'hello', v: 1 } })
+        });
+        expect(getLiveRuntime().scopes.has(ready.cid)).toBe(true);
+
+        abort.abort();
+
+        const deadline = Date.now() + 1000;
+        while (getLiveRuntime().scopes.has(ready.cid) && Date.now() < deadline) {
+            await new Promise(resolve => setTimeout(resolve, 5));
+        }
+
+        expect(getLiveRuntime().scopes.has(ready.cid)).toBe(false);
+
+        const late = await fetch(`http://127.0.0.1:${harness.port}/live/control`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                cid: ready.cid,
+                message: { t: 'sub', sid: 's1', resource: 'NumbersController.list', inputs: { params: {}, query: {} } }
+            })
+        });
+        expect(late.status).toBe(404);
+
         await harness.close();
     });
 

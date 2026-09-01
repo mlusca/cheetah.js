@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { LiveGateway } from '../src/transport/LiveGateway';
+import { dropLiveConnection, handleMessage, LiveGateway } from '../src/transport/LiveGateway';
 import { SocketTransport } from '../src/transport/SocketTransport';
 import { ConnectionScopeResolver } from '../src/transport/scope-resolver';
 import { getLiveRuntime, resetLiveRuntime, setLiveRuntime } from '../src/runtime';
@@ -160,5 +160,47 @@ describe('LiveGateway', () => {
 
         expect(subscribed).toBe(false);
         expect(getLiveRuntime().scopes.has('c1')).toBe(false);
+    });
+
+    test('dropLiveConnection drops a queued sub, which is what SSE cancel uses', async () => {
+        let releaseHello!: () => void;
+        const helloGate = new Promise<void>(resolve => {
+            releaseHello = resolve;
+        });
+
+        let subscribed = false;
+
+        setLiveRuntime({
+            engine: {
+                subscribe: async () => {
+                    subscribed = true;
+                },
+                unsubscribe() {},
+                dropConnection() {},
+                resync: async () => {}
+            } as any,
+            transport: new SocketTransport(),
+            resolver: {
+                resolve: async () => {
+                    await helloGate;
+                    return { principal: 'user-1' };
+                }
+            },
+            scopes: new Map([['sse:1', { principal: 'sse:1' }]])
+        });
+
+        void handleMessage('sse:1', JSON.stringify({ t: 'hello', v: 1, token: 't' }));
+        void handleMessage(
+            'sse:1',
+            JSON.stringify({ t: 'sub', sid: 's1', resource: 'UsersController.list', inputs: { params: {}, query: {} } })
+        );
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+        dropLiveConnection('sse:1');
+        releaseHello();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(subscribed).toBe(false);
+        expect(getLiveRuntime().scopes.has('sse:1')).toBe(false);
     });
 });

@@ -29,12 +29,23 @@ export class LiveGateway {
 
     @OnClose()
     onClose(socket: CarnoSocket): void {
-        inbound.delete(socket.id);
-        const runtime = getLiveRuntime();
-        runtime.engine.dropConnection(socket.id);
-        runtime.transport.remove(socket.id);
-        runtime.scopes.delete(socket.id);
+        dropLiveConnection(socket.id);
+        getLiveRuntime().transport.remove(socket.id);
     }
+}
+
+/**
+ * Tear down a connection from any pipe.
+ *
+ * WebSocket and SSE must leave the engine, the inbound queue and the scope
+ * map in the same state: an in-flight `hello` cannot subscribe after the
+ * client has gone, and a cancelled stream cannot leak a principal.
+ */
+export function dropLiveConnection(connectionId: string): void {
+    inbound.delete(connectionId);
+    const runtime = getLiveRuntime();
+    runtime.engine.dropConnection(connectionId);
+    runtime.scopes.delete(connectionId);
 }
 
 export function handleMessage(connectionId: string, raw: string): Promise<void> {
