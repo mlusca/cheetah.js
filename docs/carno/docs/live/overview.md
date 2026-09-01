@@ -41,6 +41,10 @@ complete single-process implementation, but it is not yet a distributed
 cross-node invalidation system. The exact boundaries are listed in
 [Phase 1 limitations](#phase-1-limitations).
 
+For clusters and writes made outside the application, see
+[Scaling live resources](./scaling.md). For typed subscriptions and optimistic
+updates, see [Typed subscriptions](./typed-client.md).
+
 ## Installation and application setup
 
 Install the package alongside the Carno packages already used by the
@@ -170,12 +174,17 @@ server or by the client core today.
 A live handler must be safe to execute more than once. Treat it as a read-only,
 recomputable function of its declared inputs:
 
-- Phase 1 allows `@Get()` only.
-- `@Param()` and `@Query()` are the supported handler inputs.
+- `@Get()` and `@Post()` may be live. The criterion is idempotence, not the
+  verb: subscribing re-runs the handler whenever the data changes, and
+  re-running a write duplicates its effect. A `PUT`, `PATCH`, or `DELETE` that
+  only reads is an abuse of the protocol and is rejected.
+- `@Param()` and `@Query()` are the supported handler inputs on both.
 - `@Param('id')` and `@Query('status')` receive one value.
 - `@Param()` and `@Query()` receive the complete parameter or query object.
-- `@Body()` is not supported in Phase 1; read-only `@Post()` resources are
-  planned for Phase 2.
+- `@Body()` is a first-class input on a live `@Post()`, for the read whose
+  filters do not fit in a query string. It is part of the instance identity, so
+  two clients posting different filters get two instances and never share data.
+  `@Body()` on a live `@Get()` is rejected: a `GET` subscription carries none.
 - `@Req()`, `@Ctx()`, `@Header()`, and `@Locals()` are rejected because those
   request-specific values are not available when the server recomputes a
   resource after an invalidation.
@@ -610,8 +619,8 @@ Live resources are validated when the plugin registers their controllers. A
 bad declaration fails startup rather than waiting for the first user to
 subscribe. Common validation errors are:
 
-- `@Live()` on anything other than `@Get()`;
-- use of `@Body()`;
+- `@Live()` on anything other than `@Get()` or `@Post()`;
+- use of `@Body()` on a `@Get()`;
 - use of `@Req()`, `@Ctx()`, `@Header()`, or `@Locals()`;
 - an empty `key` value;
 - duplicate resource identifiers.
@@ -620,6 +629,12 @@ When a subscription fails at runtime, inspect the `error` message and code
 sent for its `sid`. Typical causes are an unknown resource, a missing tenant or
 principal for the selected sharing mode, oversized inputs, or a process at its
 configured instance limit.
+
+The code `forbidden` means a `LiveAuthorizer` refused this connection. The
+decision is taken when the subscription is created and re-taken whenever
+`LiveService.invalidate('auth:principal#<id>')` fires, so revoking access ends
+that connection's subscriptions without disturbing the other subscribers of a
+shared instance.
 
 ### No `snapshot` arrives
 
