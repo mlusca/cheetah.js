@@ -4,6 +4,8 @@ export { ViewNotFoundError, ViewForbiddenError } from './errors';
 export { resolveViewEngine, isViewEngine } from './view-engine';
 export { selectViewFormat } from './negotiate';
 export { resolveViewsRoot } from './path';
+export { liveIsland } from './live-island';
+export type { IslandPayload } from './live-island';
 
 export type {
     OfficialViewEngineName,
