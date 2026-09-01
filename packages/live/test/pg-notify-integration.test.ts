@@ -60,3 +60,29 @@ describePostgres('PgNotifyEmitter against a real database', () => {
         });
     });
 });
+
+describePostgres('PgNotifyBus against a real database', () => {
+    test('two nodes see each other and not their own echo', async () => {
+        const { PgNotifyBus } = await import('../src/bus/PgNotifyBus');
+        const nodeA = new PgNotifyBus({ url: URL, channel: 'carno_bus_test', nodeId: 'node-a' });
+        const nodeB = new PgNotifyBus({ url: URL, channel: 'carno_bus_test', nodeId: 'node-b' });
+        const seenByA: InvalidationEvent[] = [];
+        const seenByB: InvalidationEvent[] = [];
+
+        nodeA.subscribe(events => seenByA.push(...events));
+        nodeB.subscribe(events => seenByB.push(...events));
+
+        await nodeA.start();
+        await nodeB.start();
+
+        nodeA.publish([{ key: 'orm:users#1', columns: ['name'] }]);
+        await waitFor(seenByB, 1);
+
+        await nodeA.stop();
+        await nodeB.stop();
+
+        expect(seenByB).toEqual([{ key: 'orm:users#1', columns: ['name'] }]);
+        // Delivered locally once, when published; the echo back was dropped.
+        expect(seenByA).toEqual([{ key: 'orm:users#1', columns: ['name'] }]);
+    });
+});

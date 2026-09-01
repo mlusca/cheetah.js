@@ -32,6 +32,13 @@ export type { Dependency, InvalidationEvent } from './graph/types';
 export { ancestorsOf, rowKey, tableKey } from './graph/dep-key';
 export type { DepKey } from './graph/dep-key';
 export { WriteDuringComputeError } from './emitters/AppEmitter';
+export { PgNotifyBus, chunkEvents } from './bus/PgNotifyBus';
+export type { PgNotifyBusOptions } from './bus/PgNotifyBus';
+export { PgNotifyEmitter, eventsFromPayload } from './emitters/pg-notify-emitter';
+export type { PgNotifyEmitterOptions, PgNotifyTable } from './emitters/pg-notify-emitter';
+export { PgListener } from './emitters/pg-listener';
+export type { ListenableSql, PgListenerOptions } from './emitters/pg-listener';
+export { tableOfKey } from './graph/dep-key';
 
 // Protocol and patches, shared with the client
 export * from './shared/protocol';
