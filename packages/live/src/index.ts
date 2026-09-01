@@ -59,6 +59,14 @@ export type { OptimisticEntry, OptimisticList } from './client/optimistic';
 export { liveStore, liveStoreOf, liveIdentity, LiveSlot } from './client/vanilla';
 export type { LiveHandle } from './client/vanilla';
 
+// Transports
+export { FanTransport } from './transport/FanTransport';
+export type { OwnedTransport } from './transport/FanTransport';
+export { SseTransport } from './transport/SseTransport';
+export type { SseTransportOptions } from './transport/SseTransport';
+export { createSseRoutes } from './transport/sse-routes';
+export type { SseRouteOptions } from './transport/sse-routes';
+
 // Conditional GET
 export { LiveETagMiddleware, pathMatcher } from './http/etag';
 export type { LiveRoutePath } from './http/etag';

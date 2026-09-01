@@ -19,6 +19,14 @@ export interface LiveConfig {
     maxInstancesPerConnection: number;
     /** Ceiling on live instances held by this process. */
     maxInstancesPerNode: number;
+    /** Path of the SSE downstream, when the SSE transport is on. */
+    ssePath: string;
+    /** Path client messages are posted to, when the SSE transport is on. */
+    sseControlPath: string;
+    /** Comment frame interval that keeps idle-timeout proxies from reaping. */
+    sseHeartbeatMs: number;
+    /** Ceiling on concurrent SSE streams held by this process. */
+    sseMaxConnections: number;
 }
 
 export const DEFAULT_LIVE_CONFIG: LiveConfig = {
@@ -29,7 +37,11 @@ export const DEFAULT_LIVE_CONFIG: LiveConfig = {
     maxPendingPatches: 32,
     fanoutQueueThreshold: 500,
     maxInstancesPerConnection: 64,
-    maxInstancesPerNode: 50000
+    maxInstancesPerNode: 50000,
+    ssePath: '/live/sse',
+    sseControlPath: '/live/control',
+    sseHeartbeatMs: 15000,
+    sseMaxConnections: 10000
 };
 
 export function resolveLiveConfig(overrides: Partial<LiveConfig> = {}): LiveConfig {

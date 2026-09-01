@@ -1,6 +1,6 @@
 import type { CarnoSocket } from '@carno.js/websocket';
-import type { LiveTransport } from '../LiveEngine';
 import type { ServerMessage } from '../shared/protocol';
+import type { OwnedTransport } from './FanTransport';
 
 /**
  * Sends protocol messages over the raw socket.
@@ -9,7 +9,7 @@ import type { ServerMessage } from '../shared/protocol';
  * payload in `{ event, data }` for the gateway's own event protocol, and this
  * is a different protocol.
  */
-export class SocketTransport implements LiveTransport {
+export class SocketTransport implements OwnedTransport {
     private readonly sockets = new Map<string, CarnoSocket>();
 
     add(socket: CarnoSocket): void {
@@ -18,6 +18,10 @@ export class SocketTransport implements LiveTransport {
 
     remove(connectionId: string): void {
         this.sockets.delete(connectionId);
+    }
+
+    owns(connectionId: string): boolean {
+        return this.sockets.has(connectionId);
     }
 
     /** <= 0 means back-pressured or dropped; the engine counts those. */
