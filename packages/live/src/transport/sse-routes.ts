@@ -1,5 +1,5 @@
 import { getLiveRuntime } from '../runtime';
-import { handleMessage } from './LiveGateway';
+import { dropLiveConnection, handleMessage } from './LiveGateway';
 import type { SseTransport } from './SseTransport';
 
 export interface SseRouteOptions {
@@ -36,7 +36,7 @@ const SSE_HEADERS = {
 export function createSseRoutes(options: SseRouteOptions) {
     const { transport, streamPath, controlPath } = options;
 
-    const stream = (): Response => {
+    const stream = (request: Request): Response => {
         // Unguessable on purpose: the id is a bearer for this connection, and
         // whoever holds it can subscribe as it.
         const connectionId = `sse:${crypto.randomUUID()}`;
@@ -47,6 +47,19 @@ export function createSseRoutes(options: SseRouteOptions) {
             // Until a `hello` arrives, the connection is its own principal:
             // safe, shares nothing. Same rule as the gateway's onOpen.
             runtime.scopes.set(connectionId, { principal: connectionId });
+
+            // Cancelling the client reader does not always reach the stream's
+            // `cancel`; aborting the request does, and is what a closed
+            // EventSource looks like on the wire.
+            request.signal.addEventListener('abort', () => {
+                transport.close(connectionId);
+
+                try {
+                    dropLiveConnection(connectionId);
+                } catch {
+                    // closeLiveRuntime nulls the runtime before dispose.
+                }
+            });
 
             return new NativeResponse(body, { status: 200, headers: SSE_HEADERS });
         } catch (error) {

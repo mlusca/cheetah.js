@@ -7,6 +7,8 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator';
  * must use this: happy-dom's fetch enforces same-origin and buffers the body.
  */
 (globalThis as { __carnoNativeFetch?: typeof fetch }).__carnoNativeFetch = globalThis.fetch;
+(globalThis as { __carnoNativeAbortController?: typeof AbortController }).__carnoNativeAbortController =
+    globalThis.AbortController;
 
 if (!(globalThis as { document?: unknown }).document) {
     GlobalRegistrator.register();

@@ -18,7 +18,7 @@ import { ResourceRegistry } from './resource/ResourceRegistry';
 import { setLiveRuntime } from './runtime';
 import { LiveETagMiddleware } from './http/etag';
 import { FanTransport } from './transport/FanTransport';
-import { LiveGateway } from './transport/LiveGateway';
+import { dropLiveConnection, LiveGateway } from './transport/LiveGateway';
 import { ConnectionScopeResolver, type LiveScopeResolver } from './transport/scope-resolver';
 import { SocketTransport } from './transport/SocketTransport';
 import { SseTransport } from './transport/SseTransport';
@@ -122,7 +122,7 @@ export class LivePlugin {
             const sse = new SseTransport({
                 heartbeatMs: config.sseHeartbeatMs,
                 maxConnections: config.sseMaxConnections,
-                onDisconnect: connectionId => engine.dropConnection(connectionId)
+                onDisconnect: dropLiveConnection
             });
 
             fan.add(sse);
