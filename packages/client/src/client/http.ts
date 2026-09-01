@@ -1,5 +1,11 @@
 import type { HttpMethod, ClientConfig, ClientCreate, ClientErrorValue, ClientResult } from './types';
 
+export interface RequestOptions {
+    query?: Record<string, unknown>;
+    headers?: Record<string, string | undefined>;
+    fetch?: RequestInit;
+}
+
 const HTTP_METHODS = new Set<string>(['get', 'post', 'put', 'delete', 'patch', 'head', 'options']);
 const BODY_METHODS = new Set<string>(['post', 'put', 'patch', 'delete']);
 const IGNORED_KEYS = new Set<PropertyKey>([
@@ -44,8 +50,19 @@ function createProxy(origin: string, currentPath: string, config: ClientConfig):
             }
 
             if (HTTP_METHODS.has(key)) {
-                return (first?: unknown, second?: unknown) =>
-                    execute(origin, currentPath || '/', key as HttpMethod, first, second, config);
+                return (first?: unknown, second?: unknown) => {
+                    const method = key as HttpMethod;
+                    const hasBody = BODY_METHODS.has(method);
+
+                    return executeRequest(
+                        origin,
+                        currentPath || '/',
+                        method,
+                        hasBody ? first : undefined,
+                        (hasBody ? second : first) as RequestOptions | undefined,
+                        config
+                    );
+                };
             }
 
             const segment = key.startsWith(':') ? key.slice(1) : key;
@@ -54,20 +71,15 @@ function createProxy(origin: string, currentPath: string, config: ClientConfig):
     });
 }
 
-async function execute(
+/** The one request path, shared by the path proxy and by createApi(). */
+export async function executeRequest(
     origin: string,
     pathname: string,
     method: HttpMethod,
-    first: unknown,
-    second: unknown,
+    body: unknown,
+    options: RequestOptions | undefined,
     config: ClientConfig
 ): Promise<ClientResult<unknown>> {
-    const hasBody = BODY_METHODS.has(method);
-    const body = hasBody ? first : undefined;
-    const options = (hasBody ? second : first) as
-        | { query?: Record<string, unknown>; headers?: Record<string, string | undefined>; fetch?: RequestInit }
-        | undefined;
-
     const request = createRequestUrl(origin, pathname);
 
     if (options?.query) {
@@ -194,7 +206,7 @@ function normalizeError(parsed: unknown, response: Response): ClientErrorValue {
     };
 }
 
-function stripTrailingSlashes(value: string): string {
+export function stripTrailingSlashes(value: string): string {
     let end = value.length;
     while (end > 0 && value.charCodeAt(end - 1) === 47) {
         end -= 1;

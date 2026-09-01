@@ -5,8 +5,14 @@ import { LIVE_META, type LiveMeta } from '../metadata';
 import { dependencyContext } from './dependency-context';
 import type { LiveInputs, LiveResource } from './types';
 
-/** Verbs that may carry @Live in phase 1. @Post() arrives with phase 2. */
-const ALLOWED_METHODS = new Set(['get']);
+/**
+ * Verbs that may carry @Live. The real criterion is idempotence, not the verb:
+ * subscribing means re-running the handler whenever the data changes, and
+ * re-running a write duplicates the side effect. GET and POST are the two the
+ * web uses for reading; a PUT that only reads is an abuse of the protocol and
+ * is not worth the API surface.
+ */
+const ALLOWED_METHODS = new Set(['get', 'post']);
 
 /**
  * Parameters that would break "state is recomputable from inputs": there is no
@@ -62,8 +68,8 @@ export class ResourceRegistry {
             if (!ALLOWED_METHODS.has(route.method)) {
                 throw new LiveValidationError(
                     `${where} is decorated with @Live() on @${route.method.toUpperCase()}(). ` +
-                    `Subscribing means re-running the handler whenever the data changes, so it must be ` +
-                    `idempotent. Phase 1 allows @Get() only; @Post() for read-only queries arrives in phase 2.`
+                    `Subscribing means re-running the handler whenever the data changes, so it has ` +
+                    `to be idempotent. Only @Get() and @Post() may be live.`
                 );
             }
 
@@ -83,9 +89,10 @@ export class ResourceRegistry {
 
             }
 
-            if (params.some(param => param.type === 'body')) {
+            if (route.method === 'get' && params.some(param => param.type === 'body')) {
                 throw new LiveValidationError(
-                    `${where} uses @Body(), which requires @Live() on @Post(). That arrives in phase 2.`
+                    `${where} uses @Body() on @Get(). A GET subscription carries no body; ` +
+                    `declare the route as @Post() or read the value from @Query().`
                 );
             }
 
@@ -148,6 +155,10 @@ function buildArgs(params: ParamMetadata[], inputs: LiveInputs): unknown[] {
             args[param.index] = param.key ? inputs.params[param.key] : inputs.params;
         } else if (param.type === 'query') {
             args[param.index] = param.key ? inputs.query[param.key] : inputs.query;
+        } else if (param.type === 'body') {
+            args[param.index] = param.key
+                ? (inputs.body as Record<string, unknown> | undefined)?.[param.key]
+                : inputs.body;
         }
     }
 

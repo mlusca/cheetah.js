@@ -11,16 +11,18 @@ import { transactionContext } from "../transaction/transaction-context";
 import { escapeString } from "../utils/sql-escape";
 import { isUpdateExpression } from "../query/update-expression";
 
+type PoolOptions = {
+  max?: number;
+  idleTimeout?: number;
+  maxLifetime?: number;
+  connectionTimeout?: number;
+};
+
 export abstract class BunDriverBase implements Partial<DriverInterface> {
   protected sql: SQL;
   protected _replicas: SQL[] = [];
   public connectionString: string;
-  protected readonly poolOptions: {
-    max: number;
-    idleTimeout: number;
-    maxLifetime: number;
-    connectionTimeout: number;
-  };
+  protected readonly poolOptions: PoolOptions;
   protected replicaSettings?: Array<Partial<ConnectionSettings>>;
   public abstract readonly dbType: "postgres" | "mysql";
 
@@ -64,22 +66,29 @@ export abstract class BunDriverBase implements Partial<DriverInterface> {
     }
   }
 
-  protected buildPoolOptions(options: ConnectionSettings): {
-    max: number;
-    idleTimeout: number;
-    maxLifetime: number;
-    connectionTimeout: number;
-  } {
-    return {
-      max: options.max ?? undefined,
-      idleTimeout: options.idleTimeout ?? undefined,
-      maxLifetime: options.maxLifetime ?? undefined,
-      connectionTimeout: options.connectionTimeout ?? undefined,
+  /**
+   * The pool options a caller actually set, with the unset ones left out.
+   *
+   * They are spread over defaults, and a key present with `undefined` erases
+   * the value beneath it. Omitting the key is what makes the spread mean
+   * "override what was given, keep the rest" -- without it a driver built with
+   * an explicit `max` still opened the driver default.
+   */
+  protected buildPoolOptions(options: Partial<ConnectionSettings>): PoolOptions {
+    const declared: PoolOptions = {
+      max: options.max,
+      idleTimeout: options.idleTimeout,
+      maxLifetime: options.maxLifetime,
+      connectionTimeout: options.connectionTimeout,
     };
+
+    return Object.fromEntries(
+      Object.entries(declared).filter(([, value]) => value !== undefined),
+    ) as PoolOptions;
   }
 
   private createSqlInstance(connString: string, options?: Partial<ConnectionSettings>): SQL {
-    const opts = { ...this.poolOptions, ...this.buildPoolOptions(options as any || {}) };
+    const opts = { ...this.poolOptions, ...this.buildPoolOptions(options ?? {}) };
     return new SQL({
       url: connString,
       max: opts.max,

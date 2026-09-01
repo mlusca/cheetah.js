@@ -1,5 +1,7 @@
+import { AllowAllAuthorizer, authKeysOf, isAuthKey, type LiveAuthorizer } from './auth/authorizer';
 import type { InvalidationBus } from './bus/InvalidationBus';
 import type { LiveConfig } from './config';
+import { ancestorsOf, type DepKey } from './graph/dep-key';
 import { DependencyGraph } from './graph/DependencyGraph';
 import { SubscriptionRegistry } from './graph/SubscriptionRegistry';
 import type { InvalidationEvent } from './graph/types';
@@ -54,6 +56,10 @@ export class LiveEngine {
     private readonly bindings = new Map<string, Map<string, string>>();
     private readonly backpressure = new Map<string, number>();
     private readonly pending = new Set<string>();
+    /** Scope of each connection, as resolved at subscribe time. */
+    private readonly scopes = new Map<string, LiveScope>();
+    /** connectionId → instanceId → decision. Cleared when an `auth:` key fires. */
+    private readonly authorized = new Map<string, Map<string, boolean>>();
 
     private flushTimer: ReturnType<typeof setTimeout> | null = null;
     private unsubscribeBus: (() => void) | null = null;
@@ -66,7 +72,8 @@ export class LiveEngine {
         private readonly subs: SubscriptionRegistry,
         private readonly bus: InvalidationBus,
         private readonly transport: LiveTransport,
-        private readonly config: LiveConfig
+        private readonly config: LiveConfig,
+        private readonly authorizer: LiveAuthorizer = new AllowAllAuthorizer()
     ) {}
 
     start(): void {
@@ -115,6 +122,20 @@ export class LiveEngine {
             instanceId = instanceIdOf(resource.id, scopeKey, canonicalInputs(inputs, this.config.maxInputBytes));
         } catch (error) {
             this.fail(connectionId, sid, 'invalid_subscription', (error as Error).message);
+            return;
+        }
+
+        this.scopes.set(connectionId, scope);
+
+        const allowed = await this.checkAuthorization(connectionId, instanceId, resource, inputs, scope);
+
+        if (!allowed) {
+            this.fail(
+                connectionId,
+                sid,
+                'forbidden',
+                `This connection is not allowed to subscribe to "${resourceId}".`
+            );
             return;
         }
 
@@ -199,6 +220,8 @@ export class LiveEngine {
 
         this.bindings.delete(connectionId);
         this.backpressure.delete(connectionId);
+        this.scopes.delete(connectionId);
+        this.authorized.delete(connectionId);
     }
 
     /** Manual invalidation — the third emitter of §4.4. */
@@ -236,8 +259,98 @@ export class LiveEngine {
         }
 
         owned.delete(sid);
+        this.authorized.get(connectionId)?.delete(instanceId);
         this.subs.unsubscribe(connectionId, instanceId);
         this.scheduleDrop(instanceId);
+    }
+
+    private async checkAuthorization(
+        connectionId: string,
+        instanceId: string,
+        resource: LiveResource,
+        inputs: LiveInputs,
+        scope: LiveScope
+    ): Promise<boolean> {
+        let perConnection = this.authorized.get(connectionId);
+
+        if (!perConnection) {
+            perConnection = new Map<string, boolean>();
+            this.authorized.set(connectionId, perConnection);
+        }
+
+        const cached = perConnection.get(instanceId);
+
+        if (cached !== undefined) {
+            return cached;
+        }
+
+        let allowed: boolean;
+
+        try {
+            allowed = await this.authorizer.authorize({
+                resourceId: resource.id,
+                controllerName: resource.controllerName,
+                handlerName: resource.handlerName,
+                meta: resource.meta,
+                inputs,
+                scope,
+                connectionId
+            });
+        } catch {
+            // An authorizer that throws is a denial. Failing open here would
+            // hand out data on a bug in application code.
+            allowed = false;
+        }
+
+        perConnection.set(instanceId, allowed);
+        return allowed;
+    }
+
+    /** An `auth:` key fired: drop the cached decisions it covers and re-ask. */
+    private reauthorize(key: DepKey): void {
+        for (const [connectionId, scope] of this.scopes) {
+            const affected = authKeysOf(scope).some(owned => ancestorsOf(owned).includes(key));
+
+            if (!affected) {
+                continue;
+            }
+
+            this.authorized.delete(connectionId);
+
+            const owned = this.bindings.get(connectionId);
+
+            if (!owned) {
+                continue;
+            }
+
+            for (const instanceId of new Set(owned.values())) {
+                const instance = this.instances.get(instanceId);
+
+                if (!instance) {
+                    continue;
+                }
+
+                void this.checkAuthorization(connectionId, instanceId, instance.resource, instance.inputs, scope)
+                    .then(allowed => {
+                        if (!allowed) {
+                            this.revoke(connectionId, instanceId);
+                        }
+                    });
+            }
+        }
+    }
+
+    /** End one connection's hold on one instance, telling it why. */
+    private revoke(connectionId: string, instanceId: string): void {
+        for (const sid of this.sidsFor(connectionId, instanceId)) {
+            this.send(connectionId, {
+                t: 'error',
+                sid,
+                code: 'forbidden',
+                message: 'This subscription is no longer authorized for this connection.'
+            });
+            this.release(connectionId, sid);
+        }
     }
 
     private scheduleDrop(instanceId: string): void {
@@ -317,6 +430,12 @@ export class LiveEngine {
 
     private onInvalidation(events: InvalidationEvent[]): void {
         for (const event of events) {
+            if (isAuthKey(event.key)) {
+                // Not data: nothing to recompute, only permissions to re-check.
+                this.reauthorize(event.key);
+                continue;
+            }
+
             for (const instanceId of this.graph.resolve(event)) {
                 // Grace-held instances have no subscribers but are still cached.
                 if (this.instances.has(instanceId)) {
@@ -384,7 +503,7 @@ export class LiveEngine {
         try {
             ({ data, deps } = await this.resources.compute(instance.resource, instance.inputs));
         } catch (error) {
-            this.broadcast(instance, sid => ({ t: 'stale', sid, reason: (error as Error).message }));
+            await this.broadcast(instance, sid => ({ t: 'stale', sid, reason: (error as Error).message }));
             return;
         }
 
@@ -407,7 +526,7 @@ export class LiveEngine {
         instance.hash = hash;
         instance.revision += 1;
 
-        this.broadcast(instance, sid => ({
+        await this.broadcast(instance, sid => ({
             t: 'patch',
             sid,
             from,
@@ -417,8 +536,21 @@ export class LiveEngine {
         }));
     }
 
-    private broadcast(instance: LiveInstance, build: (sid: string) => ServerMessage): void {
-        for (const connectionId of this.subs.connectionsOf(instance.id)) {
+    private async broadcast(
+        instance: LiveInstance,
+        build: (sid: string) => ServerMessage
+    ): Promise<void> {
+        for (const connectionId of [...this.subs.connectionsOf(instance.id)]) {
+            const scope = this.scopes.get(connectionId);
+            const allowed = scope
+                ? await this.checkAuthorization(connectionId, instance.id, instance.resource, instance.inputs, scope)
+                : false;
+
+            if (!allowed) {
+                this.revoke(connectionId, instance.id);
+                continue;
+            }
+
             for (const sid of this.sidsFor(connectionId, instance.id)) {
                 const message = build(sid);
 

@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "references": [],
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "jsx": "react-jsx"
+  },
+  "include": ["src/**/*", "test/types/**/*"]
+}

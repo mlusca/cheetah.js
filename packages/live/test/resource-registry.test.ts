@@ -48,7 +48,7 @@ describe('ResourceRegistry.register', () => {
         expect(registry.get('UsersController.list')?.meta.key).toBe('id');
     });
 
-    test('refuses @Live on a verb that is not GET', () => {
+    test('refuses @Live on a verb that is neither GET nor POST', () => {
         const registry = new ResourceRegistry();
 
         expect(() => registry.register(WritingController, new WritingController()))

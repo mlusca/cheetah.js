@@ -1,7 +1,10 @@
 export { client } from './client/http';
+export { createApi, fillPath } from './client/descriptor';
+export type { ApiCall, ApiOf, RouteDescriptor, RouteInput } from './client/descriptor';
 export type {
     HttpMethod,
     RouteOptions,
+    RouteResponse,
     HttpClient,
     ClientConfig,
     ClientCreate,
