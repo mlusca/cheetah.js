@@ -84,7 +84,11 @@ async function dispatch(connectionId: string, raw: string): Promise<void> {
                 connectionId,
                 message.sid,
                 message.resource,
-                { params: message.inputs?.params ?? {}, query: message.inputs?.query ?? {} },
+                {
+                    params: message.inputs?.params ?? {},
+                    query: message.inputs?.query ?? {},
+                    body: message.inputs?.body
+                },
                 scope,
                 message.hash
             );

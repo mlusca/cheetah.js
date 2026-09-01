@@ -3,6 +3,8 @@ import path from 'node:path';
 
 export const fixtureRoot = path.resolve(import.meta.dir, 'fixtures/app');
 
+export const liveFixtureRoot = path.resolve(import.meta.dir, 'fixtures/live-app');
+
 export const scratchRoot = path.resolve(
     'C:/Users/lucas.rodrigues_saip/AppData/Local/Temp/grok-goal-fef546bc1bf8/implementer'
 );
