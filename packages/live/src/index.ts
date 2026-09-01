@@ -73,3 +73,8 @@ export type { SseRouteOptions } from './transport/sse-routes';
 // Conditional GET
 export { LiveETagMiddleware, pathMatcher } from './http/etag';
 export type { LiveRoutePath } from './http/etag';
+
+// First paint
+export { prefetchLive } from './resource/prefetch';
+export type { LivePayload } from './resource/prefetch';
+export { hydrationKey, toHydrateMap, readHydrationPayload, HYDRATION_ATTRIBUTE } from './client/hydrate';

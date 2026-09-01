@@ -112,6 +112,7 @@ export class LivePlugin {
             transport: sockets,
             resolver: options.scopeResolver ?? new ConnectionScopeResolver(),
             scopes: new Map(),
+            resources,
             dispose
         });
 

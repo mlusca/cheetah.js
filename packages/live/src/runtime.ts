@@ -2,12 +2,15 @@ import type { LiveEngine } from './LiveEngine';
 import type { SocketTransport } from './transport/SocketTransport';
 import type { LiveScopeResolver } from './transport/scope-resolver';
 import type { LiveScope } from './shared/inputs';
+import type { ResourceRegistry } from './resource/ResourceRegistry';
 
 export interface LiveRuntime {
     engine: LiveEngine;
     transport: SocketTransport;
     resolver: LiveScopeResolver;
     scopes: Map<string, LiveScope>;
+    /** Needed by prefetch(), which computes without subscribing. */
+    resources: ResourceRegistry;
     /**
      * Everything the plugin opened and nothing else knows about: the dedicated
      * LISTEN connections of the Postgres emitter and of the distributed bus,
