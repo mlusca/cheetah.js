@@ -42,6 +42,17 @@ type DatabaseTestRoutine = (context: DatabaseTestContext) => Promise<void>;
 
 const DEFAULT_SCHEMA = 'public';
 
+/**
+ * Pool size for a test session.
+ *
+ * Sessions are cached per entity set and never closed, so every distinct set a
+ * suite touches holds its pool open for the life of the process. At the driver
+ * default that is ten sockets each, and a full `bun test` run exhausts
+ * Postgres's client slots. A test issues one statement at a time; two is
+ * headroom, not a limit. Override it through `options.connection.max`.
+ */
+const TEST_POOL_SIZE = 2;
+
 function getDefaultConnection(options?: DatabaseTestOptions): ConnectionSettings {
   const driverType = getDriverType();
   const driverClass = getDriverClass(driverType);
@@ -54,6 +65,7 @@ function getDefaultConnection(options?: DatabaseTestOptions): ConnectionSettings
 
   return {
     ...settings,
+    max: TEST_POOL_SIZE,
     driver: driverClass,
   };
 }
