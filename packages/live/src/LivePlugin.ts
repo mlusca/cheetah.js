@@ -1,4 +1,4 @@
-import { Carno, type Container } from '@carno.js/core';
+import { Carno, ObservabilityService, type Container } from '@carno.js/core';
 import { Orm } from '@carno.js/orm';
 import { WebSocketPlugin, type WebSocketPluginConfig } from '@carno.js/websocket';
 import { AllowAllAuthorizer, type LiveAuthorizer } from './auth/authorizer';
@@ -12,6 +12,7 @@ import { AppEmitter } from './emitters/AppEmitter';
 import { DependencyGraph } from './graph/DependencyGraph';
 import { SubscriptionRegistry } from './graph/SubscriptionRegistry';
 import { LiveEngine } from './LiveEngine';
+import { LiveMetrics } from './observability';
 import { LiveService } from './LiveService';
 import { ResourceRegistry } from './resource/ResourceRegistry';
 import { setLiveRuntime } from './runtime';
@@ -70,6 +71,11 @@ export class LivePlugin {
             : null;
         const bus: InvalidationBus = distributedBus ?? new InProcessBus();
         const transport = new SocketTransport();
+        let sink: ObservabilityService | null = null;
+        const metrics = new LiveMetrics({
+            onMetric: (name, value, tags) => sink?.onMetric(name, value, tags)
+        });
+
         const engine = new LiveEngine(
             resources,
             graph,
@@ -77,7 +83,8 @@ export class LivePlugin {
             bus,
             transport,
             config,
-            options.authorizer ?? new AllowAllAuthorizer()
+            options.authorizer ?? new AllowAllAuthorizer(),
+            metrics
         );
         const emitter = new AppEmitter(bus, config);
 
@@ -108,6 +115,11 @@ export class LivePlugin {
         // controller instances and the ORM holds its connection — which is why
         // everything that needs a database URL is started here and not above.
         plugin.wsHandler((container: Container) => {
+            // Resolved here and not above: the container does not exist until
+            // bootstrap, and an app with no observability plugin never
+            // registers one.
+            sink = container.has(ObservabilityService) ? container.get(ObservabilityService) : null;
+
             for (const ControllerClass of options.controllers) {
                 resources.register(ControllerClass, container.get(ControllerClass));
             }

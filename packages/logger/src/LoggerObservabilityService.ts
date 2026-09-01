@@ -23,5 +23,13 @@ export class LoggerObservabilityService extends ObservabilityService {
             { error, ...context }
         );
     }
+
+    override onMetric(
+        name: string,
+        value: number,
+        tags?: Record<string, string | number | boolean>
+    ): void {
+        this.logger.info('Metric', { metric: name, value, ...tags });
+    }
 }
 
