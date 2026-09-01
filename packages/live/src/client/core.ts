@@ -53,10 +53,17 @@ interface Entry {
     revision: number;
     hash: string | null;
     patcher: PatchEngine;
+    /** What the server last told us. Patches apply here, never to the projection. */
+    confirmed: unknown;
     state: LiveState<unknown>;
     listeners: Set<() => void>;
     dropTimer: ReturnType<typeof setTimeout> | null;
     store: LiveStore<unknown>;
+}
+
+interface Overlay {
+    resource: string;
+    apply: (draft: unknown) => void;
 }
 
 const DEFAULT_UNSUB_GRACE_MS = 5000;
@@ -66,6 +73,8 @@ const DEFAULT_MAX_BACKOFF_MS = 30000;
 export class LiveClient {
     private readonly entries = new Map<string, Entry>();
     private readonly bySid = new Map<string, Entry>();
+    private readonly overlays = new Map<number, Overlay>();
+    private nextOverlay = 0;
     private socket: LiveSocket | null = null;
     private connected = false;
     private closed = false;
@@ -93,6 +102,7 @@ export class LiveClient {
             revision: hydrated ? 1 : 0,
             hash: hydrated?.hash ?? null,
             patcher: new PatchEngine(),
+            confirmed: hydrated?.data,
             state: {
                 data: hydrated?.data,
                 pending: hydrated === undefined,
@@ -113,6 +123,29 @@ export class LiveClient {
         this.bySid.set(entry.sid, entry);
 
         return entry.store as LiveStore<T>;
+    }
+
+    /**
+     * Show something the server has not confirmed yet.
+     *
+     * The overlay is a projection over the confirmed snapshot, never a write
+     * into it: a patch arriving while the action is in flight lands on the
+     * snapshot and the overlay is re-projected on top, so the screen never
+     * flickers back to a state the server does not know about.
+     *
+     * `apply` receives a mutable draft: mutate it, do not return a new value.
+     * Returns the function that removes the overlay.
+     */
+    overlay(resourceId: string, apply: (draft: any) => void): () => void {
+        const id = this.nextOverlay++;
+        this.overlays.set(id, { resource: resourceId, apply: apply as (draft: unknown) => void });
+        this.reproject(resourceId);
+
+        return () => {
+            if (this.overlays.delete(id)) {
+                this.reproject(resourceId);
+            }
+        };
     }
 
     close(): void {
@@ -262,7 +295,8 @@ export class LiveClient {
                 }
                 entry.revision = message.rev;
                 entry.hash = message.hash;
-                this.update(entry, { data: message.data, pending: false, error: null, stale: false });
+                entry.confirmed = message.data;
+                this.project(entry, { pending: false, error: null, stale: false });
                 return;
 
             case 'current':
@@ -271,9 +305,9 @@ export class LiveClient {
                 }
                 entry.revision = message.rev;
                 entry.hash = message.hash;
-                // Content already on screen: touch only the flags, keep
-                // `data` referentially identical so nothing re-renders.
-                this.update(entry, { data: entry.state.data, pending: false, error: null, stale: false });
+                // Content already on screen: touch only the flags, keep the
+                // data referentially identical so nothing re-renders.
+                this.project(entry, { pending: false, error: null, stale: false });
                 return;
 
             case 'patch':
@@ -286,12 +320,8 @@ export class LiveClient {
 
                 entry.revision = message.to;
                 entry.hash = message.hash;
-                this.update(entry, {
-                    data: entry.patcher.apply(entry.state.data, message.ops),
-                    pending: false,
-                    error: null,
-                    stale: false
-                });
+                entry.confirmed = entry.patcher.apply(entry.confirmed, message.ops);
+                this.project(entry, { pending: false, error: null, stale: false });
                 return;
 
             case 'stale':
@@ -301,6 +331,47 @@ export class LiveClient {
             case 'error':
                 this.update(entry, { ...entry.state, pending: false, error: message.message });
                 return;
+        }
+    }
+
+    /** Confirmed snapshot plus every overlay registered for this resource. */
+    private project(
+        entry: Entry,
+        flags: { pending: boolean; error: string | null; stale: boolean }
+    ): void {
+        const overlays = [...this.overlays.values()].filter(overlay => overlay.resource === entry.resource);
+
+        if (overlays.length === 0 || entry.confirmed === undefined) {
+            this.update(entry, { ...flags, data: entry.confirmed });
+            return;
+        }
+
+        const draft = structuredClone(entry.confirmed);
+
+        for (const overlay of overlays) {
+            try {
+                overlay.apply(draft);
+            } catch (error) {
+                // A broken optimistic update must not take the real data with
+                // it: the confirmed snapshot is still correct underneath.
+                console.error('[carno:live] an optimistic overlay failed', error);
+            }
+        }
+
+        this.update(entry, { ...flags, data: draft });
+    }
+
+    private reproject(resourceId: string): void {
+        for (const entry of this.entries.values()) {
+            if (entry.resource !== resourceId) {
+                continue;
+            }
+
+            this.project(entry, {
+                pending: entry.state.pending,
+                error: entry.state.error,
+                stale: entry.state.stale
+            });
         }
     }
 
