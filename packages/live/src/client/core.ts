@@ -325,7 +325,11 @@ export class LiveClient {
 }
 
 export function storeKey(resource: string, inputs: LiveInputs): string {
-    return `${resource}|${canonical({ params: inputs.params ?? {}, query: inputs.query ?? {} })}`;
+    return `${resource}|${canonical({
+        params: inputs.params ?? {},
+        query: inputs.query ?? {},
+        body: inputs.body ?? null
+    })}`;
 }
 
 function defaultSocketFactory(url: string): LiveSocket {

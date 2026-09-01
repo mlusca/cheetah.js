@@ -163,7 +163,7 @@ describe('LiveClient store', () => {
     });
 
     test('hydration seeds the store and subscribes with the hash it already has', () => {
-        const hydrate = { 'r|{"params":{},"query":{}}': { data: { a: 1 }, hash: 'h1' } };
+        const hydrate = { 'r|{"body":null,"params":{},"query":{}}': { data: { a: 1 }, hash: 'h1' } };
         const { client, socket } = build({ hydrate });
         const store = client.store('r', { params: {}, query: {} });
         store.subscribe(() => {});
@@ -175,7 +175,7 @@ describe('LiveClient store', () => {
     });
 
     test('a current response leaves the hydrated data untouched', () => {
-        const hydrate = { 'r|{"params":{},"query":{}}': { data: { a: 1 }, hash: 'h1' } };
+        const hydrate = { 'r|{"body":null,"params":{},"query":{}}': { data: { a: 1 }, hash: 'h1' } };
         const { client, socket } = build({ hydrate });
         const store = client.store('r', { params: {}, query: {} });
         store.subscribe(() => {});

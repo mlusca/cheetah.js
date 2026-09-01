@@ -22,7 +22,7 @@ function clientWith(hydrate: Record<string, { data: unknown; hash: string }>): L
 describe('useLive', () => {
     test('renders hydrated server state on the first pass, with no round trip', () => {
         const client = clientWith({
-            'UsersController.list|{"params":{},"query":{"status":"active"}}': {
+            'UsersController.list|{"body":null,"params":{},"query":{"status":"active"}}': {
                 data: [{ id: 1, name: 'Ada' }],
                 hash: 'h1'
             }

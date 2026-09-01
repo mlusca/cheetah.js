@@ -43,7 +43,13 @@ export function scopeKeyOf(shared: LiveShared, scope: LiveScope): string {
 
 /** Canonical form of inputs, guarded by the size ceiling. */
 export function canonicalInputs(inputs: LiveInputs, maxInputBytes: number): string {
-    const encoded = canonical({ params: inputs.params ?? {}, query: inputs.query ?? {} });
+    const encoded = canonical({
+        params: inputs.params ?? {},
+        query: inputs.query ?? {},
+        // `canonical` renders undefined and null identically, so a GET (no
+        // body) and a POST with an empty body land on the same string.
+        body: inputs.body ?? null
+    });
     const size = Buffer.byteLength(encoded, 'utf8');
 
     if (size > maxInputBytes) {
