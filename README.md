@@ -50,6 +50,7 @@ This repository is the monorepo for the Carno.js ecosystem. The README is intent
 | `@carno.js/static` | Static file serving for Bun applications. |
 | `@carno.js/views` | Optional MVC views with Handlebars, EJS, Pug, or a custom engine. |
 | `@carno.js/websocket` | WebSocket gateways, rooms, namespaces, and broadcasting. |
+| `@carno.js/live` | Server-owned reactive state: live resources, dependency-graph invalidation, and framework-native client stores. |
 | `@carno.js/logger` | Logging utilities for Carno.js applications. |
 | `@carno.js/client` | Type-safe HTTP client generated from controllers. |
 | `@carno.js/cli` | Command-line tools, including ORM migration workflows. |
@@ -85,6 +86,7 @@ The documentation site is the source of truth for usage examples and API guidanc
 - [Static files](https://carnojs.github.io/carno.js/docs/static/overview)
 - [Views](https://carnojs.github.io/carno.js/docs/views/overview)
 - [WebSocket](https://carnojs.github.io/carno.js/docs/websocket/overview)
+- [Live](https://carnojs.github.io/carno.js/docs/live/overview)
 - [Testing](https://carnojs.github.io/carno.js/docs/testing/overview)
 
 ## Repository Workflow

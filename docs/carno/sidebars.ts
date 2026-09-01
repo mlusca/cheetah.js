@@ -80,6 +80,11 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Live',
+      items: ['live/overview'],
+    },
+    {
+      type: 'category',
       label: 'HTTP Client',
       items: [
         'client/overview',
