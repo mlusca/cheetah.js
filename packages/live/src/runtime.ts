@@ -8,6 +8,12 @@ export interface LiveRuntime {
     transport: SocketTransport;
     resolver: LiveScopeResolver;
     scopes: Map<string, LiveScope>;
+    /**
+     * Everything the plugin opened and nothing else knows about: the dedicated
+     * LISTEN connections of the Postgres emitter and of the distributed bus,
+     * plus the engine's timers.
+     */
+    dispose?: (() => Promise<void> | void)[];
 }
 
 let current: LiveRuntime | null = null;
@@ -31,6 +37,28 @@ export function getLiveRuntime(): LiveRuntime {
     return current;
 }
 
-export function resetLiveRuntime(): void {
+/**
+ * Close whatever the plugin opened, then forget the runtime.
+ *
+ * Dropping the reference alone is not enough: a LISTEN connection is a socket
+ * held open by nothing the container can see, so a process that builds and
+ * tears down several Carno instances — a test suite, most obviously — runs the
+ * database out of client slots.
+ */
+export async function closeLiveRuntime(): Promise<void> {
+    const runtime = current;
     current = null;
+
+    for (const close of runtime?.dispose ?? []) {
+        try {
+            await close();
+        } catch (error) {
+            console.error('[carno:live] failed to close a live connection', error);
+        }
+    }
+}
+
+/** Synchronous form. Prefer `closeLiveRuntime()` when you can await. */
+export function resetLiveRuntime(): void {
+    void closeLiveRuntime();
 }

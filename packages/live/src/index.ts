@@ -8,6 +8,7 @@ export type { LiveMeta, LiveOptions, LiveShared } from './metadata';
 // Plugin and services
 export { LivePlugin } from './LivePlugin';
 export type { LivePluginOptions } from './LivePlugin';
+export { closeLiveRuntime } from './runtime';
 export { LiveService } from './LiveService';
 export { LiveEngine } from './LiveEngine';
 export type { LiveTransport, LiveStats } from './LiveEngine';
