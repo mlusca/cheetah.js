@@ -6,6 +6,7 @@ import {
     type ClientMessage,
     type ServerMessage
 } from '../shared/protocol';
+import { WebSocketTransport, type ClientTransport } from './transport';
 
 export interface LiveState<T> {
     data: T | undefined;
@@ -42,6 +43,12 @@ export interface LiveClientOptions {
     unsubGraceMs?: number;
     reconnect?: { initialMs?: number; maxMs?: number };
     socketFactory?: (url: string) => LiveSocket;
+    /**
+     * Builds the pipe. Defaults to WebSocket; Task 9 stacks a ladder on top.
+     * `socketFactory` still works and is the shorthand for "same ladderless
+     * WebSocket, different socket" that the tests use.
+     */
+    transportFactory?: (url: string) => ClientTransport;
 }
 
 interface Entry {
@@ -75,7 +82,7 @@ export class LiveClient {
     private readonly bySid = new Map<string, Entry>();
     private readonly overlays = new Map<number, Overlay>();
     private nextOverlay = 0;
-    private socket: LiveSocket | null = null;
+    private pipe: ClientTransport | null = null;
     private connected = false;
     private closed = false;
     private attempt = 0;
@@ -156,9 +163,14 @@ export class LiveClient {
             this.reconnectTimer = null;
         }
 
-        this.socket?.close();
-        this.socket = null;
+        this.pipe?.close();
+        this.pipe = null;
         this.connected = false;
+    }
+
+    /** Which pipe is carrying this client right now. For logs, not for logic. */
+    transport(): ClientTransport['kind'] | null {
+        return this.connected ? (this.pipe?.kind ?? null) : null;
     }
 
     // ------------------------------------------------------------ lifecycle
@@ -202,37 +214,39 @@ export class LiveClient {
     }
 
     private ensureConnected(): void {
-        if (this.socket || this.closed) {
+        if (this.pipe || this.closed) {
             return;
         }
 
-        const factory = this.options.socketFactory ?? defaultSocketFactory;
-        const socket = factory(this.options.url);
-        this.socket = socket;
+        const build = this.options.transportFactory
+            ?? ((url: string) => new WebSocketTransport(url, this.options.socketFactory));
 
-        socket.onopen = () => {
-            this.connected = true;
-            this.attempt = 0;
-            this.send({ t: 'hello', v: LIVE_PROTOCOL_VERSION, token: this.options.token });
+        const pipe = build(this.options.url);
+        this.pipe = pipe;
 
-            // Reconnect is just "subscribe again, carrying the hash of what is
-            // on screen". There is no session to restore, because there is no
-            // session.
-            for (const entry of this.entries.values()) {
-                if (entry.refs > 0) {
-                    this.sendSub(entry);
+        pipe.start({
+            onOpen: () => {
+                this.connected = true;
+                this.attempt = 0;
+                this.send({ t: 'hello', v: LIVE_PROTOCOL_VERSION, token: this.options.token });
+
+                // Reconnect is just "subscribe again, carrying the hash of
+                // what is on screen". There is no session to restore, because
+                // there is no session.
+                for (const entry of this.entries.values()) {
+                    if (entry.refs > 0) {
+                        this.sendSub(entry);
+                    }
                 }
-            }
-        };
-
-        socket.onmessage = event => this.onMessage(event.data);
-        socket.onclose = () => this.onDisconnect();
-        socket.onerror = () => this.onDisconnect();
+            },
+            onMessage: raw => this.onMessage(raw),
+            onClose: () => this.onDisconnect()
+        });
     }
 
     private onDisconnect(): void {
         this.connected = false;
-        this.socket = null;
+        this.pipe = null;
 
         if (this.closed || this.reconnectTimer) {
             return;
@@ -264,11 +278,11 @@ export class LiveClient {
     }
 
     private send(message: ClientMessage): void {
-        if (!this.socket || !this.connected) {
+        if (!this.pipe || !this.connected) {
             return;
         }
 
-        this.socket.send(JSON.stringify(message));
+        this.pipe.send(JSON.stringify(message));
     }
 
     // -------------------------------------------------------------- inbound
@@ -401,8 +415,4 @@ export function storeKey(resource: string, inputs: LiveInputs): string {
         query: inputs.query ?? {},
         body: inputs.body ?? null
     })}`;
-}
-
-function defaultSocketFactory(url: string): LiveSocket {
-    return new WebSocket(url) as unknown as LiveSocket;
 }
