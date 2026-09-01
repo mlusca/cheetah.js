@@ -1,6 +1,7 @@
 import { statementObserver, type Statement } from '@carno.js/orm';
 import type { InvalidationBus } from '../bus/InvalidationBus';
 import type { LiveConfig } from '../config';
+import { tableOfKey } from '../graph/dep-key';
 import { dependencyContext } from '../resource/dependency-context';
 import { readDependencies, writeEvents } from './statement-keys';
 
@@ -21,10 +22,17 @@ export class WriteDuringComputeError extends Error {
  * application itself writes.
  */
 export class AppEmitter {
+    /** Tables announced by another emitter, so we do not announce them twice. */
+    private covered = new Set<string>();
+
     constructor(
         private readonly bus: InvalidationBus,
         private readonly config: LiveConfig
     ) {}
+
+    setCoveredTables(tables: Iterable<string>): void {
+        this.covered = new Set(tables);
+    }
 
     attach(): void {
         statementObserver.onRead((statement: Statement<any>) => {
@@ -45,7 +53,13 @@ export class AppEmitter {
         });
 
         statementObserver.onWrite((statement: Statement<any>) => {
-            this.bus.publish(writeEvents(statement, this.config.maxKeysPerRead));
+            const events = writeEvents(statement, this.config.maxKeysPerRead);
+            // A table watched by the Postgres emitter already announces itself
+            // through the trigger, on every node at once. Publishing here too
+            // would only buy a duplicate recompute.
+            const ours = events.filter(event => !this.covered.has(tableOfKey(event.key) ?? ''));
+
+            this.bus.publish(ours);
         });
     }
 

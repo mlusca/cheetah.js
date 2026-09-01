@@ -27,3 +27,15 @@ export function ancestorsOf(key: DepKey): DepKey[] {
 
     return [key, key.slice(0, index)];
 }
+
+/** The table an ORM key names, or null for a key from another namespace. */
+export function tableOfKey(key: DepKey): string | null {
+    if (!key.startsWith('orm:')) {
+        return null;
+    }
+
+    const rest = key.slice('orm:'.length);
+    const separator = rest.indexOf(ROW_SEPARATOR);
+
+    return separator === -1 ? rest : rest.slice(0, separator);
+}
