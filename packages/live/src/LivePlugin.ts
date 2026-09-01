@@ -1,5 +1,6 @@
 import { Carno, type Container } from '@carno.js/core';
 import { WebSocketPlugin, type WebSocketPluginConfig } from '@carno.js/websocket';
+import { AllowAllAuthorizer, type LiveAuthorizer } from './auth/authorizer';
 import { InProcessBus } from './bus/InProcessBus';
 import { resolveLiveConfig, type LiveConfig } from './config';
 import { AppEmitter } from './emitters/AppEmitter';
@@ -23,6 +24,11 @@ export interface LivePluginOptions {
      */
     gateways?: (new (...args: any[]) => any)[];
     scopeResolver?: LiveScopeResolver;
+    /**
+     * Decides whether a connection may hold a subscription, and is re-asked
+     * whenever `LiveService.invalidate('auth:principal#<id>')` fires.
+     */
+    authorizer?: LiveAuthorizer;
     config?: Partial<LiveConfig>;
     websocket?: WebSocketPluginConfig;
 }
@@ -35,7 +41,15 @@ export class LivePlugin {
         const subs = new SubscriptionRegistry();
         const bus = new InProcessBus();
         const transport = new SocketTransport();
-        const engine = new LiveEngine(resources, graph, subs, bus, transport, config);
+        const engine = new LiveEngine(
+            resources,
+            graph,
+            subs,
+            bus,
+            transport,
+            config,
+            options.authorizer ?? new AllowAllAuthorizer()
+        );
         const emitter = new AppEmitter(bus, config);
 
         setLiveRuntime({
