@@ -39,6 +39,11 @@
     "@carno.js/orm": { "optional": true },
     "react": { "optional": true }
   },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
   "keywords": ["carno", "carno.js", "live", "realtime", "reactive", "websocket"],
   "license": "MIT",
   "publishConfig": { "access": "public" }
