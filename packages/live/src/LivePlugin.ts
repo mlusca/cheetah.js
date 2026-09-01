@@ -16,6 +16,7 @@ import { LiveMetrics } from './observability';
 import { LiveService } from './LiveService';
 import { ResourceRegistry } from './resource/ResourceRegistry';
 import { setLiveRuntime } from './runtime';
+import { LiveETagMiddleware } from './http/etag';
 import { LiveGateway } from './transport/LiveGateway';
 import { ConnectionScopeResolver, type LiveScopeResolver } from './transport/scope-resolver';
 import { SocketTransport } from './transport/SocketTransport';
@@ -54,6 +55,12 @@ export interface LivePluginOptions {
     };
     config?: Partial<LiveConfig>;
     websocket?: WebSocketPluginConfig;
+    /**
+     * Content-hash ETag on live GET routes, so a client with neither
+     * WebSocket nor SSE can poll cheaply. On by default: it only ever adds a
+     * header, and it only touches routes that are live.
+     */
+    etag?: boolean;
 }
 
 export class LivePlugin {
@@ -101,6 +108,16 @@ export class LivePlugin {
         const plugin = new Carno({ exports: [] });
         plugin.services([LiveService]);
 
+        let teachEtag: ((paths: { method: string; path: string }[]) => void) | null = null;
+
+        if (options.etag !== false) {
+            // Registered now, taught later: `plugin.middlewares()` runs before
+            // bootstrap, and the resources are only known inside the builder.
+            const etag = new LiveETagMiddleware([]);
+            plugin.middlewares([etag]);
+            teachEtag = paths => etag.setPaths(paths);
+        }
+
         const websocket = WebSocketPlugin.create(
             [LiveGateway, ...(options.gateways ?? [])],
             options.websocket
@@ -123,6 +140,8 @@ export class LivePlugin {
             for (const ControllerClass of options.controllers) {
                 resources.register(ControllerClass, container.get(ControllerClass));
             }
+
+            teachEtag?.(resources.livePaths());
 
             if (options.pgNotify) {
                 const driver = Orm.getInstance().driverInstance;

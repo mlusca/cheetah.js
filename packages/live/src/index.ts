@@ -58,3 +58,7 @@ export type { OptimisticEntry, OptimisticList } from './client/optimistic';
 // Framework-free client adapter
 export { liveStore, liveStoreOf, liveIdentity, LiveSlot } from './client/vanilla';
 export type { LiveHandle } from './client/vanilla';
+
+// Conditional GET
+export { LiveETagMiddleware, pathMatcher } from './http/etag';
+export type { LiveRoutePath } from './http/etag';
