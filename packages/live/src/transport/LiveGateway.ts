@@ -4,6 +4,9 @@ import type { ClientMessage } from '../shared/protocol';
 
 export const LIVE_GATEWAY_PATH = '/live';
 
+/** Per-connection tail so `hello` finishes before a back-to-back `sub`. */
+const inbound = new Map<string, Promise<void>>();
+
 @Gateway(LIVE_GATEWAY_PATH)
 export class LiveGateway {
     @OnOpen()
@@ -21,11 +24,12 @@ export class LiveGateway {
             return;
         }
 
-        void handleMessage(socket.id, raw);
+        void handleMessage(socket.id, raw).catch(() => {});
     }
 
     @OnClose()
     onClose(socket: CarnoSocket): void {
+        inbound.delete(socket.id);
         const runtime = getLiveRuntime();
         runtime.engine.dropConnection(socket.id);
         runtime.transport.remove(socket.id);
@@ -33,7 +37,21 @@ export class LiveGateway {
     }
 }
 
-export async function handleMessage(connectionId: string, raw: string): Promise<void> {
+export function handleMessage(connectionId: string, raw: string): Promise<void> {
+    const previous = inbound.get(connectionId) ?? Promise.resolve();
+    const next = previous.then(
+        () => dispatch(connectionId, raw),
+        () => dispatch(connectionId, raw)
+    );
+    inbound.set(connectionId, next);
+    return next;
+}
+
+async function dispatch(connectionId: string, raw: string): Promise<void> {
+    if (!inbound.has(connectionId)) {
+        return;
+    }
+
     const runtime = getLiveRuntime();
 
     let message: ClientMessage;
@@ -51,6 +69,11 @@ export async function handleMessage(connectionId: string, raw: string): Promise<
     switch (message.t) {
         case 'hello': {
             const scope = await runtime.resolver.resolve({ connectionId, token: message.token });
+
+            if (!inbound.has(connectionId)) {
+                return;
+            }
+
             runtime.scopes.set(connectionId, scope);
             return;
         }

@@ -136,8 +136,16 @@ export class LiveEngine {
             return;
         }
 
-        this.bind(connectionId, sid, instanceId);
-        this.subs.subscribe(connectionId, instanceId);
+        const previous = this.bindings.get(connectionId)?.get(sid);
+
+        if (previous !== instanceId) {
+            if (previous !== undefined) {
+                this.release(connectionId, sid);
+            }
+
+            this.bind(connectionId, sid, instanceId);
+            this.subs.subscribe(connectionId, instanceId);
+        }
 
         let instance = this.instances.get(instanceId);
 
@@ -154,6 +162,11 @@ export class LiveEngine {
                 this.fail(connectionId, sid, 'compute_failed', (error as Error).message);
                 return;
             }
+        }
+
+        if (this.bindings.get(connectionId)?.get(sid) !== instanceId) {
+            this.scheduleDrop(instanceId);
+            return;
         }
 
         this.sendState(connectionId, sid, instance, clientHash);
@@ -224,7 +237,10 @@ export class LiveEngine {
 
         owned.delete(sid);
         this.subs.unsubscribe(connectionId, instanceId);
+        this.scheduleDrop(instanceId);
+    }
 
+    private scheduleDrop(instanceId: string): void {
         if (this.subs.hasSubscribers(instanceId)) {
             return;
         }
@@ -302,7 +318,8 @@ export class LiveEngine {
     private onInvalidation(events: InvalidationEvent[]): void {
         for (const event of events) {
             for (const instanceId of this.graph.resolve(event)) {
-                if (this.subs.hasSubscribers(instanceId)) {
+                // Grace-held instances have no subscribers but are still cached.
+                if (this.instances.has(instanceId)) {
                     this.pending.add(instanceId);
                 }
             }
