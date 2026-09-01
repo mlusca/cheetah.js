@@ -6,7 +6,14 @@ import {
     type ClientMessage,
     type ServerMessage
 } from '../shared/protocol';
-import { WebSocketTransport, type ClientTransport } from './transport';
+import {
+    LadderTransport,
+    PollingTransport,
+    SseClientTransport,
+    WebSocketTransport,
+    routeIndex,
+    type ClientTransport
+} from './transport';
 
 export interface LiveState<T> {
     data: T | undefined;
@@ -44,11 +51,20 @@ export interface LiveClientOptions {
     reconnect?: { initialMs?: number; maxMs?: number };
     socketFactory?: (url: string) => LiveSocket;
     /**
-     * Builds the pipe. Defaults to WebSocket; Task 9 stacks a ladder on top.
-     * `socketFactory` still works and is the shorthand for "same ladderless
-     * WebSocket, different socket" that the tests use.
+     * Builds the pipe. Defaults to the WebSocket → SSE → polling ladder.
+     * `socketFactory` still works and is the shorthand for "same ladder,
+     * different socket" that the tests use.
      */
     transportFactory?: (url: string) => ClientTransport;
+    /**
+     * The `routes` object the @carno.js/client codegen emits. Only the polling
+     * rung needs it -- without it the ladder stops at SSE, and says so.
+     */
+    routes?: unknown;
+    pollIntervalMs?: number;
+    transportProbeMs?: number;
+    /** Origin the SSE and polling rungs call. Defaults to the page's own. */
+    httpBaseUrl?: string;
 }
 
 interface Entry {
@@ -218,8 +234,7 @@ export class LiveClient {
             return;
         }
 
-        const build = this.options.transportFactory
-            ?? ((url: string) => new WebSocketTransport(url, this.options.socketFactory));
+        const build = this.options.transportFactory ?? ((url: string) => this.buildLadder(url));
 
         const pipe = build(this.options.url);
         this.pipe = pipe;
@@ -242,6 +257,29 @@ export class LiveClient {
             onMessage: raw => this.onMessage(raw),
             onClose: () => this.onDisconnect()
         });
+    }
+
+    /**
+     * WebSocket, then SSE, then polling. Rungs whose prerequisites are missing
+     * are not offered: a polling rung with no route index would fail every
+     * subscription with the same error.
+     */
+    private buildLadder(url: string): ClientTransport {
+        const origin = this.options.httpBaseUrl
+            ?? url.replace(/^ws/, 'http').replace(/\/live\/?$/, '');
+        const index = routeIndex(this.options.routes);
+        const rungs: (() => ClientTransport)[] = [
+            () => new WebSocketTransport(url, this.options.socketFactory),
+            () => new SseClientTransport(origin)
+        ];
+
+        if (Object.keys(index).length > 0) {
+            rungs.push(() => new PollingTransport(origin, index, {
+                intervalMs: this.options.pollIntervalMs
+            }));
+        }
+
+        return new LadderTransport(rungs, { probeMs: this.options.transportProbeMs ?? 3000 });
     }
 
     private onDisconnect(): void {

@@ -59,8 +59,8 @@ export type { OptimisticEntry, OptimisticList } from './client/optimistic';
 export { liveStore, liveStoreOf, liveIdentity, LiveSlot } from './client/vanilla';
 export type { LiveHandle } from './client/vanilla';
 
-export { WebSocketTransport } from './client/transport';
-export type { ClientTransport, TransportHandlers } from './client/transport';
+export { WebSocketTransport, LadderTransport, PollingTransport, SseClientTransport, routeIndex } from './client/transport';
+export type { ClientTransport, TransportHandlers, EventSourceLike, RoutePath } from './client/transport';
 
 // Transports
 export { FanTransport } from './transport/FanTransport';
