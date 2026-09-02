@@ -911,7 +911,7 @@ startxref
                         redirect: "manual"
                     });
                     expect(response.status).toBe(301);
-                    expect(response.headers.get("location")).toBe("https://example.com");
+                    expect(response.headers.get("location")).toBe("https://example.com/");
                 },
                 { controllers: [CustomResponseController], listen: true }
             );
