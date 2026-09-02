@@ -23,6 +23,11 @@ import { ObservabilityService } from './observability/ObservabilityService';
 
 export type MiddlewareHandler = (ctx: Context) => Response | void | Promise<Response | void>;
 
+/** A route handler compiled by Carno for Bun and integration callers. */
+export type CompiledRouteHandler = (
+    req: Request
+) => Response | Promise<Response>;
+
 export type MiddlewareClass = new (...args: any[]) => CarnoMiddleware;
 
 export type MiddlewareEntry = MiddlewareHandler | MiddlewareClass | CarnoMiddleware;
@@ -86,6 +91,7 @@ export class Carno {
     private validator: ValidatorAdapter | null = null;
     private server: any;
     private observability = new ObservabilityService();
+    private readonly compiledRouteHandlers = new WeakMap<Function, Map<string, CompiledRouteHandler>>();
 
     // WebSocket support
     _wsHandlerBuilder: ((container: Container) => any) | null = null;
@@ -303,6 +309,43 @@ export class Carno {
     }
 
     /**
+     * Execute a route after it has been compiled, preserving the exact
+     * middleware, parameter binding, and DTO-validation pipeline used by HTTP.
+     *
+     * This is intentionally separate from Bun's native route table. Optional
+     * integrations such as Live can reuse the compiled pipeline without
+     * adding a branch or lookup to ordinary HTTP requests.
+     */
+    async executeCompiledRoute(
+        ControllerClass: new (...args: any[]) => any,
+        handlerName: string,
+        request: Request,
+        params?: Record<string, string>
+    ): Promise<Response> {
+        const handler = this.compiledRouteHandlers.get(ControllerClass)?.get(handlerName);
+
+        if (!handler) {
+            throw new Error(
+                `[carno] cannot execute compiled route "${ControllerClass.name}.${handlerName}": ` +
+                'the route has not been compiled. Call listen() before executing integrations.'
+            );
+        }
+
+        const routedRequest = params === undefined
+            ? request
+            : new Request(request);
+
+        if (params !== undefined) {
+            Object.defineProperty(routedRequest, 'params', {
+                configurable: true,
+                value: params
+            });
+        }
+
+        return await handler(routedRequest);
+    }
+
+    /**
      * Bootstrap the application and start listening for HTTP requests.
      *
      * Resolves when `@OnApplicationInit()` hooks (including async ones) have
@@ -479,12 +522,15 @@ export class Carno {
 
             const method = route.method.toUpperCase();
 
+            const routeHandler = this.createHandler(compiled, params, resolvedMiddlewares, bodyDtoType);
+            this.storeCompiledRoute(ControllerClass, route.handlerName, routeHandler);
+
             // Static response - no function needed
             if (compiled.isStatic && !hasMiddlewares) {
                 this.registerRoute(fullPath, method, this.createStaticResponse(compiled.staticValue));
             } else {
                 // Dynamic handler - compile to Bun-compatible function
-                this.registerRoute(fullPath, method, this.createHandler(compiled, params, resolvedMiddlewares, bodyDtoType));
+                this.registerRoute(fullPath, method, routeHandler);
             }
         }
 
@@ -525,7 +571,7 @@ export class Carno {
         params: ParamMetadata[],
         middlewares: ResolvedMiddleware[],
         bodyDtoType?: any
-    ): Function {
+    ): CompiledRouteHandler {
         const handler = compiled.fn;
         const hasMiddlewares = middlewares.length > 0;
         const hasParams = params.length > 0;
@@ -598,11 +644,26 @@ export class Carno {
         );
 
         return async (req: Request) => {
-            const ctx = new Context(req, (req as any).params || {});
+            const ctx = new Context(req, (req as any).params ?? {});
             const response = await chain(ctx);
 
             return applyCors ? applyCors(response, req) : response;
         };
+    }
+
+    private storeCompiledRoute(
+        ControllerClass: new (...args: any[]) => any,
+        handlerName: string,
+        handler: CompiledRouteHandler
+    ): void {
+        let handlers = this.compiledRouteHandlers.get(ControllerClass);
+
+        if (!handlers) {
+            handlers = new Map<string, CompiledRouteHandler>();
+            this.compiledRouteHandlers.set(ControllerClass, handlers);
+        }
+
+        handlers.set(handlerName, handler);
     }
 
     private resolveMiddleware(middleware: MiddlewareEntry): ResolvedMiddleware {

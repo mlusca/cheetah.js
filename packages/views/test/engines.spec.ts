@@ -256,14 +256,18 @@ describe('official engines', () => {
         await expect(service.html('hello')).rejects.toBeInstanceOf(ViewForbiddenError);
     });
 
-    test('Pug include rejects an absolute path outside the views root', async () => {
+    test('Pug basedir include rejects a path outside the views root', async () => {
         const views = await makeTempViews('pug-abs-escape', {
             'hello.pug': 'p ok',
         });
         const secret = await writeOutsidePug();
         const service = new ViewService({ engine: 'pug', views, cache: false });
 
-        await writeView(views, 'hello.pug', `include ${secret.replace(/\\/g, '/')}`);
+        // Pug treats a leading slash as basedir-relative, so use a parent
+        // segment to exercise an escape from the configured views root on
+        // both POSIX and Windows.
+        const outsideBasedirPath = `/../${path.basename(secret)}`;
+        await writeView(views, 'hello.pug', `include ${outsideBasedirPath}`);
         await expect(service.html('hello')).rejects.toBeInstanceOf(ViewForbiddenError);
 
         await writeView(views, 'hello.pug', 'include C:/Windows/win.ini');

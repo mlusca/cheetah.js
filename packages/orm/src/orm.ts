@@ -5,6 +5,7 @@ import { QueryCacheManager } from './cache/query-cache-manager';
 import { transactionContext } from './transaction/transaction-context';
 import { ormSessionContext } from './orm-session-context';
 import { createLogger, type Logger } from './logger';
+import { statementObserver } from './live/statement-observer';
 
 const DEFAULT_MAX_KEYS_PER_TABLE = 10000;
 
@@ -67,8 +68,28 @@ export class Orm<T extends DriverInterface = DriverInterface> {
       return operation(transactionContext.getContext());
     }
 
-    return this.driverInstance.transaction(async (tx) => {
-      return transactionContext.run(tx as any, () => operation(tx));
-    });
+    let transaction: unknown;
+    let result: ResultType;
+
+    try {
+      result = await this.driverInstance.transaction(async (tx) => {
+        transaction = tx;
+        return transactionContext.run(tx as any, () => operation(tx));
+      });
+    } catch (error) {
+      if (transaction) {
+        statementObserver.rollbackTransaction(transaction);
+      }
+
+      throw error;
+    }
+
+    if (transaction) {
+      // The driver's transaction promise resolves only after COMMIT. Releasing
+      // notifications here prevents readers from observing rolled-back state.
+      statementObserver.commitTransaction(transaction);
+    }
+
+    return result;
   }
 }

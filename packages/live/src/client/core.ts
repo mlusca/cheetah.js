@@ -1,0 +1,492 @@
+import { PatchEngine } from '../patch/PatchEngine';
+import { canonical } from '../shared/canonical';
+import type { LiveInputs } from '../shared/inputs';
+import {
+    LIVE_PROTOCOL_VERSION,
+    type ClientMessage,
+    type ServerMessage
+} from '../shared/protocol';
+import {
+    LadderTransport,
+    PollingTransport,
+    SseClientTransport,
+    WebSocketTransport,
+    routeIndex,
+    type ClientTransport
+} from './transport';
+
+export interface LiveState<T> {
+    data: T | undefined;
+    pending: boolean;
+    error: string | null;
+    /** The server cannot vouch for this being current. Data still shown. */
+    stale: boolean;
+}
+
+export interface LiveStore<T> {
+    subscribe(listener: () => void): () => void;
+    getSnapshot(): LiveState<T>;
+}
+
+/** The slice of WebSocket this client uses, and the seam tests inject through. */
+export interface LiveSocket {
+    send(data: string): void;
+    close(): void;
+    onopen: (() => void) | null;
+    onmessage: ((event: { data: string }) => void) | null;
+    onclose: (() => void) | null;
+    onerror: ((error: unknown) => void) | null;
+}
+
+export interface LiveClientOptions {
+    url: string;
+    token?: string;
+    /**
+     * Server-rendered payloads, keyed by `${resource}|${canonical(inputs)}`.
+     * Lets the first paint skip the waterfall: the store starts full and the
+     * subscription only says "this is the hash I already have".
+     */
+    hydrate?: Record<string, { data: unknown; hash: string }>;
+    unsubGraceMs?: number;
+    reconnect?: { initialMs?: number; maxMs?: number };
+    socketFactory?: (url: string) => LiveSocket;
+    /**
+     * Builds the pipe. Defaults to the WebSocket → SSE → polling ladder.
+     * `socketFactory` still works and is the shorthand for "same ladder,
+     * different socket" that the tests use.
+     */
+    transportFactory?: (url: string) => ClientTransport;
+    /**
+     * The `routes` object the @carno.js/client codegen emits. Only the polling
+     * rung needs it -- without it the ladder stops at SSE, and says so.
+     */
+    routes?: unknown;
+    pollIntervalMs?: number;
+    transportProbeMs?: number;
+    /** Origin the SSE and polling rungs call. Defaults to the page's own. */
+    httpBaseUrl?: string;
+    /** SSE downstream path. Must match the server's `config.ssePath`. */
+    ssePath?: string;
+    /** SSE control path. Must match the server's `config.sseControlPath`. */
+    sseControlPath?: string;
+}
+
+interface Entry {
+    sid: string;
+    key: string;
+    resource: string;
+    inputs: LiveInputs;
+    refs: number;
+    revision: number;
+    hash: string | null;
+    patcher: PatchEngine;
+    /** What the server last told us. Patches apply here, never to the projection. */
+    confirmed: unknown;
+    state: LiveState<unknown>;
+    listeners: Set<() => void>;
+    dropTimer: ReturnType<typeof setTimeout> | null;
+    terminal: boolean;
+    store: LiveStore<unknown>;
+}
+
+interface Overlay {
+    resource: string;
+    apply: (draft: unknown) => void;
+}
+
+const DEFAULT_UNSUB_GRACE_MS = 5000;
+const DEFAULT_INITIAL_BACKOFF_MS = 250;
+const DEFAULT_MAX_BACKOFF_MS = 30000;
+
+export class LiveClient {
+    private readonly entries = new Map<string, Entry>();
+    private readonly bySid = new Map<string, Entry>();
+    private readonly overlays = new Map<number, Overlay>();
+    private nextOverlay = 0;
+    private pipe: ClientTransport | null = null;
+    private connected = false;
+    private closed = false;
+    private attempt = 0;
+    private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    private nextSid = 0;
+
+    constructor(private readonly options: LiveClientOptions) {}
+
+    store<T>(resource: string, inputs: LiveInputs): LiveStore<T> {
+        const key = storeKey(resource, inputs);
+        const existing = this.entries.get(key);
+
+        if (existing) {
+            return existing.store as LiveStore<T>;
+        }
+
+        const hydrated = this.options.hydrate?.[key];
+        const entry: Entry = {
+            sid: `s${this.nextSid++}`,
+            key,
+            resource,
+            inputs,
+            refs: 0,
+            revision: hydrated ? 1 : 0,
+            hash: hydrated?.hash ?? null,
+            patcher: new PatchEngine(),
+            confirmed: hydrated?.data,
+            state: {
+                data: hydrated?.data,
+                pending: hydrated === undefined,
+                error: null,
+                stale: false
+            },
+            listeners: new Set(),
+            dropTimer: null,
+            terminal: false,
+            store: undefined as unknown as LiveStore<unknown>
+        };
+
+        entry.store = {
+            subscribe: (listener: () => void) => this.retain(entry, listener),
+            getSnapshot: () => entry.state
+        };
+
+        this.entries.set(key, entry);
+        this.bySid.set(entry.sid, entry);
+
+        return entry.store as LiveStore<T>;
+    }
+
+    /**
+     * Show something the server has not confirmed yet.
+     *
+     * The overlay is a projection over the confirmed snapshot, never a write
+     * into it: a patch arriving while the action is in flight lands on the
+     * snapshot and the overlay is re-projected on top, so the screen never
+     * flickers back to a state the server does not know about.
+     *
+     * `apply` receives a mutable draft: mutate it, do not return a new value.
+     * Returns the function that removes the overlay.
+     */
+    overlay(resourceId: string, apply: (draft: any) => void): () => void {
+        const id = this.nextOverlay++;
+        this.overlays.set(id, { resource: resourceId, apply: apply as (draft: unknown) => void });
+        this.reproject(resourceId);
+
+        return () => {
+            if (this.overlays.delete(id)) {
+                this.reproject(resourceId);
+            }
+        };
+    }
+
+    close(): void {
+        this.closed = true;
+
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+
+        this.pipe?.close();
+        this.pipe = null;
+        this.connected = false;
+    }
+
+    /** Which pipe is carrying this client right now. For logs, not for logic. */
+    transport(): ClientTransport['kind'] | null {
+        return this.connected ? (this.pipe?.kind ?? null) : null;
+    }
+
+    // ------------------------------------------------------------ lifecycle
+
+    private retain(entry: Entry, listener: () => void): () => void {
+        entry.listeners.add(listener);
+        entry.refs += 1;
+
+        if (entry.dropTimer) {
+            clearTimeout(entry.dropTimer);
+            entry.dropTimer = null;
+        }
+
+        if (entry.refs === 1) {
+            const openedSynchronously = this.ensureConnected();
+
+            if (!openedSynchronously) {
+                this.sendSub(entry);
+            }
+        }
+
+        return () => {
+            entry.listeners.delete(listener);
+            entry.refs -= 1;
+
+            if (entry.terminal || entry.refs > 0 || entry.dropTimer) {
+                return;
+            }
+
+            // Grace period: coming back from a navigation must not tear the
+            // subscription down and build it again.
+            entry.dropTimer = setTimeout(() => {
+                entry.dropTimer = null;
+
+                if (entry.refs > 0) {
+                    return;
+                }
+
+                this.send({ t: 'unsub', sid: entry.sid });
+                this.entries.delete(entry.key);
+                this.bySid.delete(entry.sid);
+            }, this.options.unsubGraceMs ?? DEFAULT_UNSUB_GRACE_MS);
+        };
+    }
+
+    private ensureConnected(): boolean {
+        if (this.pipe || this.closed) {
+            return false;
+        }
+
+        const build = this.options.transportFactory ?? ((url: string) => this.buildLadder(url));
+
+        const pipe = build(this.options.url);
+        this.pipe = pipe;
+        let openedSynchronously = false;
+
+        pipe.start({
+            onOpen: () => {
+                openedSynchronously = true;
+                this.connected = true;
+                this.attempt = 0;
+                this.send({ t: 'hello', v: LIVE_PROTOCOL_VERSION, token: this.options.token });
+
+                // Reconnect is just "subscribe again, carrying the hash of
+                // what is on screen". There is no session to restore, because
+                // there is no session.
+                for (const entry of this.entries.values()) {
+                    if (entry.refs > 0) {
+                        this.sendSub(entry);
+                    }
+                }
+            },
+            onMessage: raw => this.onMessage(raw),
+            onClose: () => this.onDisconnect()
+        });
+
+        return openedSynchronously;
+    }
+
+    /**
+     * WebSocket, then SSE, then polling. Rungs whose prerequisites are missing
+     * are not offered: a polling rung with no route index would fail every
+     * subscription with the same error.
+     */
+    private buildLadder(url: string): ClientTransport {
+        const origin = this.options.httpBaseUrl
+            ?? url.replace(/^ws/, 'http').replace(/\/live\/?$/, '');
+        const index = routeIndex(this.options.routes);
+        const rungs: (() => ClientTransport)[] = [
+            () => new WebSocketTransport(url, this.options.socketFactory),
+            () => new SseClientTransport(origin, {
+                streamPath: this.options.ssePath,
+                controlPath: this.options.sseControlPath
+            })
+        ];
+
+        if (Object.keys(index).length > 0) {
+            rungs.push(() => new PollingTransport(origin, index, {
+                intervalMs: this.options.pollIntervalMs,
+                token: this.options.token
+            }));
+        }
+
+        return new LadderTransport(rungs, { probeMs: this.options.transportProbeMs ?? 3000 });
+    }
+
+    private onDisconnect(): void {
+        this.connected = false;
+        this.pipe = null;
+
+        if (this.closed || this.reconnectTimer) {
+            return;
+        }
+
+        const initial = this.options.reconnect?.initialMs ?? DEFAULT_INITIAL_BACKOFF_MS;
+        const max = this.options.reconnect?.maxMs ?? DEFAULT_MAX_BACKOFF_MS;
+        const ceiling = Math.min(max, initial * 2 ** this.attempt);
+
+        // Full jitter, and it is mandatory: a deploy reconnects every client at
+        // once, and a synchronised recompute storm takes the database down.
+        const delay = Math.random() * ceiling;
+        this.attempt += 1;
+
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            this.ensureConnected();
+        }, delay);
+    }
+
+    private sendSub(entry: Entry): void {
+        this.send({
+            t: 'sub',
+            sid: entry.sid,
+            resource: entry.resource,
+            inputs: entry.inputs,
+            hash: entry.hash ?? undefined
+        });
+    }
+
+    private send(message: ClientMessage): void {
+        if (!this.pipe || !this.connected) {
+            return;
+        }
+
+        this.pipe.send(JSON.stringify(message));
+    }
+
+    // -------------------------------------------------------------- inbound
+
+    private onMessage(raw: string): void {
+        let message: ServerMessage;
+
+        try {
+            message = JSON.parse(raw) as ServerMessage;
+        } catch {
+            return;
+        }
+
+        const entry = this.bySid.get((message as { sid?: string }).sid ?? '');
+
+        if (!entry) {
+            return;
+        }
+
+        switch (message.t) {
+            case 'snapshot':
+                if (message.key) {
+                    entry.patcher = new PatchEngine(message.key);
+                }
+                entry.revision = message.rev;
+                entry.hash = message.hash;
+                entry.confirmed = message.data;
+                this.project(entry, { pending: false, error: null, stale: false });
+                return;
+
+            case 'current':
+                if (message.key) {
+                    entry.patcher = new PatchEngine(message.key);
+                }
+                entry.revision = message.rev;
+                entry.hash = message.hash;
+                // Content already on screen: touch only the flags, keep the
+                // data referentially identical so nothing re-renders.
+                this.project(entry, { pending: false, error: null, stale: false });
+                return;
+
+            case 'patch':
+                if (message.from !== entry.revision) {
+                    // A hole in the sequence. Ask for full state rather than
+                    // applying ops to a base we cannot vouch for.
+                    this.send({ t: 'resync', sid: entry.sid, hash: entry.hash ?? undefined });
+                    return;
+                }
+
+                entry.revision = message.to;
+                entry.hash = message.hash;
+                entry.confirmed = entry.patcher.apply(entry.confirmed, message.ops);
+                this.project(entry, { pending: false, error: null, stale: false });
+                return;
+
+            case 'stale':
+                this.update(entry, { ...entry.state, stale: true });
+                return;
+
+            case 'error':
+                this.terminate(entry);
+                this.update(entry, { ...entry.state, pending: false, error: message.message });
+                return;
+        }
+    }
+
+    /** A server error ends this subscription; keep its store state, not its binding. */
+    private terminate(entry: Entry): void {
+        entry.terminal = true;
+
+        if (entry.dropTimer) {
+            clearTimeout(entry.dropTimer);
+            entry.dropTimer = null;
+        }
+
+        if (this.entries.get(entry.key) === entry) {
+            this.entries.delete(entry.key);
+        }
+
+        if (this.bySid.get(entry.sid) === entry) {
+            this.bySid.delete(entry.sid);
+        }
+    }
+
+    /** Confirmed snapshot plus every overlay registered for this resource. */
+    private project(
+        entry: Entry,
+        flags: { pending: boolean; error: string | null; stale: boolean }
+    ): void {
+        const overlays = [...this.overlays.values()].filter(overlay => overlay.resource === entry.resource);
+
+        if (overlays.length === 0 || entry.confirmed === undefined) {
+            this.update(entry, { ...flags, data: entry.confirmed });
+            return;
+        }
+
+        const draft = structuredClone(entry.confirmed);
+
+        for (const overlay of overlays) {
+            try {
+                overlay.apply(draft);
+            } catch (error) {
+                // A broken optimistic update must not take the real data with
+                // it: the confirmed snapshot is still correct underneath.
+                console.error('[carno:live] an optimistic overlay failed', error);
+            }
+        }
+
+        this.update(entry, { ...flags, data: draft });
+    }
+
+    private reproject(resourceId: string): void {
+        for (const entry of this.entries.values()) {
+            if (entry.resource !== resourceId) {
+                continue;
+            }
+
+            this.project(entry, {
+                pending: entry.state.pending,
+                error: entry.state.error,
+                stale: entry.state.stale
+            });
+        }
+    }
+
+    private update(entry: Entry, next: LiveState<unknown>): void {
+        if (
+            next.data === entry.state.data &&
+            next.pending === entry.state.pending &&
+            next.error === entry.state.error &&
+            next.stale === entry.state.stale
+        ) {
+            // Nothing changed. Keeping the same object is what makes
+            // useSyncExternalStore stable instead of looping.
+            return;
+        }
+
+        entry.state = next;
+
+        for (const listener of entry.listeners) {
+            listener();
+        }
+    }
+}
+
+export function storeKey(resource: string, inputs: LiveInputs): string {
+    return `${resource}|${canonical({
+        params: inputs.params ?? {},
+        query: inputs.query ?? {},
+        body: inputs.body ?? null
+    })}`;
+}

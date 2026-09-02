@@ -28,6 +28,7 @@ import { Metadata } from '@carno.js/core';
 import { VERSION_PROPERTY, TENANT_PROPERTY, PROPERTIES_METADATA } from './constants';
 import { OptimisticLockError } from './exceptions/optimistic-lock.error';
 import { escapeString } from './utils/sql-escape';
+import { statementObserver } from './live/statement-observer';
 
 /**
  * Canonical SQL direction for every accepted `orderBy` value. The ORDER BY
@@ -180,6 +181,7 @@ export class SqlBuilder<T> {
     this.originalColumns = columns || [];
     this.statements.alias = this.getAlias(tableName);
     this.statements.table = this.qualifyTable(schema, tableName);
+    this.statements.primaryKeyColumnName = this.entity._primaryKeyColumnName || 'id';
     return this;
   }
 
@@ -281,6 +283,7 @@ export class SqlBuilder<T> {
     this.statements.table = this.qualifyTable(schema, tableName);
     this.statements.values = this.withUpdatedValues(processedValues, this.entity);
     this.statements.instance = ValueProcessor.createInstance(processedValues, this.model, 'update');
+    this.statements.primaryKeyColumnName = this.entity._primaryKeyColumnName || 'id';
     return this;
   }
 
@@ -290,6 +293,7 @@ export class SqlBuilder<T> {
     this.statements.statement = 'delete';
     this.statements.alias = this.getAlias(tableName);
     this.statements.table = this.qualifyTable(schema, tableName);
+    this.statements.primaryKeyColumnName = this.entity._primaryKeyColumnName || 'id';
 
     return this;
   }
@@ -417,6 +421,20 @@ export class SqlBuilder<T> {
     this.prepareColumns();
     this.statements.join = this.normalizeJoinOrder(this.statements.join);
 
+    const isWrite = this.isWriteOperation();
+
+    if (isWrite) {
+      // Throws when a live resource compute is on the stack: a resource reads,
+      // an action writes. Runs before execution so the side effect is aborted,
+      // not merely reported.
+      statementObserver.notifyWriteAttempt(this.statements);
+    } else {
+      // Deliberately before the cache check: a read served from cache still has
+      // to register its dependency, or a resource whose first compute hit the
+      // cache would never be invalidated.
+      statementObserver.notifyRead(this.statements);
+    }
+
     if (this.shouldUseCache()) {
       const cached = await this.getCachedResult();
 
@@ -440,8 +458,11 @@ export class SqlBuilder<T> {
       await this.setCachedResult(result);
     }
 
-    if (this.isWriteOperation()) {
+    if (isWrite) {
       await this.invalidateCache();
+      // The observer publishes immediately outside a transaction and queues
+      // this statement until commit when the write is transactional.
+      statementObserver.notifyWrite(this.statements);
     }
 
     return result;

@@ -42,14 +42,21 @@ describe('createClientWatcher', () => {
 
         const controller = path.join(root, 'src', 'health.controller.ts');
         const original = fs.readFileSync(controller, 'utf8');
-        fs.writeFileSync(
-            controller,
-            original.replace(
-                '@Get()\n    check(): { ok: true } {',
-                `@Get('/watch-new')\n    watched(): { watched: true } {\n        return { watched: true };\n    }\n\n    @Get()\n    check(): { ok: true } {`
-            ),
-            'utf8'
+        const updated = original.replace(
+            /@Get\(\)(\r?\n)    check\(\): \{ ok: true \} \{/,
+            (_match, newline: string) =>
+                [
+                    `@Get('/watch-new')`,
+                    `    watched(): { watched: true } {`,
+                    `        return { watched: true };`,
+                    `    }`,
+                    ``,
+                    `    @Get()`,
+                    `    check(): { ok: true } {`
+                ].join(newline)
         );
+        expect(updated).not.toBe(original);
+        fs.writeFileSync(controller, updated, 'utf8');
 
         const deadline = Date.now() + 4000;
         let after = before;

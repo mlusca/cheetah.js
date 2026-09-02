@@ -43,7 +43,7 @@ type HasBody<R> = R extends { body: infer B }
 
 type RouteQuery<R> = R extends { query: infer Q } ? Q : undefined;
 type RouteHeaders<R> = R extends { headers: infer H } ? H : Record<string, string | undefined>;
-type RouteResponse<R> = R extends { response: infer S } ? NormalizeClientData<S> : unknown;
+export type RouteResponse<R> = R extends { response: infer S } ? NormalizeClientData<S> : unknown;
 
 type NormalizeClientData<T> =
     [T] extends [void | undefined]
