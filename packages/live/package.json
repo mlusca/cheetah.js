@@ -1,6 +1,6 @@
 {
   "name": "@carno.js/live",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Server-owned reactive state for Carno.js: live resources, dependency-graph invalidation, and framework-native client stores",
   "type": "commonjs",
   "main": "dist/index.js",
@@ -45,11 +45,11 @@
     "prepublishOnly": "bun run build"
   },
   "peerDependencies": {
+    "@angular/core": ">=18.0.0",
     "@carno.js/core": "^1.7.0",
     "@carno.js/orm": "^1.7.0",
     "@carno.js/websocket": "^1.7.0",
     "react": ">=18.0.0",
-    "@angular/core": ">=18.0.0",
     "vue": ">=3.4.0"
   },
   "peerDependenciesMeta": {
@@ -76,7 +76,14 @@
     "react-dom": "^18.3.1",
     "vue": "^3.5.0"
   },
-  "keywords": ["carno", "carno.js", "live", "realtime", "reactive", "websocket"],
+  "keywords": [
+    "carno",
+    "carno.js",
+    "live",
+    "realtime",
+    "reactive",
+    "websocket"
+  ],
   "license": "MIT",
   "publishConfig": {
     "access": "public"

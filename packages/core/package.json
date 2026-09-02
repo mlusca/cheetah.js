@@ -1,6 +1,6 @@
 {
     "name": "@carno.js/core",
-    "version": "1.7.0",
+    "version": "1.8.0",
     "description": "Bun-native TypeScript application framework with explicit architecture, dependency injection, decorators, and AOT/JIT-compiled HTTP routing",
     "keywords": [
         "bun",
