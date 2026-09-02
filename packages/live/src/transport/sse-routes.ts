@@ -47,6 +47,7 @@ export function createSseRoutes(options: SseRouteOptions) {
             // Until a `hello` arrives, the connection is its own principal:
             // safe, shares nothing. Same rule as the gateway's onOpen.
             runtime.scopes.set(connectionId, { principal: connectionId });
+            runtime.handshakes.delete(connectionId);
 
             // Cancelling the client reader does not always reach the stream's
             // `cancel`; aborting the request does, and is what a closed

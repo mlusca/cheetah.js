@@ -2,7 +2,7 @@ import { Service } from '@carno.js/core';
 import { getLiveRuntime } from './runtime';
 import { prefetchLive, type LivePayload } from './resource/prefetch';
 import { resourceIdOf, type LiveDescriptor } from './shared/descriptor';
-import type { LiveInputs } from './shared/inputs';
+import type { LiveExecutionContext, LiveInputs } from './resource/types';
 
 /**
  * Manual invalidation — the third emitter of §4.4, for data the ORM cannot
@@ -37,10 +37,11 @@ export class LiveService {
      */
     prefetch(
         resource: string | LiveDescriptor<any>,
-        inputs: Partial<LiveInputs> = {}
+        inputs: Partial<LiveInputs> = {},
+        context: LiveExecutionContext = {}
     ): Promise<LivePayload> {
         const resourceId = typeof resource === 'string' ? resource : resourceIdOf(resource);
 
-        return prefetchLive(getLiveRuntime().resources, resourceId, inputs);
+        return prefetchLive(getLiveRuntime().resources, resourceId, inputs, context);
     }
 }

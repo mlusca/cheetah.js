@@ -3,10 +3,11 @@ import { Controller, Get, Query } from '@carno.js/core';
 import { Live } from '../src/decorators/Live';
 import { ResourceRegistry } from '../src/resource/ResourceRegistry';
 import { prefetchLive } from '../src/resource/prefetch';
-import { hydrationKey, toHydrateMap } from '../src/client/hydrate';
+import { hydrationKey, readHydrationPayload, toHydrateMap } from '../src/client/hydrate';
 import { storeKey } from '../src/client/core';
 import { fnv1a64 } from '../src/shared/hash';
 import { canonical } from '../src/shared/canonical';
+import { directResourceExecutor } from './resource-registry-helper';
 
 @Controller('/cards')
 class CardsController {
@@ -19,7 +20,7 @@ class CardsController {
 
 function registry(): ResourceRegistry {
     const instance = new ResourceRegistry();
-    instance.register(CardsController, new CardsController());
+    instance.register(CardsController, new CardsController(), directResourceExecutor);
     return instance;
 }
 
@@ -74,6 +75,25 @@ describe('toHydrateMap', () => {
             storeKey('CardsController.list', { params: {}, query: { done: 'true' } })
         ].sort());
         expect(map[storeKey('CardsController.list', { params: {}, query: {} })].data).toEqual([{ id: 1 }, { id: 2 }]);
+    });
+
+    test('skips structurally invalid islands and keeps later payloads', () => {
+        const valid = {
+            resourceId: 'CardsController.list',
+            inputs: { params: {}, query: {} },
+            data: [{ id: 1 }],
+            hash: 'h1'
+        };
+        const root = {
+            querySelectorAll: () => [
+                { textContent: 'null' },
+                { textContent: '{}' },
+                { textContent: JSON.stringify({ ...valid, inputs: null }) },
+                { textContent: JSON.stringify(valid) }
+            ]
+        } as unknown as ParentNode;
+
+        expect(readHydrationPayload(root)).toEqual(toHydrateMap([valid]));
     });
 });
 

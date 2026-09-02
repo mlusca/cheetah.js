@@ -13,6 +13,7 @@ export class LiveGateway {
     onOpen(socket: CarnoSocket): void {
         const runtime = getLiveRuntime();
         runtime.transport.add(socket);
+        runtime.handshakes.delete(socket.id);
         // Until a `hello` arrives, the connection is its own principal: safe,
         // shares nothing.
         runtime.scopes.set(socket.id, { principal: socket.id });
@@ -46,6 +47,7 @@ export function dropLiveConnection(connectionId: string): void {
     const runtime = getLiveRuntime();
     runtime.engine.dropConnection(connectionId);
     runtime.scopes.delete(connectionId);
+    runtime.handshakes.delete(connectionId);
 }
 
 export function handleMessage(connectionId: string, raw: string): Promise<void> {
@@ -79,6 +81,10 @@ async function dispatch(connectionId: string, raw: string): Promise<void> {
 
     switch (message.t) {
         case 'hello': {
+            if (runtime.handshakes.has(connectionId)) {
+                return;
+            }
+
             const scope = await runtime.resolver.resolve({ connectionId, token: message.token });
 
             if (!inbound.has(connectionId)) {
@@ -86,6 +92,7 @@ async function dispatch(connectionId: string, raw: string): Promise<void> {
             }
 
             runtime.scopes.set(connectionId, scope);
+            runtime.handshakes.add(connectionId);
             return;
         }
 

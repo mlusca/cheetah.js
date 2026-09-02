@@ -10,6 +10,7 @@ import { dependencyContext } from '../src/resource/dependency-context';
 import { LiveEngine, type LiveTransport } from '../src/LiveEngine';
 import type { LiveAuthorizationRequest, LiveAuthorizer } from '../src/auth/authorizer';
 import type { ServerMessage } from '../src/shared/protocol';
+import { directResourceExecutor } from './resource-registry-helper';
 
 let counter = 0;
 
@@ -59,7 +60,7 @@ class ThrowingAuthorizer implements LiveAuthorizer {
 
 function build(authorizer: LiveAuthorizer) {
     const resources = new ResourceRegistry();
-    resources.register(BoardController, new BoardController());
+    resources.register(BoardController, new BoardController(), directResourceExecutor);
 
     const bus = new InProcessBus();
     const transport = new FakeTransport();

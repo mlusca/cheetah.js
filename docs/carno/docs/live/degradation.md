@@ -59,8 +59,14 @@ app.use(LivePlugin.create({
 }));
 ```
 
-When the polling rung first subscribes, it calls the route normally. On later
-ticks it sends:
+When the polling rung first subscribes, it calls the live route with a polling
+marker, a generated connection id, the resource id, and the optional `hello`
+token. The server resolves that token and consults `LiveAuthorizer` before the
+compiled HTTP route pipeline runs. Resolver-provided scope headers are also
+replayed into that pipeline. A failed resolver or a `401`/`403` stops the poll
+with `forbidden`; it never becomes a snapshot.
+
+On later ticks it also sends:
 
 ```http
 If-None-Match: "previous-content-hash"
@@ -69,6 +75,11 @@ If-None-Match: "previous-content-hash"
 An unchanged response is `304 Not Modified`, so the client keeps the same
 snapshot object and does not rerender. When the content changes, the route
 returns JSON with a new `ETag`, and polling emits a snapshot to the store.
+
+This keeps polling subject to the same live authorization contract as
+WebSocket and SSE. The `token` passed to `LiveClient` is propagated to every
+poll request; normal HTTP credentials such as same-origin cookies are handled
+by the browser's fetch implementation.
 
 Only live `GET` routes are indexed for polling. A live `POST` handler can still
 be used over WebSocket or SSE, but it is not a conditional-GET fallback.
@@ -86,7 +97,11 @@ import { routes } from './generated/app';
 const client = new LiveClient({
   url: 'wss://app.example.com/live',
   httpBaseUrl: 'https://app.example.com',
-  routes
+  routes,
+  // Use these only when the server changed config.ssePath or
+  // config.sseControlPath from their defaults.
+  ssePath: '/custom/live-stream',
+  sseControlPath: '/custom/live-control'
 });
 ```
 

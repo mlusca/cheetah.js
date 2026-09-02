@@ -1,4 +1,5 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
+import { afterAll } from 'bun:test';
 
 /**
  * Native fetch, captured before happy-dom replaces it.
@@ -13,3 +14,11 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator';
 if (!(globalThis as { document?: unknown }).document) {
     GlobalRegistrator.register();
 }
+
+// Do not leak happy-dom's Response/Request constructors into later tests
+// that start a real Bun.serve instance.
+afterAll(() => {
+    if ((globalThis as { document?: unknown }).document) {
+        GlobalRegistrator.unregister();
+    }
+});

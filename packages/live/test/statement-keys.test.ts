@@ -69,6 +69,21 @@ describe('readDependencies', () => {
         expect(readDependencies(statement, MAX).map(d => d.key)).toEqual(['orm:users#7', 'orm:orders']);
     });
 
+    test('a select-strategy join adds every child table as a dependency', () => {
+        const statement = select({
+            where: 'u."id" = 7',
+            selectJoin: [{
+                statement: 'select',
+                table: '"public"."orders"',
+                alias: 'o',
+                columns: ['o."id"'],
+                where: 'o.user_id IN (7)'
+            }]
+        });
+
+        expect(readDependencies(statement, MAX).map(d => d.key)).toEqual(['orm:users#7', 'orm:orders']);
+    });
+
     test('normalizes a qualified ORM table name', () => {
         expect(readDependencies(select({ table: '"public"."users"' }), MAX)[0].key).toBe('orm:users');
     });

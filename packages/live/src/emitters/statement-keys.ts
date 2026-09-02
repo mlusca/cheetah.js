@@ -148,6 +148,16 @@ export function readDependencies(statement: Statement<any>, maxKeysPerRead: numb
         }
     }
 
+    // Select-strategy relations execute these child statements directly via
+    // SqlJoinManager, so they never pass through the ORM's root observer hook.
+    // Their filters depend on the root rows and are not stable primary-key
+    // predicates; track each child table as a wildcard instead.
+    for (const selectJoin of statement.selectJoin ?? []) {
+        if (selectJoin.table) {
+            deps.push({ key: tableKey(tableNameOf(selectJoin.table)), columns: null });
+        }
+    }
+
     return deps;
 }
 

@@ -15,4 +15,6 @@ export interface LiveInputs {
 export interface LiveScope {
     principal?: string | number;
     tenant?: string | number;
+    /** Optional request headers for replaying route middleware during compute. */
+    headers?: HeadersInit;
 }

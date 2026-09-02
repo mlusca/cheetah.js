@@ -62,6 +62,62 @@ describe('WebSocketTransport', () => {
 });
 
 describe('LiveClient over a custom transport', () => {
+    test('passes configured SSE paths to the default transport ladder', async () => {
+        const streamUrls: string[] = [];
+        const controlUrls: string[] = [];
+        const previousEventSource = (globalThis as any).EventSource;
+        const previousFetch = globalThis.fetch;
+
+        class FakeEventSource {
+            onopen: ((event: unknown) => void) | null = null;
+            onmessage: ((event: { data: string }) => void) | null = null;
+            onerror: ((event: unknown) => void) | null = null;
+
+            constructor(url: string) {
+                streamUrls.push(url);
+                queueMicrotask(() => this.onmessage?.({
+                    data: JSON.stringify({ t: 'ready', cid: 'sse-1' })
+                }));
+            }
+
+            close(): void {}
+        }
+
+        (globalThis as any).EventSource = FakeEventSource;
+        globalThis.fetch = (async (url: any) => {
+            controlUrls.push(String(url));
+            return new Response(null, { status: 200 });
+        }) as unknown as typeof fetch;
+
+        try {
+            const socket = fakeSocket();
+            const client = new LiveClient({
+                url: 'ws://test/live',
+                httpBaseUrl: 'http://test',
+                socketFactory: () => socket,
+                ssePath: '/custom/live-stream',
+                sseControlPath: '/custom/live-control',
+                transportProbeMs: 100
+            });
+
+            client.store('CardsController.list', { params: {}, query: {} }).subscribe(() => {});
+            socket.onerror?.(new Error('websocket unavailable'));
+
+            await new Promise(resolve => setTimeout(resolve, 20));
+
+            expect(streamUrls).toEqual(['http://test/custom/live-stream']);
+            expect(controlUrls).toEqual(['http://test/custom/live-control', 'http://test/custom/live-control']);
+            client.close();
+        } finally {
+            if (previousEventSource === undefined) {
+                delete (globalThis as any).EventSource;
+            } else {
+                (globalThis as any).EventSource = previousEventSource;
+            }
+            globalThis.fetch = previousFetch;
+        }
+    });
+
     test('uses transportFactory when one is given, and reports its kind', () => {
         const sent: string[] = [];
         let handlers: TransportHandlers | null = null;

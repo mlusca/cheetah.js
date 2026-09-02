@@ -14,7 +14,13 @@ import 'reflect-metadata';
 
 // Application
 export { Carno } from './Carno';
-export type { MiddlewareHandler, MiddlewareClass, MiddlewareEntry, CarnoConfig } from './Carno';
+export type {
+  CompiledRouteHandler,
+  MiddlewareHandler,
+  MiddlewareClass,
+  MiddlewareEntry,
+  CarnoConfig
+} from './Carno';
 
 // Context
 export { Context } from './context/Context';

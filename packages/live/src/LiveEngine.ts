@@ -16,6 +16,7 @@ import {
 } from './resource/instance-id';
 import type { ResourceRegistry } from './resource/ResourceRegistry';
 import type { LiveInputs, LiveResource, LiveScope } from './resource/types';
+import { isLiveAuthorizationFailure, LiveRouteExecutionError } from './resource/route-executor';
 import { LiveMetrics } from './observability';
 
 export interface LiveTransport {
@@ -42,6 +43,7 @@ interface LiveInstance {
     id: string;
     resource: LiveResource;
     inputs: LiveInputs;
+    scope: LiveScope;
     patcher: PatchEngine;
     data: unknown;
     hash: string;
@@ -53,6 +55,8 @@ interface LiveInstance {
 
 export class LiveEngine {
     private readonly instances = new Map<string, LiveInstance>();
+    /** One promise per instance under construction; also reserves node capacity. */
+    private readonly creating = new Map<string, Promise<LiveInstance>>();
     /** connectionId → sid → instanceId. Addressing only; refcount lives in the registry. */
     private readonly bindings = new Map<string, Map<string, string>>();
     private readonly backpressure = new Map<string, number>();
@@ -142,6 +146,7 @@ export class LiveEngine {
         }
 
         const known = this.instances.has(instanceId);
+        const creating = this.creating.has(instanceId);
         const heldByConnection = this.subs.countForConnection(connectionId);
 
         if (!this.bindings.get(connectionId)?.has(sid) && heldByConnection >= this.config.maxInstancesPerConnection) {
@@ -154,7 +159,7 @@ export class LiveEngine {
             return;
         }
 
-        if (!known && this.instances.size >= this.config.maxInstancesPerNode) {
+        if (!known && !creating && this.instances.size + this.creating.size >= this.config.maxInstancesPerNode) {
             this.fail(connectionId, sid, 'node_at_capacity', 'This node is at its live instance ceiling.');
             return;
         }
@@ -178,11 +183,23 @@ export class LiveEngine {
         }
 
         if (!instance) {
+            const creation = this.creating.get(instanceId)
+                ?? this.startInstanceCreation(instanceId, resource, inputs, scope);
+
             try {
-                instance = await this.createInstance(instanceId, resource, inputs);
+                instance = await creation;
             } catch (error) {
                 this.release(connectionId, sid);
-                this.fail(connectionId, sid, 'compute_failed', (error as Error).message);
+
+                const code = error instanceof LiveRouteExecutionError
+                    ? error.statusCode === 401 || error.statusCode === 403
+                        ? 'forbidden'
+                        : error.statusCode >= 400 && error.statusCode < 500
+                            ? 'invalid_subscription'
+                            : 'compute_failed'
+                    : 'compute_failed';
+
+                this.fail(connectionId, sid, code, (error as Error).message);
                 return;
             }
         }
@@ -237,6 +254,43 @@ export class LiveEngine {
             recomputes: this.recomputes,
             recomputesWithoutPatch: this.recomputesWithoutPatch
         };
+    }
+
+    /**
+     * Polling has no server-side subscription to cache an authorization
+     * decision against, so it must ask the live authorizer on every request.
+     */
+    async authorizePolling(
+        connectionId: string,
+        resourceId: string,
+        inputs: LiveInputs,
+        scope: LiveScope
+    ): Promise<boolean> {
+        const resource = this.resources.get(resourceId);
+
+        if (!resource) {
+            return false;
+        }
+
+        try {
+            scopeKeyOf(resource.meta.shared, scope);
+        } catch {
+            return false;
+        }
+
+        try {
+            return await this.authorizer.authorize({
+                resourceId: resource.id,
+                controllerName: resource.controllerName,
+                handlerName: resource.handlerName,
+                meta: resource.meta,
+                inputs,
+                scope,
+                connectionId
+            });
+        } catch {
+            return false;
+        }
     }
 
     // ------------------------------------------------------------ internals
@@ -376,12 +430,48 @@ export class LiveEngine {
         }, this.config.unsubGraceMs);
     }
 
+    private startInstanceCreation(
+        instanceId: string,
+        resource: LiveResource,
+        inputs: LiveInputs,
+        scope: LiveScope
+    ): Promise<LiveInstance> {
+        let resolveCreation!: (instance: LiveInstance) => void;
+        let rejectCreation!: (error: unknown) => void;
+        const creation = new Promise<LiveInstance>((resolve, reject) => {
+            resolveCreation = resolve;
+            rejectCreation = reject;
+        });
+
+        this.creating.set(instanceId, creation);
+
+        void this.createInstance(instanceId, resource, inputs, scope).then(
+            instance => {
+                this.clearInstanceCreation(instanceId, creation);
+                resolveCreation(instance);
+            },
+            error => {
+                this.clearInstanceCreation(instanceId, creation);
+                rejectCreation(error);
+            }
+        );
+
+        return creation;
+    }
+
+    private clearInstanceCreation(instanceId: string, creation: Promise<LiveInstance>): void {
+        if (this.creating.get(instanceId) === creation) {
+            this.creating.delete(instanceId);
+        }
+    }
+
     private async createInstance(
         instanceId: string,
         resource: LiveResource,
-        inputs: LiveInputs
+        inputs: LiveInputs,
+        scope: LiveScope
     ): Promise<LiveInstance> {
-        const { data, deps } = await this.resources.compute(resource, inputs);
+        const { data, deps } = await this.resources.compute(resource, inputs, { scope });
         this.recomputes++;
         this.graph.setDependencies(instanceId, deps);
 
@@ -389,6 +479,7 @@ export class LiveEngine {
             id: instanceId,
             resource,
             inputs,
+            scope,
             patcher: new PatchEngine(resource.meta.key),
             data,
             hash: fnv1a64(canonical(data)),
@@ -512,8 +603,17 @@ export class LiveEngine {
         let deps;
 
         try {
-            ({ data, deps } = await this.resources.compute(instance.resource, instance.inputs));
+            ({ data, deps } = await this.resources.compute(
+                instance.resource,
+                instance.inputs,
+                { scope: instance.scope }
+            ));
         } catch (error) {
+            if (isLiveAuthorizationFailure(error)) {
+                this.revokeInstance(instance.id);
+                return;
+            }
+
             await this.broadcast(instance, sid => ({ t: 'stale', sid, reason: (error as Error).message }));
             return;
         }
@@ -584,6 +684,14 @@ export class LiveEngine {
 
                 this.send(connectionId, message);
             }
+        }
+    }
+
+    private revokeInstance(instanceId: string): void {
+        const connections = new Set(this.subs.connectionsOf(instanceId));
+
+        for (const connectionId of connections) {
+            this.revoke(connectionId, instanceId);
         }
     }
 

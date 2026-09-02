@@ -104,7 +104,9 @@ const scopeResolver: LiveScopeResolver = {
 
         return {
             principal: session?.userId ?? connectionId,
-            tenant: session?.tenantId
+            tenant: session?.tenantId,
+            // Optional values replayed into the route middleware pipeline.
+            headers: session ? { 'x-user-id': String(session.userId) } : undefined
         };
     }
 };
@@ -169,6 +171,31 @@ The resource identifier is derived from the controller class and method name:
 `TasksController.list`. Clients may use that string directly, or use the typed
 route descriptors emitted by `@carno.js/client`.
 
+### Shared route pipeline
+
+Live computes reuse the route pipeline compiled by `Carno`. Global, plugin,
+controller, and method middleware run before the controller, and POST body DTO
+validation follows the same path as HTTP. A middleware response with `401` or
+`403` is treated as a Live authorization failure and never becomes subscription
+data.
+
+Subscriptions replay the resolved `LiveScope.headers` into that pipeline. The
+headers are not part of the instance identity; use `LiveAuthorizer` for
+per-connection authorization and choose `shared: 'private'` when the returned
+content differs per principal. `LiveService.prefetch()` accepts an optional
+execution context as its third argument:
+
+```ts
+await live.prefetch('TasksController.list', inputs, {
+    headers: request.headers,
+    scope: { principal: user.id, tenant: user.tenantId }
+});
+```
+
+Without request credentials, protected middleware fails closed. This keeps
+server-side rendering from accidentally producing data that the corresponding
+HTTP request would reject.
+
 ### Handler rules
 
 A live handler must be safe to execute more than once. Treat it as a read-only,
@@ -185,9 +212,10 @@ recomputable function of its declared inputs:
   filters do not fit in a query string. It is part of the instance identity, so
   two clients posting different filters get two instances and never share data.
   `@Body()` on a live `@Get()` is rejected: a `GET` subscription carries none.
-- `@Req()`, `@Ctx()`, `@Header()`, and `@Locals()` are rejected because those
-  request-specific values are not available when the server recomputes a
-  resource after an invalidation.
+- `@Req()`, `@Ctx()`, `@Header()`, and `@Locals()` are rejected on the live
+  handler because they make its result depend on request-specific state. Route
+  middleware still receives a synthetic `Request`/`Context` during every live
+  compute, so existing guards and context setup are preserved.
 - The handler must not write to the database or perform an irreversible side
   effect. A write through the Carno ORM during a live compute raises
   `WriteDuringComputeError`.
@@ -230,7 +258,8 @@ subscription is rejected instead of creating an unbounded instance key.
 
 Do not use query inputs as an authorization mechanism. Inputs are untrusted in
 the same way as HTTP query strings. Authentication and tenant identity belong
-in the handshake and the `LiveScopeResolver`.
+in the handshake/scope resolver, the route middleware pipeline, and the
+`LiveAuthorizer` where per-connection decisions are required.
 
 ## Sharing and isolation
 
@@ -567,8 +596,8 @@ backpressure becomes excessive, so pending patch traffic cannot grow without
 bound.
 
 The content hash is an equality and hydration mechanism, not an authorization
-or integrity signature. Authorization remains the responsibility of the
-application's handshake and scope resolver.
+or integrity signature. Authorization is enforced by the handshake/scope
+resolver, the compiled route middleware pipeline, and `LiveAuthorizer`.
 
 ## Configuration
 
@@ -622,7 +651,7 @@ subscribe. Common validation errors are:
 
 - `@Live()` on anything other than `@Get()` or `@Post()`;
 - use of `@Body()` on a `@Get()`;
-- use of `@Req()`, `@Ctx()`, `@Header()`, or `@Locals()`;
+- use of `@Req()`, `@Ctx()`, `@Header()`, or `@Locals()` on a live handler;
 - an empty `key` value;
 - duplicate resource identifiers.
 
@@ -712,7 +741,7 @@ interface LiveOptions {
 | --- | --- | --- |
 | `controllers` | Yes | Controller classes containing `@Live()` handlers |
 | `gateways` | No | Application gateway classes combined with the live gateway |
-| `scopeResolver` | No | Resolves principal and tenant from a WebSocket handshake |
+| `scopeResolver` | No | Resolves principal and tenant from live handshakes, including authenticated polling |
 | `config` | No | Partial `LiveConfig` overrides |
 | `websocket` | No | Configuration forwarded to `WebSocketPlugin` |
 

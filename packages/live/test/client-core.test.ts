@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { LiveClient, type LiveSocket } from '../src/client/core';
+import { PollingTransport } from '../src/client/transport';
 import type { ClientMessage, ServerMessage } from '../src/shared/protocol';
 
 class FakeSocket implements LiveSocket {
@@ -46,6 +47,34 @@ function build(options: Partial<ConstructorParameters<typeof LiveClient>[0]> = {
 }
 
 describe('LiveClient store', () => {
+    test('does not duplicate the first polling GET when the transport opens synchronously', async () => {
+        const calls: string[] = [];
+        const fetchStub = (async (url: any) => {
+            calls.push(String(url));
+            return new Response(JSON.stringify([]), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json', ETag: '"h1"' }
+            });
+        }) as unknown as typeof fetch;
+
+        const client = new LiveClient({
+            url: 'http://test/live',
+            transportFactory: () => new PollingTransport(
+                'http://test',
+                { 'UsersController.list': { method: 'get', path: '/users' } },
+                { intervalMs: 10_000, fetch: fetchStub }
+            )
+        });
+
+        const store = client.store('UsersController.list', { params: {}, query: {} });
+        store.subscribe(() => {});
+
+        await new Promise(resolve => setTimeout(resolve, 20));
+
+        expect(calls).toEqual(['http://test/users']);
+        client.close();
+    });
+
     test('starts pending and subscribes on open', () => {
         const { client, socket } = build();
         const store = client.store('UsersController.list', { params: {}, query: {} });
@@ -136,6 +165,40 @@ describe('LiveClient store', () => {
         socket.deliver({ t: 'error', sid: socket.subs()[0].sid, code: 'unknown_resource', message: 'nope' });
 
         expect(store.getSnapshot()).toMatchObject({ pending: false, error: 'nope' });
+    });
+
+    test('removes a rejected subscription before reconnect while preserving its error', async () => {
+        const sockets: FakeSocket[] = [];
+        const client = new LiveClient({
+            url: 'ws://test/live',
+            reconnect: { initialMs: 1, maxMs: 2 },
+            socketFactory: () => {
+                const socket = new FakeSocket();
+                sockets.push(socket);
+                return socket;
+            }
+        });
+
+        const store = client.store('r', { params: {}, query: {} });
+        store.subscribe(() => {});
+        sockets[0].open();
+        const sid = sockets[0].subs()[0].sid;
+
+        sockets[0].deliver({ t: 'error', sid, code: 'forbidden', message: 'nope' });
+        expect(store.getSnapshot()).toMatchObject({ pending: false, error: 'nope' });
+
+        sockets[0].onclose?.();
+
+        await new Promise(resolve => {
+            setTimeout(() => {
+                sockets[1].open();
+                resolve(undefined);
+            }, 20);
+        });
+
+        expect(sockets[1].subs()).toHaveLength(0);
+        expect(store.getSnapshot()).toMatchObject({ pending: false, error: 'nope' });
+        client.close();
     });
 
     test('two stores with the same resource and inputs share one subscription', () => {

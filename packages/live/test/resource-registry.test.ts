@@ -3,6 +3,7 @@ import { Controller, Ctx, Delete, Get, Param, Query, Req } from '@carno.js/core'
 import { Live } from '../src/decorators/Live';
 import { dependencyContext } from '../src/resource/dependency-context';
 import { LiveValidationError, ResourceRegistry } from '../src/resource/ResourceRegistry';
+import { directResourceExecutor } from './resource-registry-helper';
 
 @Controller('/users')
 class UsersController {
@@ -42,7 +43,7 @@ class RequestController {
 describe('ResourceRegistry.register', () => {
     test('registers every @Live handler under controller.handler', () => {
         const registry = new ResourceRegistry();
-        registry.register(UsersController, new UsersController());
+        registry.register(UsersController, new UsersController(), directResourceExecutor);
 
         expect(registry.ids().sort()).toEqual(['UsersController.get', 'UsersController.list']);
         expect(registry.get('UsersController.list')?.meta.key).toBe('id');
@@ -51,22 +52,22 @@ describe('ResourceRegistry.register', () => {
     test('refuses @Live on a verb that is neither GET nor POST', () => {
         const registry = new ResourceRegistry();
 
-        expect(() => registry.register(WritingController, new WritingController()))
+        expect(() => registry.register(WritingController, new WritingController(), directResourceExecutor))
             .toThrow(LiveValidationError);
     });
 
     test('refuses request-bound parameters that break recomputability', () => {
         const registry = new ResourceRegistry();
 
-        expect(() => registry.register(RequestController, new RequestController()))
+        expect(() => registry.register(RequestController, new RequestController(), directResourceExecutor))
             .toThrow(/@Req\(\)/);
     });
 
     test('refuses two resources with the same id', () => {
         const registry = new ResourceRegistry();
-        registry.register(UsersController, new UsersController());
+        registry.register(UsersController, new UsersController(), directResourceExecutor);
 
-        expect(() => registry.register(UsersController, new UsersController()))
+        expect(() => registry.register(UsersController, new UsersController(), directResourceExecutor))
             .toThrow(/already registered/);
     });
 });
@@ -74,7 +75,7 @@ describe('ResourceRegistry.register', () => {
 describe('ResourceRegistry.compute', () => {
     test('resolves query and param arguments from inputs', async () => {
         const registry = new ResourceRegistry();
-        registry.register(UsersController, new UsersController());
+        registry.register(UsersController, new UsersController(), directResourceExecutor);
 
         const list = await registry.compute(registry.get('UsersController.list')!, {
             params: {},
@@ -91,7 +92,7 @@ describe('ResourceRegistry.compute', () => {
 
     test('collects the dependencies registered during the compute', async () => {
         const registry = new ResourceRegistry();
-        registry.register(UsersController, new UsersController());
+        registry.register(UsersController, new UsersController(), directResourceExecutor);
 
         const result = await registry.compute(registry.get('UsersController.get')!, {
             params: { id: '42' },
@@ -112,7 +113,7 @@ describe('ResourceRegistry.compute', () => {
         }
 
         const registry = new ResourceRegistry();
-        registry.register(ReportsController, new ReportsController());
+        registry.register(ReportsController, new ReportsController(), directResourceExecutor);
 
         const result = await registry.compute(registry.get('ReportsController.current')!, {
             params: {},
@@ -129,7 +130,7 @@ describe('ResourceRegistry.compute', () => {
 
     test('concurrent computes do not mix dependencies', async () => {
         const registry = new ResourceRegistry();
-        registry.register(UsersController, new UsersController());
+        registry.register(UsersController, new UsersController(), directResourceExecutor);
         const resource = registry.get('UsersController.get')!;
 
         const [a, b] = await Promise.all([

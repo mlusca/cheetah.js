@@ -64,7 +64,6 @@ describePostgres('Live Resources phase 3 acceptance', () => {
             await executeSql(`INSERT INTO live3_notes (body) VALUES ('first');`);
 
             const harness = await createTestHarness({
-                controllers: [NotesController],
                 plugins: [LivePlugin.create({
                     controllers: [NotesController],
                     config: { coalesceMs: 5 }
@@ -117,7 +116,6 @@ describePostgres('Live Resources phase 3 acceptance', () => {
             await executeSql(`INSERT INTO live3_notes (body) VALUES ('first');`);
 
             const harness = await createTestHarness({
-                controllers: [NotesController],
                 plugins: [LivePlugin.create({
                     controllers: [NotesController],
                     config: { coalesceMs: 5 }
@@ -176,7 +174,6 @@ describePostgres('Live Resources phase 3 acceptance', () => {
             const { liveSignal, provideLive, reconcileLiveSignal } = await import('../src/client/angular');
 
             const harness = await createTestHarness({
-                controllers: [NotesController],
                 plugins: [LivePlugin.create({
                     controllers: [NotesController],
                     config: { coalesceMs: 5 }

@@ -1,5 +1,12 @@
 import type { LiveSocket } from './core';
-import type { ClientMessage, ServerMessage } from '../shared/protocol';
+import {
+    LIVE_CONNECTION_HEADER,
+    LIVE_POLL_HEADER,
+    LIVE_RESOURCE_HEADER,
+    LIVE_TOKEN_HEADER,
+    type ClientMessage,
+    type ServerMessage
+} from '../shared/protocol';
 
 export interface TransportHandlers {
     onOpen(): void;
@@ -345,6 +352,7 @@ export class SseClientTransport implements ClientTransport {
 
 interface Poll {
     sid: string;
+    resourceId: string;
     url: string;
     etag: string | null;
     revision: number;
@@ -362,13 +370,17 @@ export class PollingTransport implements ClientTransport {
 
     private handlers: TransportHandlers | null = null;
     private readonly polls = new Map<string, Poll>();
+    private readonly connectionId = pollingConnectionId();
+    private token: string | undefined;
     private timer: ReturnType<typeof setInterval> | null = null;
 
     constructor(
         private readonly baseUrl: string,
         private readonly routes: Record<string, RoutePath>,
-        private readonly options: { intervalMs?: number; fetch?: typeof fetch } = {}
-    ) {}
+        private readonly options: { intervalMs?: number; fetch?: typeof fetch; token?: string } = {}
+    ) {
+        this.token = options.token;
+    }
 
     start(handlers: TransportHandlers): void {
         this.handlers = handlers;
@@ -393,9 +405,13 @@ export class PollingTransport implements ClientTransport {
             return;
         }
 
+        if (message.t === 'hello') {
+            this.token = message.token;
+            return;
+        }
+
         if (message.t !== 'sub') {
-            // `hello` carries a token this rung cannot use, and `resync` is
-            // answered by the next tick anyway.
+            // `resync` is answered by the next tick anyway.
             return;
         }
 
@@ -415,6 +431,7 @@ export class PollingTransport implements ClientTransport {
 
         const poll: Poll = {
             sid: message.sid,
+            resourceId: message.resource,
             url: buildUrl(this.baseUrl, route.path, message.inputs),
             etag: message.hash ? `"${message.hash}"` : null,
             revision: 0
@@ -442,6 +459,13 @@ export class PollingTransport implements ClientTransport {
     private async fetchOne(poll: Poll): Promise<void> {
         const get = this.options.fetch ?? fetch;
         const headers: Record<string, string> = {};
+        headers[LIVE_POLL_HEADER] = '1';
+        headers[LIVE_CONNECTION_HEADER] = this.connectionId;
+        headers[LIVE_RESOURCE_HEADER] = poll.resourceId;
+
+        if (this.token) {
+            headers[LIVE_TOKEN_HEADER] = this.token;
+        }
 
         if (poll.etag) {
             headers['If-None-Match'] = poll.etag;
@@ -463,6 +487,28 @@ export class PollingTransport implements ClientTransport {
         }
 
         if (!response.ok) {
+            if (response.status === 401 || response.status === 403) {
+                this.polls.delete(poll.sid);
+                this.emit({
+                    t: 'error',
+                    sid: poll.sid,
+                    code: 'forbidden',
+                    message: 'Polling authorization failed.'
+                });
+                return;
+            }
+
+            if (response.status >= 400 && response.status < 500) {
+                this.polls.delete(poll.sid);
+                this.emit({
+                    t: 'error',
+                    sid: poll.sid,
+                    code: 'invalid_subscription',
+                    message: `Polling route returned HTTP ${response.status}.`
+                });
+                return;
+            }
+
             this.emit({ t: 'stale', sid: poll.sid, reason: `HTTP ${response.status}` });
             return;
         }
@@ -483,6 +529,14 @@ export class PollingTransport implements ClientTransport {
     private emit(message: ServerMessage): void {
         this.handlers?.onMessage(JSON.stringify(message));
     }
+}
+
+function pollingConnectionId(): string {
+    const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    return `poll:${uuid}`;
 }
 
 function buildUrl(baseUrl: string, path: string, inputs: { params?: Record<string, string>; query?: Record<string, unknown> }): string {

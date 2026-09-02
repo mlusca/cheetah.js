@@ -24,7 +24,7 @@ export type { LiveConfig } from './config';
 // Scope
 export { ConnectionScopeResolver } from './transport/scope-resolver';
 export type { LiveHandshake, LiveScopeResolver } from './transport/scope-resolver';
-export type { LiveInputs, LiveScope } from './shared/inputs';
+export type { LiveExecutionContext, LiveInputs, LiveResourceExecutor, LiveScope } from './resource/types';
 
 // Authorization
 export { AllowAllAuthorizer, authKeysOf, isAuthKey } from './auth/authorizer';
@@ -72,9 +72,10 @@ export type { SseRouteOptions } from './transport/sse-routes';
 
 // Conditional GET
 export { LiveETagMiddleware, pathMatcher } from './http/etag';
-export type { LiveRoutePath } from './http/etag';
+export type { LivePollingGuard, LivePollingRequest, LiveRoutePath } from './http/etag';
 
 // First paint
 export { prefetchLive } from './resource/prefetch';
 export type { LivePayload } from './resource/prefetch';
+export { LiveRouteExecutionError } from './resource/route-executor';
 export { hydrationKey, toHydrateMap, readHydrationPayload, HYDRATION_ATTRIBUTE } from './client/hydrate';

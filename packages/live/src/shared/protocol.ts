@@ -3,6 +3,12 @@ import type { LiveInputs } from '../resource/types';
 
 export const LIVE_PROTOCOL_VERSION = 1;
 
+/** Headers used by the HTTP polling rung to carry the live auth contract. */
+export const LIVE_POLL_HEADER = 'X-Carno-Live-Poll';
+export const LIVE_CONNECTION_HEADER = 'X-Carno-Live-Connection';
+export const LIVE_RESOURCE_HEADER = 'X-Carno-Live-Resource';
+export const LIVE_TOKEN_HEADER = 'X-Carno-Live-Token';
+
 /** Sent once per connection, before any subscription. */
 export interface ClientHello {
     t: 'hello';
