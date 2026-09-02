@@ -65,6 +65,10 @@ export interface LiveClientOptions {
     transportProbeMs?: number;
     /** Origin the SSE and polling rungs call. Defaults to the page's own. */
     httpBaseUrl?: string;
+    /** SSE downstream path. Must match the server's `config.ssePath`. */
+    ssePath?: string;
+    /** SSE control path. Must match the server's `config.sseControlPath`. */
+    sseControlPath?: string;
 }
 
 interface Entry {
@@ -81,6 +85,7 @@ interface Entry {
     state: LiveState<unknown>;
     listeners: Set<() => void>;
     dropTimer: ReturnType<typeof setTimeout> | null;
+    terminal: boolean;
     store: LiveStore<unknown>;
 }
 
@@ -134,6 +139,7 @@ export class LiveClient {
             },
             listeners: new Set(),
             dropTimer: null,
+            terminal: false,
             store: undefined as unknown as LiveStore<unknown>
         };
 
@@ -201,15 +207,18 @@ export class LiveClient {
         }
 
         if (entry.refs === 1) {
-            this.ensureConnected();
-            this.sendSub(entry);
+            const openedSynchronously = this.ensureConnected();
+
+            if (!openedSynchronously) {
+                this.sendSub(entry);
+            }
         }
 
         return () => {
             entry.listeners.delete(listener);
             entry.refs -= 1;
 
-            if (entry.refs > 0 || entry.dropTimer) {
+            if (entry.terminal || entry.refs > 0 || entry.dropTimer) {
                 return;
             }
 
@@ -229,18 +238,20 @@ export class LiveClient {
         };
     }
 
-    private ensureConnected(): void {
+    private ensureConnected(): boolean {
         if (this.pipe || this.closed) {
-            return;
+            return false;
         }
 
         const build = this.options.transportFactory ?? ((url: string) => this.buildLadder(url));
 
         const pipe = build(this.options.url);
         this.pipe = pipe;
+        let openedSynchronously = false;
 
         pipe.start({
             onOpen: () => {
+                openedSynchronously = true;
                 this.connected = true;
                 this.attempt = 0;
                 this.send({ t: 'hello', v: LIVE_PROTOCOL_VERSION, token: this.options.token });
@@ -257,6 +268,8 @@ export class LiveClient {
             onMessage: raw => this.onMessage(raw),
             onClose: () => this.onDisconnect()
         });
+
+        return openedSynchronously;
     }
 
     /**
@@ -270,12 +283,16 @@ export class LiveClient {
         const index = routeIndex(this.options.routes);
         const rungs: (() => ClientTransport)[] = [
             () => new WebSocketTransport(url, this.options.socketFactory),
-            () => new SseClientTransport(origin)
+            () => new SseClientTransport(origin, {
+                streamPath: this.options.ssePath,
+                controlPath: this.options.sseControlPath
+            })
         ];
 
         if (Object.keys(index).length > 0) {
             rungs.push(() => new PollingTransport(origin, index, {
-                intervalMs: this.options.pollIntervalMs
+                intervalMs: this.options.pollIntervalMs,
+                token: this.options.token
             }));
         }
 
@@ -381,8 +398,27 @@ export class LiveClient {
                 return;
 
             case 'error':
+                this.terminate(entry);
                 this.update(entry, { ...entry.state, pending: false, error: message.message });
                 return;
+        }
+    }
+
+    /** A server error ends this subscription; keep its store state, not its binding. */
+    private terminate(entry: Entry): void {
+        entry.terminal = true;
+
+        if (entry.dropTimer) {
+            clearTimeout(entry.dropTimer);
+            entry.dropTimer = null;
+        }
+
+        if (this.entries.get(entry.key) === entry) {
+            this.entries.delete(entry.key);
+        }
+
+        if (this.bySid.get(entry.sid) === entry) {
+            this.bySid.delete(entry.sid);
         }
     }
 

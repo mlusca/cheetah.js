@@ -95,7 +95,8 @@ describe('LiveGateway', () => {
                     return { principal: 'user-1', tenant: 'acme' };
                 }
             },
-            scopes: new Map()
+            scopes: new Map(),
+            handshakes: new Set()
         });
 
         const gateway = new LiveGateway();
@@ -114,6 +115,71 @@ describe('LiveGateway', () => {
         await subSeen;
 
         expect(usedScope).toEqual({ principal: 'user-1', tenant: 'acme' });
+        gateway.onClose(socket as any);
+    });
+
+    test('rejects a second hello without replacing the scope of existing bindings', async () => {
+        let resolverCalls = 0;
+        const usedScopes: LiveScope[] = [];
+
+        setLiveRuntime({
+            engine: {
+                subscribe: async (
+                    _connectionId: string,
+                    _sid: string,
+                    _resource: string,
+                    _inputs: unknown,
+                    scope: LiveScope
+                ) => {
+                    usedScopes.push(scope);
+                },
+                unsubscribe() {},
+                dropConnection() {},
+                resync: async () => {}
+            } as any,
+            transport: new SocketTransport(),
+            resolver: {
+                resolve: async ({ token }) => {
+                    resolverCalls++;
+                    return { principal: token ?? 'anonymous' };
+                }
+            },
+            scopes: new Map(),
+            handshakes: new Set()
+        });
+
+        const gateway = new LiveGateway();
+        const socket = new FakeSocket('c-repeat');
+        gateway.onOpen(socket as any);
+
+        await handleMessage('c-repeat', JSON.stringify({ t: 'hello', v: 1, token: 'first' }));
+        await handleMessage(
+            'c-repeat',
+            JSON.stringify({
+                t: 'sub',
+                sid: 's1',
+                resource: 'UsersController.list',
+                inputs: { params: {}, query: {} }
+            })
+        );
+        await handleMessage('c-repeat', JSON.stringify({ t: 'hello', v: 1, token: 'second' }));
+        await handleMessage(
+            'c-repeat',
+            JSON.stringify({
+                t: 'sub',
+                sid: 's2',
+                resource: 'UsersController.list',
+                inputs: { params: {}, query: {} }
+            })
+        );
+
+        expect(resolverCalls).toBe(1);
+        expect(getLiveRuntime().scopes.get('c-repeat')).toEqual({ principal: 'first' });
+        expect(usedScopes).toEqual([
+            { principal: 'first' },
+            { principal: 'first' }
+        ]);
+
         gateway.onClose(socket as any);
     });
 
@@ -141,7 +207,8 @@ describe('LiveGateway', () => {
                     return { principal: 'user-1' };
                 }
             },
-            scopes: new Map()
+            scopes: new Map(),
+            handshakes: new Set()
         });
 
         const gateway = new LiveGateway();
@@ -186,7 +253,8 @@ describe('LiveGateway', () => {
                     return { principal: 'user-1' };
                 }
             },
-            scopes: new Map([['sse:1', { principal: 'sse:1' }]])
+            scopes: new Map([['sse:1', { principal: 'sse:1' }]]),
+            handshakes: new Set()
         });
 
         void handleMessage('sse:1', JSON.stringify({ t: 'hello', v: 1, token: 't' }));

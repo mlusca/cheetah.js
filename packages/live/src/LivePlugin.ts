@@ -15,6 +15,7 @@ import { LiveEngine } from './LiveEngine';
 import { LiveMetrics } from './observability';
 import { LiveService } from './LiveService';
 import { ResourceRegistry } from './resource/ResourceRegistry';
+import { createLiveRouteExecutor } from './resource/route-executor';
 import { setLiveRuntime } from './runtime';
 import { LiveETagMiddleware } from './http/etag';
 import { FanTransport } from './transport/FanTransport';
@@ -23,6 +24,7 @@ import { ConnectionScopeResolver, type LiveScopeResolver } from './transport/sco
 import { SocketTransport } from './transport/SocketTransport';
 import { SseTransport } from './transport/SseTransport';
 import { createSseRoutes } from './transport/sse-routes';
+import { LIVE_CONNECTION_HEADER, LIVE_TOKEN_HEADER } from './shared/protocol';
 
 export interface LivePluginOptions {
     /** Controllers holding @Live() handlers. Validated at bootstrap. */
@@ -104,19 +106,22 @@ export class LivePlugin {
             metrics
         );
         const emitter = new AppEmitter(bus, config);
+        const scopeResolver = options.scopeResolver ?? new ConnectionScopeResolver();
 
         const dispose: (() => Promise<void> | void)[] = [() => engine.stop()];
 
         setLiveRuntime({
             engine,
             transport: sockets,
-            resolver: options.scopeResolver ?? new ConnectionScopeResolver(),
+            resolver: scopeResolver,
             scopes: new Map(),
+            handshakes: new Set(),
             resources,
             dispose
         });
 
         const plugin = new Carno({ exports: [] });
+        plugin.controllers(options.controllers);
         plugin.services([LiveService]);
 
         if (options.sse) {
@@ -139,15 +144,36 @@ export class LivePlugin {
             plugin.route('POST', routes.controlPath, routes.control);
         }
 
-        let teachEtag: ((paths: { method: string; path: string }[]) => void) | null = null;
+        let teachEtag: ((paths: { method: string; path: string; resourceId?: string }[]) => void) | null = null;
 
-        if (options.etag !== false) {
-            // Registered now, taught later: `plugin.middlewares()` runs before
-            // bootstrap, and the resources are only known inside the builder.
-            const etag = new LiveETagMiddleware([]);
-            plugin.middlewares([etag]);
-            teachEtag = paths => etag.setPaths(paths);
-        }
+        // Registered now, taught later: `plugin.middlewares()` runs before
+        // bootstrap, and the resources are only known inside the builder.
+        // The middleware also gates polling, even when ETags are disabled.
+        const etag = new LiveETagMiddleware([], { enabled: options.etag !== false });
+        etag.setPollingGuard(async ({ resourceId, inputs, request }) => {
+            const connectionId = request.headers.get(LIVE_CONNECTION_HEADER);
+
+            if (!connectionId) {
+                return null;
+            }
+
+            let scope;
+
+            try {
+                scope = await scopeResolver.resolve({
+                    connectionId,
+                    token: request.headers.get(LIVE_TOKEN_HEADER) ?? undefined
+                });
+            } catch {
+                return null;
+            }
+
+            return await engine.authorizePolling(connectionId, resourceId, inputs, scope)
+                ? scope
+                : null;
+        });
+        plugin.middlewares([etag]);
+        teachEtag = paths => etag.setPaths(paths);
 
         const websocket = WebSocketPlugin.create(
             [LiveGateway, ...(options.gateways ?? [])],
@@ -167,9 +193,10 @@ export class LivePlugin {
             // bootstrap, and an app with no observability plugin never
             // registers one.
             sink = container.has(ObservabilityService) ? container.get(ObservabilityService) : null;
+            const routeExecutor = createLiveRouteExecutor(container.get(Carno));
 
             for (const ControllerClass of options.controllers) {
-                resources.register(ControllerClass, container.get(ControllerClass));
+                resources.register(ControllerClass, container.get(ControllerClass), routeExecutor);
             }
 
             teachEtag?.(resources.livePaths());

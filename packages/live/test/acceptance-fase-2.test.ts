@@ -108,7 +108,6 @@ describePostgres('Live Resources phase 2 acceptance', () => {
     test('a write that never touched the application reaches the screen (criterion 2)', async () => {
         await withDatabase(TABLE_STATEMENTS, async ({ executeSql }) => {
             const harness = await createTestHarness({
-                controllers: [CardsController],
                 plugins: [LivePlugin.create({
                     controllers: [CardsController],
                     config: { coalesceMs: 5 },
@@ -145,7 +144,6 @@ describePostgres('Live Resources phase 2 acceptance', () => {
     test('a live @Post() answers plain JSON and also updates over the socket', async () => {
         await withDatabase(TABLE_STATEMENTS, async () => {
             const harness = await createTestHarness({
-                controllers: [CardsController],
                 plugins: [LivePlugin.create({
                     controllers: [CardsController],
                     config: { coalesceMs: 5 }
@@ -190,7 +188,6 @@ describePostgres('Live Resources phase 2 acceptance', () => {
     test('two subscriptions with different bodies do not share an instance', async () => {
         await withDatabase(TABLE_STATEMENTS, async () => {
             const harness = await createTestHarness({
-                controllers: [CardsController],
                 plugins: [LivePlugin.create({ controllers: [CardsController], config: { coalesceMs: 5 } })],
                 listen: true
             });
@@ -227,7 +224,6 @@ describePostgres('Live Resources phase 2 acceptance', () => {
     test('an unauthorized connection is told so and gets no data', async () => {
         await withDatabase(TABLE_STATEMENTS, async () => {
             const harness = await createTestHarness({
-                controllers: [CardsController],
                 plugins: [LivePlugin.create({
                     controllers: [CardsController],
                     authorizer: new DenyEveryone(),

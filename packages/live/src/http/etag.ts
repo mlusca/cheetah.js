@@ -1,11 +1,23 @@
 import type { CarnoClosure, CarnoMiddleware, Context } from '@carno.js/core';
 import { canonical } from '../shared/canonical';
 import { fnv1a64 } from '../shared/hash';
+import { LIVE_POLL_HEADER, LIVE_RESOURCE_HEADER } from '../shared/protocol';
+import type { LiveInputs, LiveScope } from '../resource/types';
 
 export interface LiveRoutePath {
     method: string;
     path: string;
+    resourceId?: string;
 }
+
+export interface LivePollingRequest {
+    resourceId: string;
+    inputs: LiveInputs;
+    request: Request;
+}
+
+export type LivePollingGuard =
+    (request: LivePollingRequest) => LiveScope | null | Promise<LiveScope | null>;
 
 /** `/cards/:id` matches `/cards/42` and nothing deeper. */
 export function pathMatcher(pattern: string): RegExp {
@@ -30,9 +42,10 @@ export function pathMatcher(pattern: string): RegExp {
  * application would change the behaviour of routes that asked for none of this.
  */
 export class LiveETagMiddleware implements CarnoMiddleware {
-    private matchers: RegExp[] = [];
+    private matchers: { matcher: RegExp; resourceId?: string }[] = [];
+    private pollingGuard: LivePollingGuard | null = null;
 
-    constructor(paths: LiveRoutePath[]) {
+    constructor(paths: LiveRoutePath[], private readonly options: { enabled?: boolean } = {}) {
         this.setPaths(paths);
     }
 
@@ -40,11 +53,52 @@ export class LiveETagMiddleware implements CarnoMiddleware {
     setPaths(paths: LiveRoutePath[]): void {
         this.matchers = paths
             .filter(entry => entry.method.toUpperCase() === 'GET')
-            .map(entry => pathMatcher(entry.path));
+            .map(entry => ({ matcher: pathMatcher(entry.path), resourceId: entry.resourceId }));
+    }
+
+    setPollingGuard(guard: LivePollingGuard): void {
+        this.pollingGuard = guard;
     }
 
     async handle(ctx: Context, next: CarnoClosure): Promise<Response | void> {
-        if (ctx.method.toUpperCase() !== 'GET' || !this.covers(ctx.path)) {
+        const polling = ctx.req.headers.get(LIVE_POLL_HEADER) === '1';
+        const requestedResource = polling
+            ? ctx.req.headers.get(LIVE_RESOURCE_HEADER) ?? undefined
+            : undefined;
+        const route = ctx.method.toUpperCase() === 'GET'
+            ? this.routeFor(ctx.path, requestedResource)
+            : undefined;
+
+        if (polling && (!requestedResource || !route)) {
+            return new Response('Forbidden', { status: 403 });
+        }
+
+        if (!route) {
+            return next();
+        }
+
+        if (ctx.req.headers.get(LIVE_POLL_HEADER) === '1') {
+            const resourceId = route.resourceId;
+            const scope = resourceId && this.pollingGuard
+                ? await this.pollingGuard({
+                    resourceId,
+                    inputs: { params: ctx.params, query: ctx.query },
+                    request: ctx.req
+                })
+                : null;
+
+            if (!scope) {
+                return new Response('Forbidden', { status: 403 });
+            }
+
+            if (scope.headers) {
+                const headers = new Headers(ctx.req.headers);
+                new Headers(scope.headers).forEach((value, key) => headers.set(key, value));
+                (ctx as { req: Request }).req = new Request(ctx.req, { headers });
+            }
+        }
+
+        if (this.options.enabled === false) {
             return next();
         }
 
@@ -82,7 +136,9 @@ export class LiveETagMiddleware implements CarnoMiddleware {
         return new Response(body, { status: 200, headers });
     }
 
-    private covers(path: string): boolean {
-        return this.matchers.some(matcher => matcher.test(path));
+    private routeFor(path: string, resourceId?: string): { resourceId?: string } | undefined {
+        return this.matchers.find(route =>
+            route.matcher.test(path) && (resourceId === undefined || route.resourceId === resourceId)
+        );
     }
 }

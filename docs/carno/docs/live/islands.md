@@ -65,6 +65,17 @@ The prefetch and the live subscription use the same resource id and canonical
 inputs. The hash in the payload is calculated from the same value the client
 will display.
 
+Prefetch runs the same route middleware and DTO-validation pipeline as HTTP.
+For an authenticated page, pass the page request credentials as the optional
+third argument; omitting them makes protected middleware fail closed:
+
+```ts
+const payload = await this.live.prefetch('NotesController.list', inputs, {
+  headers: request.headers,
+  scope: { principal: user.id, tenant: user.tenantId }
+});
+```
+
 ## 3. Embed it in the Handlebars template
 
 Render the data normally for the first request, and call the helper next to the

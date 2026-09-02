@@ -1,7 +1,7 @@
 import { canonical } from '../shared/canonical';
 import { normalizeLiveInputs } from '../shared/descriptor';
 import { fnv1a64 } from '../shared/hash';
-import type { LiveInputs } from '../shared/inputs';
+import type { LiveExecutionContext, LiveInputs } from './types';
 import type { ResourceRegistry } from './ResourceRegistry';
 
 /** What a server-rendered page hands the client so the first paint is full. */
@@ -25,7 +25,8 @@ export interface LivePayload {
 export async function prefetchLive(
     resources: ResourceRegistry,
     resourceId: string,
-    inputs: Partial<LiveInputs> = {}
+    inputs: Partial<LiveInputs> = {},
+    context: LiveExecutionContext = {}
 ): Promise<LivePayload> {
     const resource = resources.get(resourceId);
 
@@ -37,7 +38,7 @@ export async function prefetchLive(
     }
 
     const normalized = normalizeLiveInputs(inputs);
-    const { data } = await resources.compute(resource, normalized);
+    const { data } = await resources.compute(resource, normalized, context);
 
     return {
         resourceId,

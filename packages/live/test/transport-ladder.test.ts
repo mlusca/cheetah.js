@@ -178,6 +178,7 @@ describe('PollingTransport', () => {
 
         const received: any[] = [];
         transport.start({ onOpen: () => {}, onMessage: raw => received.push(JSON.parse(raw)), onClose: () => {} });
+        transport.send(JSON.stringify({ t: 'hello', v: 1, token: 'poll-secret' }));
         transport.send(JSON.stringify({
             t: 'sub',
             sid: 's1',
@@ -188,6 +189,9 @@ describe('PollingTransport', () => {
         await new Promise(resolve => setTimeout(resolve, 20));
 
         expect(calls[0].url).toBe('http://x/cards?done=true');
+        expect(calls[0].headers['X-Carno-Live-Poll']).toBe('1');
+        expect(calls[0].headers['X-Carno-Live-Token']).toBe('poll-secret');
+        expect(calls[0].headers['X-Carno-Live-Connection']).toMatch(/^poll:/);
         expect(received[0]).toMatchObject({ t: 'snapshot', sid: 's1', data: [{ id: 1 }], hash: 'abc' });
         transport.close();
     });

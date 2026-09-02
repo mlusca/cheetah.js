@@ -75,6 +75,7 @@ import { DependencyGraph } from '../src/graph/DependencyGraph';
 import { InProcessBus } from '../src/bus/InProcessBus';
 import { LiveEngine } from '../src/LiveEngine';
 import { ResourceRegistry } from '../src/resource/ResourceRegistry';
+import { directResourceExecutor } from './resource-registry-helper';
 import { SubscriptionRegistry } from '../src/graph/SubscriptionRegistry';
 import { resolveLiveConfig } from '../src/config';
 import { Controller, Get } from '@carno.js/core';
@@ -93,7 +94,7 @@ describe('LiveEngine metrics', () => {
 
         const sink = recorder();
         const resources = new ResourceRegistry();
-        resources.register(ThingsController, new ThingsController());
+        resources.register(ThingsController, new ThingsController(), directResourceExecutor);
 
         const bus = new InProcessBus();
         const engine = new LiveEngine(

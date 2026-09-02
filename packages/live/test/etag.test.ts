@@ -3,6 +3,7 @@ import { Context, Controller, Get, Post } from '@carno.js/core';
 import { Live } from '../src/decorators/Live';
 import { LiveETagMiddleware, pathMatcher } from '../src/http/etag';
 import { ResourceRegistry } from '../src/resource/ResourceRegistry';
+import { directResourceExecutor } from './resource-registry-helper';
 
 const LIVE_PATHS = [
     { method: 'GET', path: '/cards' },
@@ -115,6 +116,25 @@ describe('LiveETagMiddleware', () => {
         expect(response.headers.get('ETag')).toBeNull();
     });
 
+    test('rejects a polling request without its resource id', async () => {
+        let downstream = false;
+        const middleware = new LiveETagMiddleware([
+            { method: 'GET', path: '/cards', resourceId: 'CardsController.list' }
+        ]);
+        middleware.setPollingGuard(() => ({ principal: 'ada' }));
+
+        const response = await middleware.handle(
+            contextFor('http://x/cards', { 'X-Carno-Live-Poll': '1' }),
+            async () => {
+                downstream = true;
+                return jsonResponse([]);
+            }
+        ) as Response;
+
+        expect(response.status).toBe(403);
+        expect(downstream).toBe(false);
+    });
+
     test('a non-200 is left alone', async () => {
         const middleware = new LiveETagMiddleware(LIVE_PATHS);
         const response = await middleware.handle(contextFor('http://x/cards'), async () =>
@@ -162,13 +182,12 @@ describe('ResourceRegistry.livePaths', () => {
         }
 
         const registry = new ResourceRegistry();
-        registry.register(CardsController, new CardsController());
+        registry.register(CardsController, new CardsController(), directResourceExecutor);
 
         expect(registry.livePaths().sort((a, b) => a.path.localeCompare(b.path))).toEqual([
-            { method: 'GET', path: '/cards' },
-            { method: 'GET', path: '/cards/:id' },
-            { method: 'POST', path: '/cards/search' }
+            { method: 'GET', path: '/cards', resourceId: 'CardsController.list' },
+            { method: 'GET', path: '/cards/:id', resourceId: 'CardsController.one' },
+            { method: 'POST', path: '/cards/search', resourceId: 'CardsController.search' }
         ]);
     });
 });
-

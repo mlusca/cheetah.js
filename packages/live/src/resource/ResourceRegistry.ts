@@ -3,7 +3,12 @@ import { CONTROLLER_META, PARAMS_META, ROUTES_META, type ParamMetadata } from '@
 import type { Dependency } from '../graph/types';
 import { LIVE_META, type LiveMeta } from '../metadata';
 import { dependencyContext } from './dependency-context';
-import type { LiveInputs, LiveResource } from './types';
+import type {
+    LiveExecutionContext,
+    LiveInputs,
+    LiveResource,
+    LiveResourceExecutor
+} from './types';
 
 /**
  * Verbs that may carry @Live. The real criterion is idempotence, not the verb:
@@ -15,8 +20,9 @@ import type { LiveInputs, LiveResource } from './types';
 const ALLOWED_METHODS = new Set(['get', 'post']);
 
 /**
- * Parameters that would break "state is recomputable from inputs": there is no
- * Request, no header set and no middleware-populated locals during a recompute.
+ * Parameters that would make the handler depend on a caller request rather
+ * than its declared, replayable inputs. Middleware still receives a synthetic
+ * request during every compute and may use it as a guard.
  */
 const FORBIDDEN_PARAMS: Record<string, string> = {
     req: '@Req()',
@@ -48,7 +54,11 @@ export class ResourceRegistry {
      * compiles everything at startup, so a misdeclared resource fails the boot
      * instead of failing the first subscription in production.
      */
-    register(ControllerClass: new (...args: any[]) => any, instance: any): void {
+    register(
+        ControllerClass: new (...args: any[]) => any,
+        instance: any,
+        executor: LiveResourceExecutor
+    ): void {
         const routes: RouteInfoLike[] = Reflect.getMetadata(ROUTES_META, ControllerClass) || [];
         const controllerMeta: { path?: string } = Reflect.getMetadata(CONTROLLER_META, ControllerClass) || {};
         const prefix = controllerMeta.path ?? '';
@@ -84,8 +94,8 @@ export class ResourceRegistry {
 
                 if (forbidden) {
                     throw new LiveValidationError(
-                        `${where} uses ${forbidden}, which is not available during a recompute. ` +
-                        `A live resource must be a pure function of its declared inputs.`
+                        `${where} uses ${forbidden}, which is not a replayable live input. ` +
+                        `A live resource handler must be a pure function of its declared inputs.`
                     );
                 }
 
@@ -106,16 +116,22 @@ export class ResourceRegistry {
                 throw new LiveValidationError(`Live resource "${id}" is already registered.`);
             }
 
-            this.resources.set(id, {
+            let resource: LiveResource;
+
+            resource = {
                 id,
+                controllerClass: ControllerClass,
                 controllerName: ControllerClass.name,
                 handlerName: route.handlerName,
                 meta,
                 params,
-                invoke: (args: unknown[]) => Promise.resolve(instance[route.handlerName](...args)),
+                invoke: (inputs: LiveInputs, context: LiveExecutionContext = {}) =>
+                    executor(instance, resource, inputs, context),
                 httpPath: joinRoutePath(prefix, route.path),
                 httpMethod: route.method.toUpperCase()
-            });
+            };
+
+            this.resources.set(id, resource);
         }
     }
 
@@ -128,53 +144,30 @@ export class ResourceRegistry {
     }
 
     /** Every live route, as the HTTP layer addresses it. */
-    livePaths(): { method: string; path: string }[] {
+    livePaths(): { method: string; path: string; resourceId: string }[] {
         return [...this.resources.values()].map(resource => ({
             method: resource.httpMethod,
-            path: resource.httpPath
+            path: resource.httpPath,
+            resourceId: resource.id
         }));
     }
 
     /** Run the handler and report what it read. */
     async compute(
         resource: LiveResource,
-        inputs: LiveInputs
+        inputs: LiveInputs,
+        context: LiveExecutionContext = {}
     ): Promise<{ data: unknown; deps: Dependency[] }> {
-        const args = buildArgs(resource.params, inputs);
-
         const { result, deps } = await dependencyContext.run(collector => {
             for (const key of resource.meta.dependsOn) {
                 collector.add({ key, columns: null });
             }
 
-            return resource.invoke(args);
+            return resource.invoke(inputs, context);
         });
 
         return { data: result, deps };
     }
-}
-
-function buildArgs(params: ParamMetadata[], inputs: LiveInputs): unknown[] {
-    if (params.length === 0) {
-        return [];
-    }
-
-    const size = Math.max(...params.map(param => param.index)) + 1;
-    const args = new Array<unknown>(size).fill(undefined);
-
-    for (const param of params) {
-        if (param.type === 'param') {
-            args[param.index] = param.key ? inputs.params[param.key] : inputs.params;
-        } else if (param.type === 'query') {
-            args[param.index] = param.key ? inputs.query[param.key] : inputs.query;
-        } else if (param.type === 'body') {
-            args[param.index] = param.key
-                ? (inputs.body as Record<string, unknown> | undefined)?.[param.key]
-                : inputs.body;
-        }
-    }
-
-    return args;
 }
 
 /** Same join the core router does: collapse the slashes, keep the root. */

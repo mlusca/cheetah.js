@@ -9,6 +9,8 @@ export interface LiveRuntime {
     transport: SocketTransport;
     resolver: LiveScopeResolver;
     scopes: Map<string, LiveScope>;
+    /** Connections that have completed their single allowed hello. */
+    handshakes: Set<string>;
     /** Needed by prefetch(), which computes without subscribing. */
     resources: ResourceRegistry;
     /**

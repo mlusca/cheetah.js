@@ -79,7 +79,6 @@ afterEach(async () => {
 describe('SSE routes', () => {
     test('a subscription over SSE receives a snapshot and then a patch', async () => {
         const harness = await createTestHarness({
-            controllers: [NumbersController],
             plugins: [LivePlugin.create({
                 controllers: [NumbersController],
                 sse: true,
@@ -112,7 +111,6 @@ describe('SSE routes', () => {
 
     test('the control endpoint refuses an unknown connection id', async () => {
         const harness = await createTestHarness({
-            controllers: [NumbersController],
             plugins: [LivePlugin.create({ controllers: [NumbersController], sse: true })],
             listen: true
         });
@@ -131,7 +129,6 @@ describe('SSE routes', () => {
 
     test('the control endpoint refuses a malformed body', async () => {
         const harness = await createTestHarness({
-            controllers: [NumbersController],
             plugins: [LivePlugin.create({ controllers: [NumbersController], sse: true })],
             listen: true
         });
@@ -148,7 +145,6 @@ describe('SSE routes', () => {
 
     test('cancelling the stream drops the scope and refuses a late control message', async () => {
         const harness = await createTestHarness({
-            controllers: [NumbersController],
             plugins: [LivePlugin.create({
                 controllers: [NumbersController],
                 sse: true,
@@ -196,7 +192,6 @@ describe('SSE routes', () => {
 
     test('no routes exist when sse is off', async () => {
         const harness = await createTestHarness({
-            controllers: [NumbersController],
             plugins: [LivePlugin.create({ controllers: [NumbersController] })],
             listen: true
         });

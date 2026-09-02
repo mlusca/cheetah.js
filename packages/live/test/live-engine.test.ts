@@ -9,6 +9,9 @@ import { ResourceRegistry } from '../src/resource/ResourceRegistry';
 import { dependencyContext } from '../src/resource/dependency-context';
 import { LiveEngine, type LiveTransport } from '../src/LiveEngine';
 import type { ServerMessage } from '../src/shared/protocol';
+import { LiveRouteExecutionError } from '../src/resource/route-executor';
+import type { LiveResourceExecutor } from '../src/resource/types';
+import { directResourceExecutor } from './resource-registry-helper';
 
 const rows: { id: number; name: string; hits: number }[] = [];
 
@@ -49,7 +52,7 @@ class FakeTransport implements LiveTransport {
 
 function build(overrides = {}) {
     const resources = new ResourceRegistry();
-    resources.register(UsersController, new UsersController());
+    resources.register(UsersController, new UsersController(), directResourceExecutor);
 
     const bus = new InProcessBus();
     const transport = new FakeTransport();
@@ -126,6 +129,184 @@ describe('LiveEngine.subscribe', () => {
         await engine.subscribe('c1', 's2', 'UsersController.list', { params: {}, query: { q: 'A' } }, {});
 
         expect(transport.messagesFor('c1')[1]).toMatchObject({ t: 'error', code: 'too_many_instances' });
+    });
+
+    test('single-flights initial creation for a shared instance', async () => {
+        let releaseCompute!: () => void;
+        const computeGate = new Promise<void>(resolve => {
+            releaseCompute = resolve;
+        });
+        let firstComputeStarted!: () => void;
+        const firstStarted = new Promise<void>(resolve => {
+            firstComputeStarted = resolve;
+        });
+        let computeCalls = 0;
+
+        @Controller('/single-flight')
+        class SingleFlightController {
+            @Get('/')
+            @Live({ shared: 'public' })
+            async list() {
+                computeCalls++;
+                firstComputeStarted();
+                await computeGate;
+                return { value: 'shared' };
+            }
+        }
+
+        const resources = new ResourceRegistry();
+        resources.register(SingleFlightController, new SingleFlightController(), directResourceExecutor);
+        const transport = new FakeTransport();
+        const engine = new LiveEngine(
+            resources,
+            new DependencyGraph(),
+            new SubscriptionRegistry(),
+            new InProcessBus(),
+            transport,
+            resolveLiveConfig({ coalesceMs: 1 })
+        );
+        engine.start();
+
+        const inputs = { params: {}, query: {} };
+        const first = engine.subscribe('c1', 's1', 'SingleFlightController.list', inputs, {});
+        const second = engine.subscribe('c2', 's2', 'SingleFlightController.list', inputs, {});
+
+        await firstStarted;
+        releaseCompute();
+        await Promise.all([first, second]);
+
+        expect(computeCalls).toBe(1);
+        expect(engine.stats().instances).toBe(1);
+        expect(transport.messagesFor('c1')[0]).toMatchObject({
+            t: 'snapshot',
+            data: { value: 'shared' }
+        });
+        expect(transport.messagesFor('c2')[0]).toMatchObject({
+            t: 'snapshot',
+            data: { value: 'shared' }
+        });
+    });
+
+    test('reserves node capacity for a distinct instance being created', async () => {
+        let releaseCompute!: () => void;
+        const computeGate = new Promise<void>(resolve => {
+            releaseCompute = resolve;
+        });
+        let firstComputeStarted!: () => void;
+        const firstStarted = new Promise<void>(resolve => {
+            firstComputeStarted = resolve;
+        });
+        let computeCalls = 0;
+
+        @Controller('/capacity-flight')
+        class CapacityFlightController {
+            @Get('/')
+            @Live({ shared: 'public' })
+            async list(@Query('q') q?: string) {
+                computeCalls++;
+                firstComputeStarted();
+                await computeGate;
+                return { value: q ?? 'all' };
+            }
+        }
+
+        const resources = new ResourceRegistry();
+        resources.register(CapacityFlightController, new CapacityFlightController(), directResourceExecutor);
+        const transport = new FakeTransport();
+        const engine = new LiveEngine(
+            resources,
+            new DependencyGraph(),
+            new SubscriptionRegistry(),
+            new InProcessBus(),
+            transport,
+            resolveLiveConfig({ coalesceMs: 1, maxInstancesPerNode: 1 })
+        );
+        engine.start();
+
+        const first = engine.subscribe(
+            'c1',
+            's1',
+            'CapacityFlightController.list',
+            { params: {}, query: {} },
+            {}
+        );
+        await firstStarted;
+
+        const second = engine.subscribe(
+            'c2',
+            's2',
+            'CapacityFlightController.list',
+            { params: {}, query: { q: 'other' } },
+            {}
+        );
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+        releaseCompute();
+        await Promise.all([first, second]);
+
+        expect(computeCalls).toBe(1);
+        expect(transport.messagesFor('c1')[0]).toMatchObject({ t: 'snapshot' });
+        expect(transport.messagesFor('c2')[0]).toMatchObject({
+            t: 'error',
+            code: 'node_at_capacity'
+        });
+        expect(engine.stats().instances).toBe(1);
+    });
+
+    test('recomputes with the subscription scope and revokes on a pipeline denial', async () => {
+        let allowed = true;
+        let receivedHeader: string | null = null;
+
+        @Controller('/scoped')
+        class ScopedController {
+            @Get('/')
+            @Live({ shared: 'public' })
+            read() {
+                dependencyContext.current()?.add({ key: 'orm:scope', columns: null });
+                return { ok: true };
+            }
+        }
+
+        const executor: LiveResourceExecutor = async (instance, resource, inputs, context) => {
+            receivedHeader = new Headers(context.scope?.headers).get('x-allow');
+
+            if (!allowed) {
+                throw new LiveRouteExecutionError(403, 'forbidden');
+            }
+
+            return directResourceExecutor(instance, resource, inputs, context);
+        };
+        const resources = new ResourceRegistry();
+        resources.register(ScopedController, new ScopedController(), executor);
+        const bus = new InProcessBus();
+        const transport = new FakeTransport();
+        const engine = new LiveEngine(
+            resources,
+            new DependencyGraph(),
+            new SubscriptionRegistry(),
+            bus,
+            transport,
+            resolveLiveConfig({ coalesceMs: 1, unsubGraceMs: 5 })
+        );
+        engine.start();
+
+        await engine.subscribe(
+            'c1',
+            's1',
+            'ScopedController.read',
+            { params: {}, query: {} },
+            { principal: 'ada', headers: { 'x-allow': 'yes' } }
+        );
+        expect(receivedHeader).toBe('yes');
+        transport.clear();
+
+        allowed = false;
+        engine.invalidate('orm:scope');
+        await settle();
+
+        expect(transport.messagesFor('c1')).toEqual([
+            expect.objectContaining({ t: 'error', code: 'forbidden' })
+        ]);
     });
 });
 
@@ -303,7 +484,7 @@ describe('LiveEngine lifecycle', () => {
         }
 
         const resources = new ResourceRegistry();
-        resources.register(SlowController, new SlowController());
+        resources.register(SlowController, new SlowController(), directResourceExecutor);
         const engine = new LiveEngine(
             resources,
             new DependencyGraph(),
@@ -341,7 +522,7 @@ describe('LiveEngine lifecycle', () => {
         }
 
         const resources = new ResourceRegistry();
-        resources.register(SlowController, new SlowController());
+        resources.register(SlowController, new SlowController(), directResourceExecutor);
         const transport = new FakeTransport();
         const engine = new LiveEngine(
             resources,

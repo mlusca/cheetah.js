@@ -90,7 +90,6 @@ describe('Live Resources acceptance', () => {
     test('an ORM write reaches a subscriber with no broadcast code (criteria 1, 4, 5)', async () => {
         await withDatabase(TABLE_STATEMENTS, async () => {
             const harness = await createTestHarness({
-                controllers: [TasksController],
                 plugins: [LivePlugin.create({ controllers: [TasksController], config: { coalesceMs: 5 } })],
                 listen: true
             });
@@ -130,7 +129,6 @@ describe('Live Resources acceptance', () => {
     test('does not publish an uncommitted write that is later rolled back', async () => {
         await withDatabase(TABLE_STATEMENTS, async context => {
             const harness = await createTestHarness({
-                controllers: [TasksController],
                 plugins: [LivePlugin.create({ controllers: [TasksController], config: { coalesceMs: 5 } })],
                 listen: true
             });
@@ -184,7 +182,6 @@ describe('Live Resources acceptance', () => {
     test('publishes a transactional write only after commit', async () => {
         await withDatabase(TABLE_STATEMENTS, async context => {
             const harness = await createTestHarness({
-                controllers: [TasksController],
                 plugins: [LivePlugin.create({ controllers: [TasksController], config: { coalesceMs: 5 } })],
                 listen: true
             });
@@ -225,7 +222,6 @@ describe('Live Resources acceptance', () => {
     test('resubscribing with the current hash retransmits nothing (criterion 3)', async () => {
         await withDatabase(TABLE_STATEMENTS, async () => {
             const harness = await createTestHarness({
-                controllers: [TasksController],
                 plugins: [LivePlugin.create({ controllers: [TasksController], config: { coalesceMs: 5 } })],
                 listen: true
             });
@@ -260,7 +256,6 @@ describe('Live Resources acceptance', () => {
     test('the same route still answers plain JSON (criterion 6)', async () => {
         await withDatabase(TABLE_STATEMENTS, async () => {
             const harness = await createTestHarness({
-                controllers: [TasksController],
                 plugins: [LivePlugin.create({ controllers: [TasksController] })],
                 listen: true
             });
@@ -281,7 +276,6 @@ describe('Live Resources acceptance', () => {
     test('two tenants subscribing the same resource never share an instance (criterion 8)', async () => {
         await withDatabase(TABLE_STATEMENTS, async () => {
             const harness = await createTestHarness({
-                controllers: [TasksController],
                 plugins: [LivePlugin.create({ controllers: [TasksController], config: { coalesceMs: 5 } })],
                 listen: true
             });
